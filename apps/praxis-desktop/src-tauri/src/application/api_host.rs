@@ -966,6 +966,7 @@ pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart
     let cost_before = sessions.get(&key)?.and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
     sessions.put(&key, record.clone())?;
     let working_directory = start.working_directory.clone().map(PathBuf::from).or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+    super::log_bus::log(host, &format!("[ai] [ApiAgent] Starting session for {key} provider={} model={} cwd={}", start.connection.provider, start.model, working_directory.display()));
     let task = register_api_task(host, dir, &key, &session_id, &start.tool_mode, working_directory, start.auto_approve, start.permission_mode.as_deref() == Some("auto"), cost_before);
     host.events().emit("ai:sessionChanged", Some(record));
     task.set_state("planning", None);
@@ -1014,7 +1015,7 @@ pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, m
     history.push(turn);
     let working_directory = start.working_directory.clone().map(PathBuf::from).or_else(|| std::env::current_dir().ok()).unwrap_or_default();
     let session_id = record["sessionId"].as_str().unwrap_or_default().to_owned();
-    super::log_bus::log(host, &format!("[ApiAgent] Starting follow-up turn provider={} session={key} model={model} at={}", connection.provider, chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
+    super::log_bus::log(host, &format!("[ai] [ApiAgent] Starting follow-up turn provider={} session={key} model={model} at={}", connection.provider, chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
     let task = register_api_task(host, dir, key, &session_id, &tool_mode, working_directory, record["autoApprovePermissions"] == true, record["permissionMode"] == "auto", Some(record["cost"].clone()).filter(|c| !c.is_null()));
     task.mutate(true, |record| {
         record["responseText"] = json!("");

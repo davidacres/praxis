@@ -30,7 +30,7 @@ pub fn reviewed_issue_key(session_key: &str) -> Option<String> {
 }
 
 fn host_call(host: &HostContext, channel: &str, args: Vec<Value>) -> std::result::Result<Value, String> {
-    let response = host.dispatch_rpc(RustRpcRequest { id: "ticket-review".into(), channel: channel.into(), args });
+    let response = super::activity::run_as_agent(|| host.dispatch_rpc(RustRpcRequest { id: "ticket-review".into(), channel: channel.into(), args }));
     if response.ok { Ok(response.result.unwrap_or(Value::Null)) } else { Err(response.error.map_or_else(|| "The host returned no error.".to_owned(), |e| e.message)) }
 }
 

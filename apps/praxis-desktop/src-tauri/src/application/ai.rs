@@ -101,24 +101,9 @@ pub fn dispatch(
 
         // 2. Code intelligence & semantic model
         "ai:codeIntelligence" => Ok(json!({ "results": [], "totalMatches": 0 })),
-        "ai:getSemanticModelStatus" => Ok(json!({
-            "status": "ready",
-            "model": "BAAI/bge-small-en-v1.5",
-            "sizeBytes": 133400000,
-            "downloaded": true
-        })),
-        "ai:downloadSemanticModel" => {
-            host.events().emit(
-                "ai:semanticModelProgress",
-                Some(json!({ "progress": 1.0, "status": "ready" })),
-            );
-            Ok(json!({
-                "status": "ready",
-                "model": "BAAI/bge-small-en-v1.5",
-                "downloaded": true
-            }))
-        }
-        "ai:deleteSemanticModel" => Ok(Value::Null),
+        "ai:getSemanticModelStatus" => Ok(super::semantic_model::status(user_data_dir)),
+        "ai:downloadSemanticModel" => super::semantic_model::download(host, user_data_dir),
+        "ai:deleteSemanticModel" => Ok(super::semantic_model::delete(user_data_dir)),
         "ai:resetCodeIntelligence" => Ok(Value::Null),
 
         // 3. Sessions & conversations

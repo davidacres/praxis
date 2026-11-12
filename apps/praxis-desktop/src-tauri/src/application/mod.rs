@@ -26,6 +26,7 @@ mod builtin_mcp;
 mod connections;
 mod deployments;
 mod log_bus;
+mod semantic_model;
 mod task_designer_plan;
 mod task_designer_state;
 mod plan_watch;
@@ -473,6 +474,19 @@ impl Application {
         // Queued turns resume at launch, before any window asks for the chat.
         let recovery_host = host.clone();
         std::thread::spawn(move || team_chat::recover_on_startup(&recovery_host));
+        let activity_root = host.config().user_data_dir.clone();
+        host.events().on_event(move |event| {
+            if event.channel == "ai:sessionChanged" {
+                if let Some(session) = &event.payload {
+                    activity::observe_session(&activity_root, session);
+                }
+            }
+        });
+        // Retired runtime-pin add-ons are uninstalled before anything reads the agent catalog.
+        let reconcile_host = host.clone();
+        std::thread::spawn(move || {
+            marketplace::reconcile_installed_on_launch(&reconcile_host, &reconcile_host.config().user_data_dir);
+        });
         for &channel in CHANNELS.iter().chain(std::iter::once(&"settings:set")) {
             let application = Arc::clone(&application);
             host.register_handler(channel, move |host, args| {
@@ -713,7 +727,7 @@ impl Application {
                             summary: issue["summary"].as_str().unwrap_or(""),
                             action,
                             connection_id: Some(connection_id),
-                            actor: "you",
+                            actor: activity::current_actor(),
                         },
                     );
                 }

@@ -563,7 +563,6 @@ pub fn workflow_templates(user_data_dir: &Path) -> Vec<Value> {
 }
 
 /// Launch-time reconciliation: drop retired pin packages, then re-mirror agents and skills.
-#[allow(dead_code)]
 pub fn reconcile_installed_on_launch(host: &HostContext, user_data_dir: &Path) {
     let store = storage(user_data_dir);
     let retired: Vec<InstalledAddon> = store

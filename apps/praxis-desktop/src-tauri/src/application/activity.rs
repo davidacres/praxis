@@ -90,6 +90,59 @@ fn open_locked(root: &Path, project_id: &str) -> Result<(String, Vec<Value>)> {
     Ok((started_at, entries))
 }
 
+thread_local! {
+    static AGENT_WRITE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Board writes made inside `work` (on this thread) are attributed to the agent, not the person.
+pub fn run_as_agent<T>(work: impl FnOnce() -> T) -> T {
+    let previous = AGENT_WRITE.with(|flag| flag.replace(true));
+    let result = work();
+    AGENT_WRITE.with(|flag| flag.set(previous));
+    result
+}
+
+/// The actor for a board write observed right now.
+pub fn current_actor() -> &'static str {
+    if AGENT_WRITE.with(std::cell::Cell::get) { "agent" } else { "you" }
+}
+
+/// Records a session's state change as agent activity on its project (once per distinct state).
+pub fn observe_session(root: &Path, session: &Value) {
+    use std::collections::HashMap;
+    use std::sync::{Mutex as StdMutex, OnceLock};
+    static LAST_STATE: OnceLock<StdMutex<HashMap<String, String>>> = OnceLock::new();
+    let (Some(project_id), Some(session_id), Some(state)) = (
+        session["projectId"].as_str().filter(|p| !p.is_empty()),
+        session["sessionId"].as_str(),
+        session["state"].as_str(),
+    ) else {
+        return;
+    };
+    let changed = LAST_STATE
+        .get_or_init(Default::default)
+        .lock()
+        .map(|mut all| all.insert(session_id.to_owned(), state.to_owned()).as_deref() != Some(state))
+        .unwrap_or(false);
+    if !changed {
+        return;
+    }
+    let issue_key = session["issueKey"].as_str().unwrap_or_default();
+    let title = session["title"].as_str().filter(|t| !t.is_empty()).unwrap_or(issue_key);
+    record(
+        root,
+        &Observation {
+            project_id,
+            kind: "session",
+            target_key: issue_key,
+            summary: title,
+            action: &format!("Session {}", state.replace('_', " ")),
+            connection_id: None,
+            actor: "agent",
+        },
+    );
+}
+
 /// One observation of a change made through Praxis (or noticed on disk).
 pub struct Observation<'a> {
     pub project_id: &'a str,
