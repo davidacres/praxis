@@ -31,6 +31,13 @@ export function nullUndefined(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Channels whose Electron handler resolved `undefined` for "not there". JSON has no `undefined`,
+ * so the backend answers `null`; callers written against the original contract compare with
+ * `undefined`, so a null result on these channels is handed back as `undefined`.
+ */
+const NULL_RESULT_IS_UNDEFINED = new Set(['assistant:getChat']);
+
 /** One listener per webview, registered before any initial snapshot request. */
 export async function createTauriTransport(
   invoke: TauriInvoke,
@@ -59,7 +66,8 @@ export async function createTauriTransport(
     async invoke(channel, ...args) {
       if (disposed) throw new DesktopInvocationError(channel, 'DESKTOP_CLOSED', 'Desktop bridge is closed.');
       try {
-        return await invoke('praxis_rpc', { channel, args: args.map(nullUndefined) });
+        const result = await invoke('praxis_rpc', { channel, args: args.map(nullUndefined) });
+        return (result === null && NULL_RESULT_IS_UNDEFINED.has(channel) ? undefined : result) as never;
       } catch (failure) {
         const error = failure as { code?: unknown; message?: unknown } | null;
         throw new DesktopInvocationError(channel,

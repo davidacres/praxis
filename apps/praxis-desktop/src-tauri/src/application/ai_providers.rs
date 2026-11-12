@@ -412,7 +412,7 @@ pub(super) fn api_connection(host: &HostContext, provider: &str) -> Result<(supe
         "gemini" => Wire::Gemini,
         _ => Wire::OpenAi,
     };
-    Ok((ApiConnection { wire, options, stream_usage, provider: provider.to_owned(), label: resolved.descriptor.label }, model))
+    Ok((ApiConnection { wire, options, stream_usage, provider: provider.to_owned(), label: resolved.descriptor.label, preset_id: resolved.custom.as_ref().and_then(|c| c["presetId"].as_str()).map(str::to_owned) }, model))
 }
 
 pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Option<Result<Value>> {

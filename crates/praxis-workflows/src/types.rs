@@ -447,7 +447,9 @@ pub struct WorkflowApprovalNode {
     #[serde(flatten)]
     pub base: WorkflowNodeBase,
     pub prompt: String,
+    #[serde(default)]
     pub required_gates: Vec<WorkflowGateKind>,
+    #[serde(default)]
     pub allow_bypass: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub optional: Option<bool>,

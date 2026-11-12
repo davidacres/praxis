@@ -161,13 +161,44 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
   };
 }
 
+/**
+ * Playwright already traces every context a test launches (`trace: 'retain-on-failure'`), so a spec
+ * that starts its own trace (the Electron-era `electronApp.context().tracing.start`) would hit
+ * "Tracing has been already started". Starting is then a no-op, and stopping it writes
+ * the requested file from the chunk recorded so far and reopens a chunk, so the harness trace
+ * keeps recording to the end of the test.
+ */
+function tracingTolerantContext(context: BrowserContext): BrowserContext {
+  const tracing = new Proxy(context.tracing, {
+    get(target, prop) {
+      if (prop === 'start') return async () => undefined;
+      if (prop === 'stop') {
+        return async (options?: { path?: string }) => {
+          if (!options?.path) return;
+          await target.stopChunk({ path: options.path });
+          await target.startChunk();
+        };
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+  });
+  return new Proxy(context, {
+    get(target, prop) {
+      if (prop === 'tracing') return tracing;
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+  });
+}
+
 function backendHandle(backend: ChildProcess, context: BrowserContext): BackendHandle {
   const unsupported = (what: string) => async (): Promise<never> => {
     throw new Error(`${what} drove the retired Electron main process and has no equivalent: the backend is a separate Rust process. Use TestApp.overrideChannel (stub/record a channel or dialog), emitEvent (push a host event), openWindow, callBackend/callHost, page.setViewportSize, the filesystem, or notReproducible() for a native-only step.`);
   };
   return {
     process: () => backend,
-    context: () => context,
+    context: () => tracingTolerantContext(context),
     windows: () => context.pages(),
     evaluate: unsupported('electronApp.evaluate'),
     waitForEvent: unsupported('electronApp.waitForEvent'),
@@ -376,6 +407,15 @@ export async function launchTestApp(
   window.on('console', message => {
     if (message.type() === 'error') console.log(`PAGE LOG [error]: ${message.text()}`);
   });
+  // The Electron window had its shell (and its global shortcuts) up by the time `reload()` resolved;
+  // the webview installs its host bridge asynchronously, so a key press straight after a reload
+  // would reach a shell that was not listening yet. A reload resolves once the title bar is back.
+  const reloadPage = window.reload.bind(window);
+  window.reload = async options => {
+    const response = await reloadPage(options);
+    await window.locator('[data-testid="titlebar-settings"]').first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => undefined);
+    return response;
+  };
   await window.goto(`${baseUrl}/tauri.html`);
   await window.waitForLoadState('domcontentloaded');
   if (!options?.keepSplash) {

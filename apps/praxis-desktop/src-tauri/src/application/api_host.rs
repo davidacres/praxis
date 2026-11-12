@@ -50,6 +50,8 @@ pub struct ApiConnection {
     pub stream_usage: bool,
     pub provider: String,
     pub label: String,
+    /// The preset a custom endpoint was created from, when it was.
+    pub preset_id: Option<String>,
 }
 
 pub struct ApiStart {
@@ -623,7 +625,15 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 if !connection.stream_usage {
                     request.as_object_mut().map(|o| o.remove("stream_options"));
                 }
-                apply_openai_reasoning(&mut request, &wire_model, reasoning);
+                if connection.preset_id.as_deref() == Some("bifrost") {
+                    // Bifrost translates its own unified reasoning object to the selected upstream and
+                    // does not consume Vercel's providerOptions or `reasoning_effort`.
+                    if let Some(level) = parse_effort(reasoning) {
+                        request["reasoning"] = json!({ "effort": level.as_str() });
+                    }
+                } else {
+                    apply_openai_reasoning(&mut request, &wire_model, reasoning);
+                }
                 request
             }
             Wire::Anthropic => {
