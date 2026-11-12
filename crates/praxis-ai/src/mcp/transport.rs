@@ -117,8 +117,21 @@ impl StdioTransport {
         args: &[String],
         env: &Option<BTreeMap<String, String>>,
     ) -> Result<Self, String> {
+        Self::spawn_in(command, args, env, None).await
+    }
+
+    /// Like [`Self::spawn`], with an optional working directory for the server process.
+    pub async fn spawn_in(
+        command: &str,
+        args: &[String],
+        env: &Option<BTreeMap<String, String>>,
+        cwd: Option<&str>,
+    ) -> Result<Self, String> {
         let mut cmd = Command::new(command);
         cmd.args(args);
+        if let Some(dir) = cwd.filter(|d| !d.is_empty()) {
+            cmd.current_dir(dir);
+        }
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());

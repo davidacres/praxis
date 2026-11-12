@@ -28,6 +28,16 @@ pub use events::{EventSubscriptionId, HostEventBus};
 use praxis_contracts::RustHostStatus;
 use praxis_core::core_status;
 pub use secrets::HostSecretStore;
+pub mod jira_service;
+
+/// A string (or number) field of a Jira JSON object, when present and non-empty.
+pub(crate) fn jira_value(value: &serde_json::Value, key: &str) -> Option<String> {
+    match value.get(key)? {
+        serde_json::Value::String(s) if !s.is_empty() => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
 pub use services::HostServices;
 pub use stdio::{HostInboundReply, HostWireFrame};
 pub use workflow_bridge::{

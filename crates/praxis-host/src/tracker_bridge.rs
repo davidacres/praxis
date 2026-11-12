@@ -35,6 +35,8 @@ pub struct TrackerConnectionInput {
     pub github_config: Option<StaticGitHubConfig>,
     #[serde(default)]
     pub gitlab_config: Option<StaticGitLabConfig>,
+    #[serde(default)]
+    pub jira_config: Option<crate::jira_service::StaticJiraConfig>,
 }
 
 fn parse_conn(args: &[Value]) -> Result<TrackerConnectionInput, RustRpcError> {
@@ -66,6 +68,10 @@ pub fn resolve_tracker_service(input: &TrackerConnectionInput) -> Arc<dyn IssueT
                 Arc::new(SilentLogSink),
             ))
         }
+        BackendMode::Jiracloud => match input.jira_config.clone().filter(|cfg| cfg.is_configured()) {
+            Some(cfg) => Arc::new(crate::jira_service::JiraCloudService::new(cfg)),
+            None => Arc::new(StubBackendService::new(BackendMode::Jiracloud)),
+        },
         other => Arc::new(StubBackendService::new(other)),
     }
 }
