@@ -179,6 +179,8 @@ test('notes stay in their own project, in the sidebar, the store and the file', 
   const section = page.getByTestId('notes-section');
   await expect(section).toBeVisible();
   const visible = (title: string) => section.getByRole('button', { name: title, exact: true });
+  // Wait for the list to render after the reload (a bare count() would race it), then require exactly one.
+  await expect(section.getByRole('button', { name: /^Only in (one|two)$/ })).toHaveCount(1);
   const shown = [await visible('Only in one').count(), await visible('Only in two').count()];
   expect(shown.reduce((x, y) => x + y, 0)).toBe(1);
 
