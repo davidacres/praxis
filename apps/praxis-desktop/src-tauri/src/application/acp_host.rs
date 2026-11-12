@@ -49,7 +49,7 @@ pub enum Decision {
 impl Decision {
     pub fn parse(text: &str) -> Option<Self> {
         match text {
-            "allow_once" => Some(Self::AllowOnce),
+            "allow_once" | "allow" => Some(Self::AllowOnce),
             "allow_always" => Some(Self::AllowAlways),
             "deny" => Some(Self::Deny),
             _ => None,

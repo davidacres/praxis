@@ -946,6 +946,47 @@ impl StageDispatcher for HostDispatcher {
     }
 }
 
+/// For the `switch` policy: the next usable AI for a stage, skipping the one that ran out, every
+/// AI that ran out in this run and, for an independent reviewer, the AI that wrote the work it judges
+/// (`fallbackProviderForStage`).
+struct HostFallbackProvider {
+    host: HostContext,
+}
+
+#[async_trait]
+impl praxis_workflows::orchestrator::FallbackProviderChooser for HostFallbackProvider {
+    async fn choose(&self, run: &WorkflowRun, node_id: &str) -> Option<String> {
+        use praxis_workflows::run::{exhausted_providers, provider_can_run_stage, stage_provider};
+        let active = self.host.settings().read().ai.active_provider.clone();
+        let current = stage_provider(
+            run,
+            node_id,
+            run.ai_provider.as_deref().filter(|p| !p.is_empty()).unwrap_or(&active),
+        );
+        let mut exclude = vec![current];
+        exclude.extend(exhausted_providers(run));
+        if let Some(WorkflowNode::AgentTask(task)) = run.definition.nodes.iter().find(|n| n.base().id == node_id)
+            && let Some(author) = task.independent_of.as_deref()
+            && let Some(latest) = run
+                .nodes
+                .get(author)
+                .and_then(|state| state.attempts.iter().rev().find(|a| a.provider.is_some() && a.pause.is_none()))
+            && let Some(provider) = &latest.provider
+        {
+            exclude.push(provider.clone());
+        }
+        let mut order: Vec<String> = run.ai_provider.iter().filter(|p| !p.is_empty()).cloned().collect();
+        order.push(active);
+        let usable = super::scheduled_runner_host::usable_providers(&self.host);
+        order.extend(usable.iter().cloned());
+        let mut seen = std::collections::HashSet::new();
+        order
+            .into_iter()
+            .filter(|id| seen.insert(id.clone()) && usable.contains(id))
+            .find(|id| !exclude.contains(id) && provider_can_run_stage(run, node_id, id))
+    }
+}
+
 // ── engine ───────────────────────────────────────────────────────────────
 
 pub struct Engine {
@@ -980,7 +1021,7 @@ pub fn engine(host: &HostContext) -> &'static Engine {
                         super::workflow_write_back::write_back(&events_host, run);
                     }
                 })),
-                choose_fallback_provider: None,
+                choose_fallback_provider: Some(Arc::new(HostFallbackProvider { host: host.clone() })),
                 now: None,
             }),
         }
