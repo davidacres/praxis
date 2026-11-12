@@ -880,7 +880,7 @@ fn scheduled_runs_crud_lifecycle_and_views() {
     // 2. Save a new scheduled run
     let save_input = json!({
         "name": "Nightly Build & Test",
-        "date": "2026-11-12",
+        "date": "2099-11-12",
         "time": "23:00",
         "timezone": "UTC",
         "tickets": [
