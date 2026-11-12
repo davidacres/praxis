@@ -111,5 +111,6 @@ test('a global policy composes strictest-wins with a project policy', async () =
   await page.getByRole('dialog', { name: 'Remove this policy?' }).getByRole('button', { name: 'Remove policy' }).click();
   await expect(globalCard.getByRole('button', { name: 'Create policy' })).toBeVisible();
   const cleared = await page.evaluate(async id => window.praxis.workflows.effectivePolicy(id), projectId);
-  expect(cleared).toBeUndefined();
+  // The Tauri transport is JSON: "no policy" arrives as null rather than undefined.
+  expect(cleared ?? undefined).toBeUndefined();
 });
