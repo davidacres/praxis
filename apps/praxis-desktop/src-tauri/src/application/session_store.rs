@@ -48,6 +48,40 @@ fn transcript_path(dir: &Path, session_id: &str) -> PathBuf {
     dir.join(TRANSCRIPT_DIR).join(format!("{clean}.json"))
 }
 
+/// Whether the session's route can produce reasoning text. Derived for the renderer, never stored:
+/// the answer depends on the route, which the renderer cannot work out itself.
+pub fn stamp_reasoning(mut record: Value) -> Value {
+    use praxis_ai::providers::reasoning_support::{ReasoningEffort, reasoning_availability};
+    let effort = record["reasoningEffort"].as_str().and_then(|e| serde_json::from_value::<ReasoningEffort>(json!(e)).ok());
+    let availability = reasoning_availability(record["provider"].as_str(), record["model"].as_str(), effort);
+    record["reasoningAvailability"] = json!(availability);
+    record
+}
+
+const INTERRUPTED_SUMMARY: &str = "Session interrupted by an app restart";
+
+/// A restart kills every in-flight task, but the record on disk still says it is running. Left
+/// alone it would show a ghost "running" session that Abort cannot touch, so it settles to
+/// `aborted` and is flagged for the startup recovery offer.
+fn settle_interrupted(mut record: Value) -> Value {
+    if !matches!(record["state"].as_str(), Some("planning" | "executing" | "awaiting_approval" | "awaiting_input")) {
+        return record;
+    }
+    record["state"] = json!("aborted");
+    record["interruptedByRestart"] = json!(true);
+    if record["completedAt"].is_null() {
+        record["completedAt"] = json!(super::now());
+    }
+    // Sessions with a transcript get the event when it loads (see `hydrate`).
+    if record["eventCount"].as_u64().unwrap_or(0) == 0 {
+        let event = json!({ "timestamp": super::now(), "type": "aborted", "summary": INTERRUPTED_SUMMARY });
+        let mut events = record["events"].as_array().cloned().unwrap_or_default();
+        events.push(event);
+        record["events"] = json!(events);
+    }
+    record
+}
+
 impl SessionStore {
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, State>> {
         let mut state = self.state.lock().map_err(|_| failure("The session store is unavailable."))?;
@@ -57,7 +91,7 @@ impl SessionStore {
                 let document = parse(&path, Some(&raw))?;
                 let sessions = document.get("praxis.agentSessions").or_else(|| document.get("praxis.aiSessions.v1"));
                 if let Some(map) = sessions.and_then(Value::as_object) {
-                    state.records = map.iter().map(|(key, value)| (key.clone(), value.clone())).collect();
+                    state.records = map.iter().map(|(key, value)| (key.clone(), settle_interrupted(value.clone()))).collect();
                 }
                 // A restart kills every in-flight task, but the record still says planning/executing/awaiting.
                 // Left alone it shows a ghost "running" session that nothing can abort: settle it to `aborted`.
@@ -95,6 +129,13 @@ impl SessionStore {
             }
         }
         record["eventsLoaded"] = json!(true);
+        if record["interruptedByRestart"] == true {
+            let mut events = record["events"].as_array().cloned().unwrap_or_default();
+            if !events.iter().any(|event| event["summary"] == INTERRUPTED_SUMMARY) {
+                events.push(json!({ "timestamp": super::now(), "type": "aborted", "summary": INTERRUPTED_SUMMARY }));
+                record["events"] = json!(events);
+            }
+        }
     }
 
     /// Every record, as held (events only for sessions that have been opened or run).
@@ -126,7 +167,8 @@ impl SessionStore {
         state.records.insert(issue_key.to_owned(), record.clone());
         state.dirty.insert(issue_key.to_owned());
         self.persist_locked(&mut state, Some(issue_key))?;
-        Ok(record)
+        super::ai_usage_stats::track_session(&self.dir, &record);
+        Ok(stamp_reasoning(record))
     }
 
     pub fn remove(&self, issue_key: &str) -> Result<()> {
@@ -149,10 +191,11 @@ impl SessionStore {
         state.records.insert(issue_key.to_owned(), record.clone());
         state.dirty.insert(issue_key.to_owned());
         drop(state);
+        super::ai_usage_stats::track_session(&self.dir, &record);
         if persist {
             self.queue_flush();
         }
-        Ok(Some(record))
+        Ok(Some(stamp_reasoning(record)))
     }
 
     /// Writes pending changes shortly, off the caller's thread, once for any burst of updates.

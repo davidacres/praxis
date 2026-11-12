@@ -218,6 +218,14 @@ impl Task {
             if let Some(uses) = praxis_ai::session::skill_usage::merge_detected_skill_uses(Some(&record["detectedSkills"]), &signals).filter(|_| !signals.is_empty()) {
                 record["detectedSkills"] = json!(uses);
             }
+            let mut event = event;
+            // In a multi-AI conversation each reply is attributed to the AI that wrote it.
+            if event["type"] == "message" && event["speaker"].is_null() && record["conversation"]["state"] == "running" {
+                let speaker = record["conversation"]["participants"].as_array().and_then(|p| p.iter().find(|x| x["id"] == record["conversation"]["currentSpeakerId"])).cloned();
+                if let Some(speaker) = speaker {
+                    event["speaker"] = json!({ "participantId": speaker["id"], "provider": speaker["provider"], "model": speaker["model"], "displayLabel": speaker["displayLabel"] });
+                }
+            }
             if let Some(events) = record["events"].as_array_mut() {
                 events.push(event);
                 let count = events.len();
@@ -431,7 +439,12 @@ impl Task {
         if let Some(name) = permission_tool_name(request["name"].as_str(), request["toolCallId"].as_str().unwrap_or_default()) {
             data = Some(json!({ "toolName": name }));
         }
-        self.append(evt("permission_requested", format!("Approval needed: {action}"), Some(format!("The agent is requesting permission to {action}.")), data), 0);
+        // API-session tools describe their own request (`description` and `detail`).
+        let (summary, detail) = match request["description"].as_str() {
+            Some(description) => (description.to_owned(), request["detail"].as_str().map(str::to_owned)),
+            None => (format!("Approval needed: {action}"), Some(format!("The agent is requesting permission to {action}."))),
+        };
+        self.append(evt("permission_requested", summary, detail, data), 0);
         answer.await.unwrap_or(Decision::Deny)
     }
 
@@ -666,9 +679,9 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
     let cost_before = sessions.get(&key)?.and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
     let mut record = json!({
         "issueKey": key, "sessionId": session_id, "provider": request.provider, "toolMode": request.tool_mode,
-        "state": "not_started", "taskDefinition": request.task, "purpose": purpose_of(&request.task, &key),
-        "handoverBrief": { "updatedAt": started_at, "revision": 0 },
-        "runtimeEpochs": [{ "provider": request.provider, "startedAt": started_at }],
+        "state": "not_started", "taskDefinition": request.task, "purpose": super::session_handover::purpose_from_task(&request.task, &key, None),
+        "handoverBrief": super::session_handover::empty_brief(&started_at),
+        "runtimeEpochs": [{ "id": super::session_handover::new_epoch_id(), "provider": request.provider, "startedAt": started_at, "reason": "started" }],
         "mode": mode, "events": [], "eventsLoaded": true, "eventCount": 0, "stepCount": 0, "startedAt": started_at,
         "reasoningEffort": request.reasoning_effort.clone().unwrap_or_else(|| "medium".into())
     });
@@ -838,6 +851,18 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     if let Some(model) = request.model.as_deref().filter(|m| !m.is_empty()) {
         // Not every agent exposes a model option; the prompt still runs.
         let _ = connection.request("session/set_config_option", json!({ "sessionId": agent_session, "configId": "model", "value": model })).await;
+    }
+    // The reasoning effort rides the agent's `thought_level` option; agents without one keep their default.
+    if let Some(effort) = request.reasoning_effort.as_deref().filter(|e| !e.is_empty()) {
+        let option = options.iter().find(|o| o["category"] == "thought_level" || o["id"] == "effort").cloned();
+        if let Some(option) = option.filter(|o| o["type"] == "select") {
+            let choices: Vec<Value> = option["options"].as_array().into_iter().flatten().flat_map(|e| if e.get("group").is_some() { e["options"].as_array().cloned().unwrap_or_default() } else { vec![e.clone()] }).collect();
+            let preferred: Vec<&str> = if effort == "off" { vec!["off", "none", "minimal", "default"] } else { vec![effort] };
+            let value = preferred.iter().find_map(|candidate| choices.iter().find(|c| c["value"].as_str().is_some_and(|v| v.eq_ignore_ascii_case(candidate)) || c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(candidate))).and_then(|c| c["value"].as_str().map(str::to_owned)));
+            if let Some(value) = value {
+                let _ = connection.request("session/set_config_option", json!({ "sessionId": agent_session, "configId": option["id"], "value": value })).await;
+            }
+        }
     }
     if let Some(modes) = session["modes"].as_object() {
         let current = modes.get("currentModeId").cloned().unwrap_or(Value::Null);
@@ -1072,6 +1097,9 @@ pub struct Continue {
     pub args: Vec<String>,
     pub mcp_servers: Vec<Value>,
     pub gadget_answer: bool,
+    /// A turn Praxis schedules between the AIs of a multi-AI conversation, not typed by the user.
+    pub internal: bool,
+    pub conversation_context: Option<String>,
 }
 
 /// `Previous conversation:` plus the recent assistant/user text, for a session that cannot be resumed.
@@ -1132,7 +1160,10 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
     if record["permissionMode"] == "autopilot" {
         system.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("AUTOPILOT_SESSION_PROMPT")));
     }
-    let current_turn = format!("User follow-up:\n{follow_up}");
+    if let Some(context) = request.conversation_context.as_deref().filter(|c| !c.is_empty()) {
+        system.push_str(&format!("\n\n{context}"));
+    }
+    let current_turn = format!("{}:\n{follow_up}", if request.internal { "Conversation routing instruction" } else { "User follow-up" });
     let resumed_prompt = [system.clone(), current_turn.clone()].join("\n\n");
     let events = record["events"].as_array().cloned().unwrap_or_default();
     let prompt = [Some(system), conversation_transcript(&events), Some(current_turn)].into_iter().flatten().collect::<Vec<_>>().join("\n\n");
@@ -1155,7 +1186,7 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
     // The previous turn recorded its own reply when it ended; clear the live buffer so the old answer
     // cannot briefly render after the new user message.
     task.mutate(true, |record| record["responseText"] = json!(""));
-    let mut event = evt("user_input_completed", "You", Some(follow_up), None);
+    let mut event = if request.internal { evt("conversation_turn", "Conversation turn started", None, None) } else { evt("user_input_completed", "You", Some(follow_up), None) };
     if !request.images.is_empty() {
         event["attachments"] = json!(request.images);
     }

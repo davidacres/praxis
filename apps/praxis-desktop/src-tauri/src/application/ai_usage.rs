@@ -1,31 +1,12 @@
-use std::collections::HashMap;
 use std::path::Path;
 
-use praxis_ai::usage_stats::{AiUsageEvent, summarize_usage};
 use praxis_host::HostContext;
 use serde_json::{Value, json};
 
-use super::storage::{parse, read};
+use super::ai_usage_stats as stats;
 use super::{Result, failure, now, text};
 
 const USAGE_SECRET_PREFIX: &str = "ai-usage:";
-
-fn usage_file(user_data_dir: &Path) -> std::path::PathBuf {
-    user_data_dir.join("ai-usage.json")
-}
-
-fn read_usage_events(user_data_dir: &Path) -> Result<Vec<AiUsageEvent>> {
-    let path = usage_file(user_data_dir);
-    if let Some(content) = read(&path)? {
-        let val = parse(&path, Some(&content))?;
-        if let Some(events_val) = val.get("events") {
-            let events: Vec<AiUsageEvent> =
-                serde_json::from_value(events_val.clone()).map_err(failure)?;
-            return Ok(events);
-        }
-    }
-    Ok(Vec::new())
-}
 
 fn default_provider_snapshot(provider: &str) -> Value {
     json!({
@@ -44,112 +25,19 @@ pub fn dispatch(
     args: &[Value],
 ) -> Result<Value> {
     match channel {
-        "aiUsage:listEvents" => {
-            let events = read_usage_events(user_data_dir)?;
-            Ok(json!(events))
-        }
-        "aiUsage:dashboardSummary" => {
-            let events = read_usage_events(user_data_dir)?;
-            let total = summarize_usage(&events);
-            let mut by_model: HashMap<String, Value> = HashMap::new();
-            let mut by_provider: HashMap<String, Value> = HashMap::new();
-
-            for ev in &events {
-                let m_entry = by_model.entry(ev.model.clone()).or_insert_with(|| {
-                    json!({
-                        "requests": 0,
-                        "inputTokens": 0,
-                        "outputTokens": 0,
-                        "totalTokens": 0,
-                        "costUsd": 0.0
-                    })
-                });
-                let req = m_entry["requests"].as_u64().unwrap_or(0) + 1;
-                let inp = m_entry["inputTokens"].as_u64().unwrap_or(0) + ev.tokens.input;
-                let out = m_entry["outputTokens"].as_u64().unwrap_or(0) + ev.tokens.output;
-                let cost = m_entry["costUsd"].as_f64().unwrap_or(0.0) + ev.cost_usd.unwrap_or(0.0);
-                *m_entry = json!({
-                    "requests": req,
-                    "inputTokens": inp,
-                    "outputTokens": out,
-                    "totalTokens": inp + out,
-                    "costUsd": cost
-                });
-
-                let p_entry = by_provider.entry(ev.provider.clone()).or_insert_with(|| {
-                    json!({
-                        "requests": 0,
-                        "inputTokens": 0,
-                        "outputTokens": 0,
-                        "totalTokens": 0,
-                        "costUsd": 0.0
-                    })
-                });
-                let p_req = p_entry["requests"].as_u64().unwrap_or(0) + 1;
-                let p_inp = p_entry["inputTokens"].as_u64().unwrap_or(0) + ev.tokens.input;
-                let p_out = p_entry["outputTokens"].as_u64().unwrap_or(0) + ev.tokens.output;
-                let p_cost =
-                    p_entry["costUsd"].as_f64().unwrap_or(0.0) + ev.cost_usd.unwrap_or(0.0);
-                *p_entry = json!({
-                    "requests": p_req,
-                    "inputTokens": p_inp,
-                    "outputTokens": p_out,
-                    "totalTokens": p_inp + p_out,
-                    "costUsd": p_cost
-                });
-            }
-
-            let summary = json!({
-                "requests": total.requests,
-                "inputTokens": total.input_tokens,
-                "outputTokens": total.output_tokens,
-                "totalTokens": total.total_tokens(),
-                "costUsd": total.cost_usd
-            });
-
-            Ok(json!({
-                "today": summary,
-                "thisWeek": summary,
-                "thisMonth": summary,
-                "byModel": by_model,
-                "byProvider": by_provider
-            }))
-        }
+        "aiUsage:listEvents" => Ok(json!(stats::list_events(user_data_dir))),
+        "aiUsage:dashboardSummary" => Ok(stats::dashboard_summary(&stats::list_events(user_data_dir), chrono::Utc::now())),
         "aiUsage:series" => {
-            let events = read_usage_events(user_data_dir)?;
-            let total = summarize_usage(&events);
-            let bucket = json!({
-                "periodStart": now(),
-                "requests": total.requests,
-                "inputTokens": total.input_tokens,
-                "outputTokens": total.output_tokens,
-                "totalTokens": total.total_tokens(),
-                "costUsd": total.cost_usd
-            });
-            Ok(json!([bucket]))
+            let granularity = stats::Granularity::parse(text(args, 0)?).ok_or_else(|| failure("Unknown usage granularity."))?;
+            let periods = args.get(1).and_then(Value::as_u64).unwrap_or(1) as usize;
+            let provider = args.get(2).and_then(Value::as_str).filter(|p| !p.is_empty());
+            let model = args.get(3).and_then(Value::as_str).filter(|m| !m.is_empty());
+            let events: Vec<Value> = stats::list_events(user_data_dir).into_iter().filter(|e| model.is_none_or(|m| e["model"].as_str() == Some(m))).collect();
+            Ok(json!(stats::series(&events, granularity, periods, chrono::Utc::now(), provider)))
         }
         "aiUsage:compareLatestPeriod" => {
-            let events = read_usage_events(user_data_dir)?;
-            let total = summarize_usage(&events);
-            let summary = json!({
-                "requests": total.requests,
-                "inputTokens": total.input_tokens,
-                "outputTokens": total.output_tokens,
-                "totalTokens": total.total_tokens(),
-                "costUsd": total.cost_usd
-            });
-            Ok(json!({
-                "current": summary,
-                "previous": {
-                    "requests": 0,
-                    "inputTokens": 0,
-                    "outputTokens": 0,
-                    "totalTokens": 0,
-                    "costUsd": 0.0
-                },
-                "deltaTokens": total.total_tokens(),
-                "deltaCost": total.cost_usd
-            }))
+            let granularity = stats::Granularity::parse(text(args, 0)?).ok_or_else(|| failure("Unknown usage granularity."))?;
+            Ok(stats::compare_latest_period(&stats::list_events(user_data_dir), granularity, chrono::Utc::now()))
         }
         "aiUsage:providerSnapshot" => {
             let provider = text(args, 0)?;

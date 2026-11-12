@@ -65,6 +65,9 @@ impl AcpConnection {
     pub async fn spawn(options: AcpSpawn) -> Result<(Self, mpsc::UnboundedReceiver<Incoming>), String> {
         let mut command = Command::new(&options.command);
         command.args(&options.args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+        // Its own process group, so stopping the agent stops every command it started.
+        #[cfg(unix)]
+        command.process_group(0);
         if let Some(cwd) = &options.cwd {
             command.current_dir(cwd);
         }
@@ -166,6 +169,13 @@ impl AcpConnection {
     pub async fn shutdown(&self) {
         self.stdin.lock().await.take();
         if let Some(mut child) = self.child.lock().await.take() {
+            #[cfg(unix)]
+            if let Some(pid) = child.id() {
+                // Ask the whole group to stop, then insist.
+                signal_group(pid, nix::sys::signal::Signal::SIGTERM);
+                let _ = tokio::time::timeout(std::time::Duration::from_millis(300), child.wait()).await;
+                signal_group(pid, nix::sys::signal::Signal::SIGKILL);
+            }
             let _ = child.kill().await;
             let _ = child.wait().await;
         }
@@ -197,5 +207,13 @@ async fn route(message: &Value, pending: &Pending, tx: &mpsc::UnboundedSender<In
             let _ = waiter.send(outcome);
         }
         (None, None) => {}
+    }
+}
+
+/// Signals every process in the group led by `pid` (the agent and what it started).
+#[cfg(unix)]
+pub fn signal_group(pid: u32, signal: nix::sys::signal::Signal) {
+    if let Ok(pid) = i32::try_from(pid) {
+        let _ = nix::sys::signal::killpg(nix::unistd::Pid::from_raw(pid), signal);
     }
 }

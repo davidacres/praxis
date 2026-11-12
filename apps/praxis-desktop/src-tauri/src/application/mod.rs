@@ -5,11 +5,17 @@ mod ai;
 mod acp_host;
 mod api_host;
 mod ai_delegate;
+mod ai_review;
+mod gadget_service;
+mod ai_session_ops;
+mod session_handover;
 mod ai_models;
 mod session_store;
 mod user_mcp;
 mod ai_providers;
+mod ai_feedback;
 mod ai_usage;
+mod ai_usage_stats;
 mod artifacts;
 mod assistant;
 mod team_chat;
@@ -19,7 +25,6 @@ mod boards;
 mod builtin_mcp;
 mod connections;
 mod deployments;
-mod gadgets;
 mod log_bus;
 mod task_designer_plan;
 mod task_designer_state;
@@ -429,11 +434,15 @@ fn issue_connection<'a>(channel: &str, args: &'a [Value]) -> Option<&'a str> {
     args.get(index).and_then(Value::as_str).filter(|id| !id.trim().is_empty())
 }
 
+/// How many AI sessions are mid-turn, for the close guard.
+pub fn running_session_count(dir: &std::path::Path) -> usize {
+    acp_host::active_keys(dir).iter().filter(|key| acp_host::is_running(dir, key)).count()
+}
+
 /// All desktop metadata mutations, including settings writes sharing the same
 /// JSON file, use one lock. Long-running PTY/AI/workflow commands do not hold it.
 pub struct Application {
     state: Mutex<ApplicationState>,
-    log_bus: Mutex<Option<log_bus::LogBus>>,
     plan_watchers: plan_watch::PlanWatchers,
     webviews: webviews::WebviewManager,
     version: String,
@@ -449,7 +458,7 @@ impl Application {
     pub fn register(host: &HostContext, version: &str) {
         // The Output tab backfills from this bus; the launch line proves the
         // ring buffer and `log:getRecent` end to end.
-        let bus = log_bus::LogBus::new(&host.config().user_data_dir);
+        let bus = log_bus::shared(&host.config().user_data_dir);
         // Persisted as well, so the next session sees where this one began.
         if !bus.recent().is_empty() {
             bus.append(host, "—— previous session above ——");
@@ -457,7 +466,6 @@ impl Application {
         bus.append(host, &format!("[app] Praxis {version} started"));
         let application = Arc::new(Self {
             state: Mutex::new(ApplicationState::default()),
-            log_bus: Mutex::new(Some(bus)),
             plan_watchers: plan_watch::PlanWatchers::default(),
             webviews: webviews::WebviewManager::new(),
             version: version.into(),
@@ -485,6 +493,23 @@ impl Application {
             // Launching only spawns, and an abort can take seconds: neither may hold the profile lock.
             _ if ai_delegate::CHANNELS.contains(&channel) => {
                 if let Some(result) = ai_delegate::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
+            }
+            // Ticket reviews launch an agent and gadget answers call back into the tracker, so
+            // neither may hold the profile lock.
+            _ if ai_review::CHANNELS.contains(&channel) => {
+                if let Some(result) = ai_review::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
+            }
+            _ if gadget_service::CHANNELS.contains(&channel) => {
+                if let Some(result) = gadget_service::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
+            }
+            _ if ai_session_ops::CHANNELS.contains(&channel) => {
+                if let Some(result) = ai_session_ops::dispatch(host, &host.config().user_data_dir, channel, args) {
                     return result;
                 }
             }
@@ -603,10 +628,7 @@ impl Application {
         } else if channel.starts_with("boardPrefs:") {
             board_prefs::dispatch(&host.config().user_data_dir, channel, args)?
         } else if channel == "log:getRecent" {
-            let mut bus_guard = self.log_bus.lock().map_err(failure)?;
-            let bus =
-                bus_guard.get_or_insert_with(|| log_bus::LogBus::new(&host.config().user_data_dir));
-            bus.dispatch(channel, args)?
+            log_bus::shared(&host.config().user_data_dir).dispatch(channel, args)?
         } else if channel.starts_with("activity:") {
             activity::dispatch(
                 host,
@@ -647,8 +669,6 @@ impl Application {
             || channel.starts_with("detachedChat:")
         {
             self.webviews.dispatch(host, channel, args)?
-        } else if channel.starts_with("gadgets:") {
-            gadgets::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("aiUsage:") {
             ai_usage::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("assistant:") {

@@ -1472,6 +1472,10 @@ async fn guard_proxy_and_preview_security() {
 #[test]
 fn gadgets_publishing_and_submission() {
     let profile = Profile::new();
+    // A gadget is pinned to a live session; text published for no session mints nothing.
+    let unscoped = profile.rpc("gadgets:publishFromText", vec![json!("sess-1"), json!("pref"), json!("```praxis-gadget\n{}\n```")]);
+    assert!(unscoped.as_array().expect("blocks").is_empty());
+    super::session_store::store(&profile.root).put("SESSION-1", json!({ "issueKey": "SESSION-1", "sessionId": "sess-1", "state": "completed" })).expect("session");
 
     // 1. Publish from text with a choice gadget
     let text_with_gadget = r#"
@@ -1496,8 +1500,20 @@ Here is a choice for you:
         "actionId": "pick",
         "value": { "kind": "choice", "selected": "yes" }
     });
-    let result = profile.rpc("gadgets:submit", vec![submit_req]);
-    assert_eq!(result["status"], "applied");
+    let result = profile.rpc("gadgets:submit", vec![submit_req.clone()]);
+    assert_eq!(result["status"], "completed");
+    assert_eq!(result["replay"], false);
+    let blocks = profile.rpc("gadgets:getBlocks", vec![json!("sess-1")]);
+    let gadget = blocks.as_array().expect("blocks").iter().find(|b| b["type"] == "gadget").expect("gadget");
+    assert_eq!(gadget["gadget"]["state"], "completed");
+    assert_eq!(gadget["gadget"]["answer"]["selected"], "yes");
+
+    // The same submission again is a replay, and a different answer under that key is refused.
+    let mut again = submit_req.clone();
+    again["idempotencyKey"] = result["idempotencyKey"].clone();
+    assert_eq!(profile.rpc("gadgets:submit", vec![again.clone()])["replay"], true);
+    again["value"] = json!({ "kind": "choice", "selected": "no" });
+    assert_eq!(profile.rpc("gadgets:submit", vec![again])["error"]["code"], "duplicate-action");
 
     // 3. Clear session gadgets
     profile.rpc("gadgets:clear", vec![json!("sess-1")]);
@@ -1512,8 +1528,8 @@ fn ai_usage_and_provider_snapshots() {
     // 1. Dashboard summary
     let summary = profile.rpc("aiUsage:dashboardSummary", vec![]);
     assert!(summary.get("today").is_some());
-    assert!(summary.get("thisWeek").is_some());
-    assert!(summary.get("byModel").is_some());
+    assert!(summary.get("week").is_some());
+    assert!(summary["allTime"]["models"].is_array());
 
     // 2. Series and compare
     let series = profile.rpc("aiUsage:series", vec![json!("day"), json!(7)]);
@@ -1647,18 +1663,13 @@ fn ai_sessions_and_analysis_lifecycle() {
     let providers = profile.rpc("ai:listProviderStatuses", vec![]);
     assert!(providers.as_array().expect("providers").len() >= 3);
 
-    // 2. Conversation start & message
-    let session = profile.rpc("ai:startConversation", vec![json!("TASK-99")]);
-    assert_eq!(session["issueKey"], "TASK-99");
-
-    let event = profile.rpc(
-        "ai:sendConversationMessage",
-        vec![json!("TASK-99"), json!("Investigate memory leak")],
-    );
-    assert_eq!(event["content"], "Investigate memory leak");
-
-    let retrieved = profile.rpc("ai:getSession", vec![json!("TASK-99")]);
-    assert_eq!(retrieved["events"].as_array().expect("events").len(), 1);
+    // 2. A multi-AI conversation needs a session, a mode and a second AI.
+    let error = profile.try_rpc("ai:startConversation", vec![json!("TASK-99"), json!({})]).expect_err("mode required");
+    assert!(error.message.contains("Choose a conversation mode"));
+    let error = profile.try_rpc("ai:startConversation", vec![json!("TASK-99"), json!({ "mode": "consult", "provider": "openai", "turnCap": 2 })]).expect_err("no session");
+    assert!(error.message.contains("No agent session found for TASK-99"));
+    let error = profile.try_rpc("ai:sendConversationMessage", vec![json!("TASK-99"), json!({ "participantId": "host", "message": "hi" })]).expect_err("no conversation");
+    assert!(error.message.contains("No running multi-AI conversation"));
 
     // 3. Analysis submit, confirm, clear
     let analysis_data = json!({

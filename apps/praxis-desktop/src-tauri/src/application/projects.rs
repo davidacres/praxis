@@ -207,6 +207,7 @@ struct CreateInput {
     folder_name: Option<String>,
     workflow_stages: Vec<ProjectWorkflowStage>,
     starter_tickets: Vec<Starter>,
+    /// Absent means project-board tools only, as a project created without one always got.
     #[serde(default)]
     default_ai_tool_mode: Option<String>,
 }

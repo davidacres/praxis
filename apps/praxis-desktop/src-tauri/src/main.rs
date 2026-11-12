@@ -65,7 +65,17 @@ async fn praxis_rpc(
             Ok(Value::Null)
         }
         "window:isMaximized" => Ok(json!(window.is_maximized().map_err(shell_error)?)),
-        "window:close" | "window:confirmClose" => {
+        // Closing with sessions still running asks first; `confirmClose` is the answer.
+        "window:close" => {
+            let running = application::running_session_count(&state.host.config().user_data_dir);
+            if running == 0 {
+                window.close().map_err(shell_error)?;
+            } else {
+                window.emit("praxis:event", json!({"channel": "window:closeRequested", "payload": { "runningSessionCount": running }})).map_err(shell_error)?;
+            }
+            Ok(Value::Null)
+        }
+        "window:confirmClose" => {
             window.close().map_err(shell_error)?;
             Ok(Value::Null)
         }

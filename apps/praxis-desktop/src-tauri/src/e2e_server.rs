@@ -233,7 +233,15 @@ fn rpc(shared: &Shared, channel: String, args: Vec<Value>) -> Value {
             }
             None => fail("INVALID_ARGUMENT", "Zoom factor must be between 0.5 and 3.".into()),
         },
-        "window:reload" | "window:minimize" | "window:toggleMaximize" | "window:close"
+        // Closing with sessions still running asks first, as the native window does.
+        "window:close" => {
+            let running = crate::application::running_session_count(&shared.host.config().user_data_dir);
+            if running > 0 {
+                shared.host.events().emit("window:closeRequested", Some(json!({ "runningSessionCount": running })));
+            }
+            ok(Value::Null)
+        }
+        "window:reload" | "window:minimize" | "window:toggleMaximize"
         | "window:confirmClose" | "window:cancelClose" | "window:setSurfaceVibrancy"
         | "window:setNotificationView" | "shell:openExternal" => ok(Value::Null),
         "dialog:pickFolder" | "workspaces:saveToFile" | "workspaces:openFromFile" => ok(Value::Null),
