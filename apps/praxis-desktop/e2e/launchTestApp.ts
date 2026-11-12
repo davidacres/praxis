@@ -820,6 +820,9 @@ async function stopTestWork(app: TestApp): Promise<void> {
   // Failed assertions can leave a task awaiting approval. End test-owned work
   // before closing, so the application's active-session close guard can settle.
   if (!app.window.isClosed()) {
+    // A spec can end straight after a reload, when the document has loaded but the webview
+    // has not installed its host bridge yet (`window.praxis` is set asynchronously).
+    await app.window.waitForFunction(() => Boolean((window as { praxis?: unknown }).praxis?.projects), undefined, { timeout: 10000 });
     await app.window.evaluate(async () => {
       const projects = await window.praxis.projects.list();
       const runs = (await Promise.all(projects.map(project => window.praxis.workflows.listRuns(project.id)))).flat();
