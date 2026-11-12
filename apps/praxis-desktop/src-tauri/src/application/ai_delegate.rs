@@ -155,7 +155,13 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     };
 
     let existing_folder = non_empty(&input, "issueKey").and_then(|key| store(dir).get(key).ok().flatten()).and_then(|r| r["workingDirectory"].as_str().map(str::trim).filter(|w| !w.is_empty()).map(str::to_owned));
+    // A project ticket's session starts in the project's own folder.
+    let project_folder = non_empty(&input, "projectId")
+        .or_else(|| non_empty(&input, "connectionId").and_then(|c| c.strip_prefix("project:")))
+        .and_then(|project_id| super::workflows::project_folder(host, project_id))
+        .map(|folder| folder.to_string_lossy().into_owned());
     let working_directory = non_empty(&input, "workingDirectory").map(str::to_owned)
+        .or(project_folder)
         .or(existing_folder)
         .or_else(|| Some(ai.working_directory.trim().to_owned()).filter(|w| !w.is_empty()))
         .or_else(|| std::env::var("PRAXIS_AI_WORKING_DIR").ok().map(|w| w.trim().to_owned()).filter(|w| !w.is_empty()));

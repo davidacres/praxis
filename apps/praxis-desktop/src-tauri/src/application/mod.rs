@@ -49,7 +49,10 @@ mod workflow_agent_stage;
 mod workflow_engine;
 mod workflow_env_failure;
 mod workflow_estimate;
+mod workflow_evidence;
+mod workflow_packs;
 mod workflow_summary;
+mod workflow_write_back;
 mod workflows;
 mod workspaces;
 

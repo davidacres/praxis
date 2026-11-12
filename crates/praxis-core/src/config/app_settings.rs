@@ -1852,9 +1852,22 @@ pub fn sanitize_app_settings(raw: &Value) -> AppSettings {
         Some(app_obj) => read_string(app_obj.get("activeLookId"), ""),
         None => defaults.appearance.active_look_id.clone(),
     };
-    let appearance_active_look_id = if appearance_looks
-        .iter()
-        .any(|look| look.id == requested_look_id)
+    // A profile that chose a theme other than the default and other than its active Look's has
+    // left that Look (editing the theme detaches it), so the Look must not override the choice.
+    let chose_other_theme = raw_appearance
+        .and_then(|a| a.get("themeId"))
+        .and_then(Value::as_str)
+        .filter(|theme| *theme != defaults.appearance.theme_id)
+        .is_some_and(|theme| {
+            appearance_looks
+                .iter()
+                .find(|look| look.id == requested_look_id)
+                .is_some_and(|look| look.theme_id != theme)
+        });
+    let appearance_active_look_id = if !chose_other_theme
+        && appearance_looks
+            .iter()
+            .any(|look| look.id == requested_look_id)
     {
         requested_look_id
     } else {

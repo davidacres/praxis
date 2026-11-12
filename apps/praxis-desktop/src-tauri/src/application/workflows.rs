@@ -175,6 +175,12 @@ pub fn project_folder(host: &HostContext, project_id: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+fn projects_exist(host: &HostContext, project_id: &str) -> bool {
+    storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+        .ok()
+        .is_some_and(|catalog| catalog.require(storage::PROJECTS, project_id).is_ok())
+}
+
 const PROJECT_WORKFLOWS_DIR: &str = ".praxis/workflows";
 
 /// Mirrors core's `workflowFileName`: an id that cannot be a safe file name is refused.
@@ -509,12 +515,290 @@ pub fn recommend_template(_host: &HostContext, _args: &[Value]) -> Result<Value>
     }))
 }
 
-pub fn recommend_model_tiers(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(json!({
-        "tiers": {},
-        "provider": "anthropic",
-        "model": "claude-3-5-sonnet"
-    }))
+const TIER_SYSTEM_PROMPT: &str = "You are helping someone choose how capable a model each stage of a software delivery workflow needs.\nTiers: \"fast\" (cheap and quick: summaries, formatting, simple checks of text), \"standard\" (routine review, test\nauthoring, analysis), \"strong\" (hard reasoning: writing or changing production code, security review, subtle\ncorrectness review). A stage that fails is retried one tier higher automatically, so prefer the cheapest tier that\nwill usually succeed. Respond with exactly one fenced JSON code block and nothing else:\n\n```json\n{ \"stages\": { \"<nodeId, verbatim>\": { \"tier\": \"fast|standard|strong\", \"rationale\": \"<one short sentence>\" } } }\n```";
+
+/// The provider a one-shot recommendation runs on (`resolveRecommendationProvider`): the explicit
+/// Recommendations provider, else the active one when it is a configured API provider, else the
+/// first configured API provider.
+fn recommendation_connection(
+    host: &HostContext,
+) -> Result<(super::api_host::ApiConnection, String)> {
+    use praxis_ai::providers::registry::{DescriptorKind, built_in_descriptors};
+    let (explicit, active, custom): (Option<String>, String, Vec<String>) = {
+        let settings = host.settings().read();
+        (
+            settings.ai.recommendation_provider.clone().filter(|p| !p.is_empty()),
+            settings.ai.active_provider.clone(),
+            settings
+                .ai
+                .custom_providers
+                .iter()
+                .flatten()
+                .filter_map(|c| serde_json::to_value(c).ok()?["id"].as_str().map(str::to_string))
+                .collect(),
+        )
+    };
+    let ready = |provider: &str| {
+        super::ai_providers::api_connection(host, provider)
+            .ok()
+            .filter(|(connection, _)| connection.options.api_key.is_some())
+    };
+    if let Some(provider) = explicit {
+        return ready(&provider).ok_or_else(|| {
+            failure(format!(
+                "{provider} is not configured — add an API key in Settings → AI, or change the Recommendations provider setting."
+            ))
+        });
+    }
+    let mut order = vec![active];
+    order.extend(
+        built_in_descriptors()
+            .into_iter()
+            .filter(|d| d.kind == DescriptorKind::Api)
+            .map(|d| d.id),
+    );
+    order.extend(custom);
+    order
+        .iter()
+        .find_map(|provider| ready(provider))
+        .ok_or_else(|| {
+            failure("No AI provider is configured for recommendations — add an API key in Settings → AI.")
+        })
+}
+
+fn extract_json_block(text: &str) -> String {
+    let fenced = regex::Regex::new(r"(?is)```json\s*(.*?)```")
+        .ok()
+        .and_then(|re| re.captures(text).map(|c| c[1].to_string()))
+        .or_else(|| {
+            regex::Regex::new(r"(?s)```\s*(.*?)```")
+                .ok()
+                .and_then(|re| re.captures(text).map(|c| c[1].to_string()))
+        });
+    fenced.unwrap_or_else(|| text.to_string()).trim().to_string()
+}
+
+pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value> {
+    use praxis_workflows::stage_model::default_tier_for_stage;
+    let project_id = text(args, 0)?;
+    if !projects_exist(host, project_id) {
+        return Err(failure(format!("Project {project_id} was not found.")));
+    }
+    let definition = args.get(1).cloned().unwrap_or(Value::Null);
+    let agents: Vec<&Value> = definition["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|n| n["type"] == "agent-task")
+        .collect();
+    if agents.is_empty() {
+        return Err(failure("This workflow has no agent stages to choose a model for."));
+    }
+    let mut lines = vec![format!("Workflow: {}", definition["name"].as_str().unwrap_or(""))];
+    if let Some(description) = definition["description"].as_str().filter(|d| !d.is_empty()) {
+        lines.push(format!("Description: {description}"));
+    }
+    lines.push(String::new());
+    lines.push("Stages:".into());
+    let stages: Vec<String> = agents
+        .iter()
+        .map(|node| {
+            let mut parts = vec![
+                format!("- id: {}", node["id"].as_str().unwrap_or("")),
+                format!("  name: {}", node["name"].as_str().unwrap_or("")),
+                format!(
+                    "  writes code to the worktree: {}",
+                    if node["mutatesWorktree"] == true { "yes" } else { "no" }
+                ),
+            ];
+            if let Some(gate) = node["satisfiesGate"].as_str() {
+                parts.push(format!("  evidence for the {gate} gate"));
+            }
+            let instructions: String = node["instructions"]
+                .as_str()
+                .unwrap_or("")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(400)
+                .collect();
+            parts.push(format!(
+                "  instructions: {}",
+                if instructions.is_empty() { "(none)" } else { &instructions }
+            ));
+            parts.join("\n")
+        })
+        .collect();
+    lines.push(stages.join("\n"));
+    let prompt = lines.join("\n");
+
+    let (connection, model) = recommendation_connection(host)?;
+    let provider = connection.provider.clone();
+    let (reply, usage) = runtime::block_on(super::api_host::run_provider_prompt(
+        &connection,
+        &model,
+        TIER_SYSTEM_PROMPT,
+        &prompt,
+        None,
+        |_| {},
+    ))
+    .map_err(failure)?;
+    let parsed: Value = serde_json::from_str(&extract_json_block(&reply))
+        .map_err(|_| failure("The AI model-tier response was not valid JSON."))?;
+    let Some(answered) = parsed["stages"].as_object() else {
+        return Err(failure("The AI model-tier response did not include a \"stages\" object."));
+    };
+    let mut result = serde_json::Map::new();
+    for node in agents {
+        let id = node["id"].as_str().unwrap_or("");
+        let entry = answered.get(id);
+        let tier = entry
+            .and_then(|e| e["tier"].as_str())
+            .filter(|t| ["fast", "standard", "strong"].contains(t));
+        result.insert(
+            id.to_string(),
+            match tier {
+                Some(tier) => json!({
+                    "tier": tier,
+                    "rationale": entry
+                        .and_then(|e| e["rationale"].as_str())
+                        .map(str::trim)
+                        .filter(|r| !r.is_empty())
+                        .unwrap_or("No rationale was given."),
+                    "defaulted": false,
+                }),
+                None => json!({
+                    "tier": default_tier_for_stage(
+                        node["mutatesWorktree"] == true,
+                        node["satisfiesGate"].is_string()
+                    ).to_string(),
+                    "rationale": "The model gave no usable answer for this stage, so the default for what it does was used.",
+                    "defaulted": true,
+                }),
+            },
+        );
+    }
+    Ok(json!({ "stages": result, "model": model, "provider": provider, "usage": usage }))
+}
+
+/// The agent and skill dependencies of a workflow's agent stages, each `installed`, `available`
+/// (a bundled definition can be installed on selection) or `missing` (`extractWorkflowDependencies`).
+fn extract_dependencies(catalog: &Value, template: &Value) -> Vec<Value> {
+    use praxis_core::agent_runtime::bundled::{bundled_skill, is_bundled_agent};
+    let list = |key: &str| catalog.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
+    let has_runtime_hosts = catalog.get("runtimeHosts").is_some_and(Value::is_array);
+    let hosts = if has_runtime_hosts { list("runtimeHosts") } else { list("agents") };
+    let has_profiles = catalog.get("profiles").is_some_and(Value::is_array);
+    let profiles = list("profiles");
+    let skills = list("skills");
+
+    struct Entry {
+        profile_id: String,
+        host_id: String,
+        provider_id: Option<String>,
+        scope: String,
+        skills: Vec<String>,
+        node_ids: Vec<String>,
+    }
+    let mut entries: Vec<(String, Entry)> = Vec::new();
+    for node in template["nodes"].as_array().into_iter().flatten() {
+        if node["type"] != "agent-task" {
+            continue;
+        }
+        let agent = &node["agent"];
+        let agent_id = agent["agentId"].as_str().unwrap_or("");
+        let profile_id = agent["profileId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id).to_string();
+        let host_id = agent["hostId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id).to_string();
+        let provider = agent["providerId"].as_str().filter(|s| !s.is_empty()).map(str::to_string);
+        let scope = agent["scope"].as_str().unwrap_or("global").to_string();
+        let key = format!("{scope}:{profile_id}:{host_id}:{}", provider.clone().unwrap_or_default());
+        let position = entries.iter().position(|(k, _)| *k == key);
+        let index = position.unwrap_or_else(|| {
+            entries.push((
+                key,
+                Entry { profile_id, host_id, provider_id: provider, scope, skills: Vec::new(), node_ids: Vec::new() },
+            ));
+            entries.len() - 1
+        });
+        let entry = &mut entries[index].1;
+        entry.node_ids.push(node["id"].as_str().unwrap_or("").to_string());
+        for name in agent["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            if !entry.skills.iter().any(|s| s == name) {
+                entry.skills.push(name.to_string());
+            }
+        }
+    }
+
+    let usable = |v: &Value| v["trusted"] == true && v["errors"].as_array().is_none_or(Vec::is_empty);
+    entries
+        .into_iter()
+        .map(|(_, entry)| {
+            let host = hosts.iter().find(|h| h["manifest"]["id"] == entry.host_id.as_str());
+            let host_installed = host.is_some_and(usable);
+            let profile = profiles.iter().find(|p| p["profile"]["id"] == entry.profile_id.as_str());
+            let profile_installed = if has_profiles {
+                profile.is_some_and(|p| p["trusted"] == true && p["error"].as_str().is_none_or(str::is_empty))
+            } else {
+                entry.profile_id == entry.host_id
+            };
+            let missing_skills: Vec<&String> = entry
+                .skills
+                .iter()
+                .filter(|name| !skills.iter().any(|s| s["metadata"]["name"] == name.as_str()))
+                .collect();
+            let bundled_binding = entry.profile_id == entry.host_id && is_bundled_agent(&entry.host_id);
+            let host_available = host_installed || is_bundled_agent(&entry.host_id);
+            let profile_available = profile_installed || bundled_binding;
+            let skills_available = missing_skills.iter().all(|name| bundled_skill(name).is_some());
+            let (status, reason) = if host_installed && profile_installed && missing_skills.is_empty() {
+                ("installed", None)
+            } else if host_available && profile_available && skills_available {
+                let mut missing = Vec::new();
+                if !profile_installed {
+                    missing.push(format!("profile \"{}\"", entry.profile_id));
+                }
+                if !host_installed {
+                    missing.push(format!("runtime host \"{}\"", entry.host_id));
+                }
+                if !missing_skills.is_empty() {
+                    missing.push(format!(
+                        "skills ({})",
+                        missing_skills.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                    ));
+                }
+                ("available", Some(format!("{} available for installation.", missing.join(", "))))
+            } else if !profile_available {
+                ("missing", Some(format!("Agent profile \"{}\" is not installed or available.", entry.profile_id)))
+            } else if !host_available {
+                ("missing", Some(format!("Runtime host \"{}\" is not installed or available.", entry.host_id)))
+            } else {
+                (
+                    "missing",
+                    Some(format!(
+                        "Required skills ({}) are not available.",
+                        missing_skills
+                            .iter()
+                            .filter(|name| bundled_skill(name).is_none())
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                )
+            };
+            let mut dependency = json!({
+                "agentId": entry.host_id, "profileId": entry.profile_id, "hostId": entry.host_id,
+                "scope": entry.scope, "skillNames": entry.skills, "nodeIds": entry.node_ids, "status": status,
+            });
+            if let Some(provider) = entry.provider_id {
+                dependency["providerId"] = json!(provider);
+            }
+            if let Some(reason) = reason {
+                dependency["reason"] = json!(reason);
+            }
+            dependency
+        })
+        .collect()
 }
 
 pub fn template_readiness(host: &HostContext, args: &[Value]) -> Result<Value> {
@@ -538,18 +822,16 @@ pub fn template_readiness(host: &HostContext, args: &[Value]) -> Result<Value> {
                     );
                 }
             }
-            let installable = template["nodes"].as_array().into_iter().flatten().any(|node| {
-                let agent = node["agent"]["agentId"].as_str().unwrap_or("");
-                praxis_core::agent_runtime::bundled::is_bundled_agent(agent)
-                    || node["agent"]["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str).any(|n| praxis_core::agent_runtime::bundled::bundled_skill(n).is_some())
-            });
+            let dependencies = extract_dependencies(&catalog, template);
+            let all_resolvable = dependencies.iter().all(|d| matches!(d["status"].as_str(), Some("installed" | "available")));
+            let has_available = dependencies.iter().any(|d| d["status"] == "available");
             json!({
                 "templateId": template["id"],
                 "structureOk": structure.valid(),
                 "agentsOk": blocking.is_empty(),
                 "blockingByNode": blocking,
-                "dependencies": [],
-                "autoInstallable": installable && !blocking.is_empty(),
+                "dependencies": dependencies,
+                "autoInstallable": all_resolvable && has_available,
             })
         })
         .collect();
@@ -1918,6 +2200,46 @@ pub fn delete_run(host: &HostContext, args: &[Value]) -> Result<Value> {
             }
         }
     }
+    // The run's stage sessions (their transcripts belong to the run) and its link from the
+    // controller session that started it go with it.
+    let sessions = super::session_store::store(&host.config().user_data_dir);
+    for node in &run.definition.nodes {
+        let key = workflow_summary::stage_session_key(run_id, node.id());
+        if sessions.get(&key).ok().flatten().is_some() {
+            let _ = sessions.remove(&key);
+            host.events().emit("ai:sessionDeleted", Some(json!(key)));
+        }
+    }
+    if let Some(controller) = run.controller_session_key.as_deref() {
+        let remaining: Vec<String> = sessions
+            .get(controller)
+            .ok()
+            .flatten()
+            .map(|record| {
+                record["workflowRunIds"]
+                    .as_array()
+                    .map(|ids| ids.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>())
+                    .unwrap_or_else(|| record["workflowRunId"].as_str().filter(|r| !r.is_empty()).map(|r| vec![r.to_string()]).unwrap_or_default())
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|id| id != run_id)
+            .collect();
+        let next = remaining.last().and_then(|id| stored_run(host, id));
+        let updated = sessions.mutate(controller, true, |record| {
+            record["workflowRunId"] = json!(remaining.last().cloned().unwrap_or_default());
+            record["workflowRunIds"] = json!(remaining);
+            record["workflowNodeId"] = json!("");
+            record["workflowId"] = json!(next.as_ref().map(|r| r.workflow_id.clone()).unwrap_or_default());
+            if let Some(next) = &next {
+                record["workflowVersion"] = json!(next.workflow_version);
+                record["workflowRole"] = json!("controller");
+            }
+        });
+        if let Ok(Some(record)) = updated {
+            host.events().emit("ai:sessionChanged", Some(record));
+        }
+    }
     let _guard = workflow_engine::runs_lock()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1943,8 +2265,23 @@ pub fn archive_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     Ok(summarize(host, &run))
 }
 
-pub fn get_evidence(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(json!({ "expired": false }))
+pub fn get_evidence(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let run_id = text(args, 0)?;
+    let node_id = text(args, 1)?;
+    let attempt = args.get(2).and_then(Value::as_u64).unwrap_or(1) as usize;
+    let Some(run) = stored_run(host, run_id) else {
+        return Ok(json!({ "expired": false }));
+    };
+    Ok(super::workflow_evidence::read_view(
+        &host.config().user_data_dir.join("workflow-evidence"),
+        &super::workflow_evidence::EvidenceKey {
+            project_id: &run.project_id,
+            run_id,
+            node_id,
+            attempt,
+        },
+        &run.project_id,
+    ))
 }
 
 pub fn start_diagnosis(_host: &HostContext, _args: &[Value]) -> Result<Value> {

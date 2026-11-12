@@ -131,7 +131,14 @@ pub fn usable_providers(host: &HostContext) -> Vec<String> {
             praxis_ai::providers::registry::DescriptorKind::CliAgent => {
                 // A CLI agent counts once it has been pointed at (or chosen as the active AI); one that
                 // merely happens to be installed on this machine is not set up for Praxis.
-                config.and_then(|c| c.cli_path.as_deref()).is_some_and(|p| !p.trim().is_empty())
+                config.and_then(|c| c.cli_path.as_deref()).map(str::trim).is_some_and(|p| {
+                    !p.is_empty()
+                        && praxis_workflows::check_process::is_check_command_available(
+                            p,
+                            std::env::var("PATH").ok().as_deref(),
+                            std::env::var("PATHEXT").ok().as_deref(),
+                        )
+                })
                     || (descriptor.id == ai.active_provider
                         && descriptor.default_command.as_deref().is_some_and(|command| {
                             praxis_workflows::check_process::is_check_command_available(
@@ -307,6 +314,18 @@ fn stage_progress(host: &HostContext, run: &WorkflowRun) -> Value {
     } else {
         None
     };
+    // Held at a stage by its environment (a missing tool, a working copy that could not be set up),
+    // with nothing failed outright: that stage is the one to retry.
+    let blocker = blocker.or_else(|| {
+        (summary["paused"] == json!(true) && summary["pauseReason"] == "environment")
+            .then(|| {
+                stages
+                    .iter()
+                    .find(|s| s["lane"] == "paused" && s["pause"] == "environment")
+                    .cloned()
+            })
+            .flatten()
+    });
     let current = blocker
         .clone()
         .or_else(|| {
@@ -958,6 +977,14 @@ pub fn ensure_started(host: &HostContext) {
     });
     let active = Arc::clone(runner(host));
     let host = host.clone();
+    // A run that was due while Praxis was closed shows as missed instead of starting.
+    for run in super::scheduled_runs::list_runs(&host) {
+        let before = run.status;
+        let reconciled = praxis_workflows::scheduled_run::reconcile_scheduled_run_on_launch(run, &super::now());
+        if reconciled.status != before {
+            let _ = super::scheduled_runs::save_run(&host, reconciled);
+        }
+    }
     runtime::runtime().spawn(async move {
         active.recover().await;
         let mut ticker = tokio::time::interval(tick_interval());
