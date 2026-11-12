@@ -44,7 +44,6 @@ impl LogBus {
         state.lines.iter().cloned().collect()
     }
 
-    #[allow(dead_code)]
     pub fn append(&self, host: &HostContext, line: &str) {
         let clean_line = line.strip_suffix('\n').unwrap_or(line).to_string();
         if let Ok(mut state) = self.state.lock() {
@@ -57,7 +56,6 @@ impl LogBus {
         host.events().emit("log:appended", Some(json!(clean_line)));
     }
 
-    #[allow(dead_code)]
     fn persist_line(&self, line: &str) {
         let _ = fs::create_dir_all(&self.log_dir);
         let log_file = self.log_dir.join(LOG_FILE_NAME);

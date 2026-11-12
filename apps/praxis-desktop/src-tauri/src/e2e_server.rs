@@ -61,7 +61,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", json!({ "e2eServer": { "port": port } }));
     std::io::stdout().flush()?;
 
-    let shared = Arc::new(Shared { host, methods, token, subscribers, zoom: Mutex::new(1.0) });
+    let zoom = host.settings().read().appearance.zoom_factor;
+    let shared = Arc::new(Shared { host, methods, token, subscribers, zoom: Mutex::new(zoom) });
     let accept_shared = Arc::clone(&shared);
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
@@ -225,7 +226,9 @@ fn rpc(shared: &Shared, channel: String, args: Vec<Value>) -> Value {
         "window:getZoomFactor" => ok(json!(*shared.zoom.lock().expect("zoom"))),
         "window:setZoomFactor" => match args.first().and_then(Value::as_f64).filter(|f| (0.5..=3.0).contains(f)) {
             Some(factor) => {
+                let factor = (factor * 100.0).round() / 100.0;
                 *shared.zoom.lock().expect("zoom") = factor;
+                let _ = shared.host.settings().write(&json!({ "appearance": { "zoomFactor": factor } }));
                 ok(json!(factor))
             }
             None => fail("INVALID_ARGUMENT", "Zoom factor must be between 0.5 and 3.".into()),

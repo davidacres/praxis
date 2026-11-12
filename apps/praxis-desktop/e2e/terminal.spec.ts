@@ -22,6 +22,8 @@ test('runs a real PTY and preserves it when the panel is closed', async () => {
   await win.getByLabel('Toggle panel').click();
   const terminal = win.getByTestId('integrated-terminal');
   await expect(terminal).toBeVisible();
+  // The panel creates its shell after it opens; wait for it rather than racing it.
+  await expect.poll(() => win.evaluate(async () => (await window.praxis.terminal.list()).some(session => !session.exited))).toBe(true);
   const liveSession = await win.evaluate(async () => (await window.praxis.terminal.list()).find(session => !session.exited)?.id);
   if (liveSession) await chooseOption(win.getByLabel('Active terminal'), liveSession);
 
@@ -54,6 +56,8 @@ test('captures shell-integrated command records and exposes failed-command actio
   app = await launchTestApp();
   const win = app.window;
   await win.getByLabel('Toggle panel').click();
+  // The panel creates its shell after it opens; wait for it rather than racing it.
+  await expect.poll(() => win.evaluate(async () => (await window.praxis.terminal.list()).some(session => !session.exited))).toBe(true);
   const liveSession = await win.evaluate(async () => (await window.praxis.terminal.list()).find(session => !session.exited)?.id);
   if (liveSession) await chooseOption(win.getByLabel('Active terminal'), liveSession);
   const terminal = win.getByTestId('integrated-terminal');

@@ -155,6 +155,8 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
     });
     const body = await response.json();
     if (!body.ok) throw body.error ?? { code: 'DESKTOP_ERROR', message: 'Unknown backend error' };
+    // The desktop shell reloads its webview for this channel; the e2e server cannot.
+    if (args.channel === 'window:reload') setTimeout(() => window.location.reload(), 0);
     return body.result;
   };
 }

@@ -151,7 +151,7 @@ fn create(catalog: &mut Catalog, input: &Value, version: &str) -> Result<Value> 
 }
 
 pub fn open_file(catalog: &mut Catalog, path: &Path) -> Result<Value> {
-    let path = fs::canonicalize(path).map_err(failure)?;
+    let path = super::projects::absolute(path)?;
     let raw = fs::read_to_string(&path).map_err(failure)?;
     let parsed =
         read_workspace_file(&raw, path.parent().and_then(Path::to_str)).map_err(failure)?;
@@ -252,7 +252,7 @@ pub fn dispatch(
             if !folder.is_absolute() || !folder.is_dir() {
                 return Err(failure("Choose an existing folder."));
             }
-            let folder = fs::canonicalize(folder).map_err(failure)?;
+            let folder = super::projects::absolute(folder)?;
             let name = folder
                 .file_name()
                 .and_then(|name| name.to_str())

@@ -82,10 +82,8 @@ fn workspace_and_project_survive_reopen_with_categories_and_owned_files() {
     let reopened = Profile::open(&profile.root);
     let saved =
         invoke(&reopened, "projects:get", vec![project["id"].clone()]).expect("saved project");
-    assert_eq!(
-        saved["workspaceFolder"],
-        json!(fs::canonicalize(&folder).expect("canonical folder"))
-    );
+    // `path.resolve` semantics: the folder keeps the spelling it was given.
+    assert_eq!(saved["workspaceFolder"], json!(folder));
     let workspace = invoke(&reopened, "workspaces:get", vec![workspace["id"].clone()])
         .expect("saved workspace");
     assert_eq!(workspace["projectIds"], json!([project["id"]]));
@@ -370,7 +368,7 @@ fn portable_export_strips_secrets_and_resolves_paths_after_moving_the_tree() {
     let restored = profile.rpc("projects:get", vec![project["id"].clone()]);
     assert_eq!(
         restored["workspaceFolder"],
-        json!(fs::canonicalize(moved.join("checkout")).expect("canonical checkout"))
+        json!(moved.join("checkout"))
     );
 }
 
@@ -649,9 +647,12 @@ fn log_bus_buffers_recent_lines_and_persists() {
     let reopened = Profile::open(&profile.root);
     let recent = invoke(&reopened, "log:getRecent", vec![]).expect("getRecent");
     let arr = recent.as_array().expect("array");
-    assert_eq!(arr.len(), 2);
+    assert_eq!(arr.len(), 4);
     assert_eq!(arr[0], "first log");
     assert_eq!(arr[1], "second log");
+    assert_eq!(arr[2], "—— previous session above ——");
+    assert!(arr[3].as_str().unwrap().starts_with("[app] Praxis "));
+    assert!(arr[3].as_str().unwrap().ends_with(" started"));
 }
 
 #[test]
@@ -1323,9 +1324,10 @@ fn runs_services_and_task_designer_canvases() {
 
     // 3. Task designer canvas persistence
     let canvas_state = json!({
-        "nodes": [{ "id": "node-1", "type": "task" }],
+        "nodes": [{ "id": "node-1", "type": "note", "x": 1, "y": 2, "width": 280, "height": 190 }],
         "connectors": [],
-        "viewport": { "x": 10.0, "y": 20.0, "zoom": 1.5 }
+        "zoom": 1.5,
+        "toolbarPosition": { "x": 16, "y": 16 }
     });
     let saved_canvas = profile.rpc(
         "taskDesigner:setState",
@@ -1341,12 +1343,8 @@ fn runs_services_and_task_designer_canvases() {
         retrieved_canvas["nodes"].as_array().expect("nodes").len(),
         1
     );
-    assert_eq!(retrieved_canvas["viewport"]["zoom"], 1.5);
+    assert_eq!(retrieved_canvas["zoom"], 1.5);
 
-    // 4. Resolve issue
-    let resolved = profile.rpc("taskDesigner:resolveIssue", vec![json!("FEAT-42")]);
-    assert_eq!(resolved["mainIssue"]["issueKey"], "FEAT-42");
-    assert_eq!(resolved["mainIssue"]["projectKey"], "FEAT");
 }
 
 #[test]

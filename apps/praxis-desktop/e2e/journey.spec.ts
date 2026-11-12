@@ -37,7 +37,7 @@ let app: TestApp | undefined;
 let window: Page;
 
 /** The repo root — four levels up from apps/praxis-desktop/main/e2e. */
-const REPO_ROOT = path.resolve(__dirname, '../../../..');
+const REPO_ROOT = path.resolve(__dirname, '../../..');
 
 /** The Praxis Desktop app root — where its own `*.praxis.*` files and `docs/plans` live. */
 const DESKTOP_APP_ROOT = path.join('apps', 'praxis-desktop');

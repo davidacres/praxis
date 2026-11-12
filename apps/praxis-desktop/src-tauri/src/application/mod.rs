@@ -21,6 +21,9 @@ mod connections;
 mod deployments;
 mod gadgets;
 mod log_bus;
+mod task_designer_plan;
+mod task_designer_state;
+mod plan_watch;
 mod marketplace;
 mod notes;
 mod projects;
@@ -399,11 +402,32 @@ const CHANNELS: &[&str] = &[
     "preview:captureDiagnostics",
 ];
 
+fn issue_action(channel: &str) -> Option<&'static str> {
+    match channel {
+        "issue:create" => Some("Created"),
+        "issue:update" => Some("Updated"),
+        "issue:delete" => Some("Deleted"),
+        "issue:transition" => Some("Status changed"),
+        "issue:addComment" => Some("Comment added"),
+        _ => None,
+    }
+}
+
+/// The connection id argument of an issue write, by channel arity.
+fn issue_connection<'a>(channel: &str, args: &'a [Value]) -> Option<&'a str> {
+    let index = match channel {
+        "issue:create" | "issue:delete" => 1,
+        _ => 2,
+    };
+    args.get(index).and_then(Value::as_str).filter(|id| !id.trim().is_empty())
+}
+
 /// All desktop metadata mutations, including settings writes sharing the same
 /// JSON file, use one lock. Long-running PTY/AI/workflow commands do not hold it.
 pub struct Application {
     state: Mutex<ApplicationState>,
     log_bus: Mutex<Option<log_bus::LogBus>>,
+    plan_watchers: plan_watch::PlanWatchers,
     webviews: webviews::WebviewManager,
     version: String,
 }
@@ -416,9 +440,18 @@ struct ApplicationState {
 
 impl Application {
     pub fn register(host: &HostContext, version: &str) {
+        // The Output tab backfills from this bus; the launch line proves the
+        // ring buffer and `log:getRecent` end to end.
+        let bus = log_bus::LogBus::new(&host.config().user_data_dir);
+        // Persisted as well, so the next session sees where this one began.
+        if !bus.recent().is_empty() {
+            bus.append(host, "—— previous session above ——");
+        }
+        bus.append(host, &format!("[app] Praxis {version} started"));
         let application = Arc::new(Self {
             state: Mutex::new(ApplicationState::default()),
-            log_bus: Mutex::new(None),
+            log_bus: Mutex::new(Some(bus)),
+            plan_watchers: plan_watch::PlanWatchers::default(),
             webviews: webviews::WebviewManager::new(),
             version: version.into(),
         });
@@ -519,6 +552,10 @@ impl Application {
         let mut catalog =
             Catalog::load(&host.config().user_data_dir, &host.config().settings_path)?;
         let before = connections::list(&catalog);
+        if matches!(channel, "activity:list" | "board:list" | "board:get" | "issue:list") {
+            // Reading a board is what starts watching its plan folder.
+            self.plan_watchers.ensure(host, &catalog.list(storage::PROJECTS));
+        }
         if !state.initialized {
             projects::heal(&mut catalog)?;
         }
@@ -592,7 +629,7 @@ impl Application {
         } else if channel.starts_with("runs:") {
             runs::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("taskDesigner:") {
-            task_designer::dispatch(&host.config().user_data_dir, channel, args)?
+            task_designer::dispatch(host, &mut catalog, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("browser:")
             || channel.starts_with("preview:")
             || channel.starts_with("detachedChat:")
@@ -608,6 +645,48 @@ impl Application {
             agent_runtime::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("ai:") {
             ai::dispatch(host, &host.config().user_data_dir, channel, args)?
+        } else if let Some(action) = issue_action(channel) {
+            // Observe the service boundary: every write to a project's board is recorded.
+            let existing = if channel == "issue:create" {
+                None
+            } else {
+                let mut probe = vec![args.first().cloned().unwrap_or(Value::Null)];
+                if let Some(connection) = issue_connection(channel, args) {
+                    probe.push(json!(connection));
+                }
+                boards::dispatch(host, &mut catalog, "issue:get", &probe).ok()
+            };
+            let result = boards::dispatch(host, &mut catalog, channel, args)?;
+            let issue = if channel == "issue:create" { Some(&result) } else { existing.as_ref() };
+            if let (Some(issue), Some(connection_id)) = (issue, issue_connection(channel, args)) {
+                let projects: Vec<Value> = catalog
+                    .list(storage::PROJECTS)
+                    .into_iter()
+                    .filter(|project| {
+                        project["id"].as_str().is_some_and(|id| {
+                            connection_id == format!("project:{id}")
+                                || project["linkedBoards"].as_array().is_some_and(|links| {
+                                    links.iter().any(|link| link["connectionId"] == connection_id)
+                                })
+                        })
+                    })
+                    .collect();
+                for project in &projects {
+                    activity::record(
+                        &host.config().user_data_dir,
+                        &activity::Observation {
+                            project_id: project["id"].as_str().unwrap_or(""),
+                            kind: "issue",
+                            target_key: issue["key"].as_str().unwrap_or(""),
+                            summary: issue["summary"].as_str().unwrap_or(""),
+                            action,
+                            connection_id: Some(connection_id),
+                            actor: "you",
+                        },
+                    );
+                }
+            }
+            result
         } else {
             boards::dispatch(host, &mut catalog, channel, args)?
         };
