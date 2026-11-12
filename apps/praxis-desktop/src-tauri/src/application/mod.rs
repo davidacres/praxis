@@ -30,6 +30,7 @@ mod webviews;
 mod workflow_agent_stage;
 mod workflow_engine;
 mod workflow_env_failure;
+mod workflow_estimate;
 mod workflow_summary;
 mod workflows;
 mod workspaces;

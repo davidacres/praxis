@@ -583,6 +583,37 @@ fn all_template_values(host: &HostContext, project_id: &str) -> Vec<Value> {
     all
 }
 
+/// Installs the agents and skills a template names that Praxis ships but the user has not yet
+/// installed (`ensureWorkflowDependenciesInstalled`), then refreshes the catalog.
+fn ensure_workflow_dependencies_installed(host: &HostContext, template: &Value) {
+    let dir = &host.config().user_data_dir;
+    let agents_dir = dir.join("agents");
+    let skills_dir = dir.join("skills");
+    let mut installed_any = false;
+    for node in template["nodes"].as_array().into_iter().flatten() {
+        if node["type"] != "agent-task" {
+            continue;
+        }
+        let agent_id = node["agent"]["agentId"].as_str().unwrap_or("");
+        if !agent_id.is_empty()
+            && !agents_dir.join(agent_id).join("agent.json").exists()
+            && praxis_core::agent_runtime::bundled::install_available_agent(agent_id, &agents_dir)
+        {
+            installed_any = true;
+        }
+        for name in node["agent"]["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            if !skills_dir.join(name).join("SKILL.md").exists()
+                && praxis_core::agent_runtime::bundled::install_available_skill(name, &skills_dir)
+            {
+                installed_any = true;
+            }
+        }
+    }
+    if installed_any {
+        super::agent_runtime::refresh(host, dir);
+    }
+}
+
 pub fn instantiate(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
     let template_id = text(args, 1)?;
@@ -595,6 +626,7 @@ pub fn instantiate(host: &HostContext, args: &[Value]) -> Result<Value> {
         .into_iter()
         .find(|t| t.get("id").and_then(Value::as_str) == Some(template_id))
         .ok_or_else(|| failure(format!("Template {template_id} was not found.")))?;
+    ensure_workflow_dependencies_installed(host, &template);
     let copy = instantiate_template(&template, project_id, &now(), None, name_override);
     let result = validate_workflow(&copy, None);
     if !result.valid() {
@@ -1272,25 +1304,48 @@ pub fn prepare_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     let definition = runnable_definition(host, project_id, workflow_id).ok_or_else(|| {
         failure(format!("Workflow {workflow_id} was not found for this project."))
     })?;
-    let issues = match resolve_run_parameters(&definition, supplied) {
-        Err(error) if supplied.is_some() => vec![json!({ "message": error.message })],
-        _ => Vec::new(),
+    let resolved = resolve_run_parameters(&definition, supplied);
+    let (values, issues) = match resolved {
+        Ok(values) => (values, Vec::new()),
+        Err(error) => (
+            json!({}),
+            if supplied.is_some() { vec![json!({ "message": error.message })] } else { Vec::new() },
+        ),
     };
-    let agent_stages = definition["nodes"]
-        .as_array()
-        .map_or(0, |nodes| {
-            nodes
-                .iter()
-                .filter(|n| matches!(n["type"].as_str(), Some("agent-task" | "map")))
-                .count()
-        });
+    let settings = host.settings().read();
+    let active = settings.ai.active_provider.clone();
+    let threshold = u64::from(settings.delivery.run_confirm_agent_sessions);
+    let tiers = settings.ai.model_tiers.clone();
+    drop(settings);
+    let provider_for = |node: &Value| {
+        node["agent"]["providerId"]
+            .as_str()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(str::to_string)
+            .or_else(|| Some(active.clone()).filter(|a| !a.is_empty()))
+    };
+    let tier_model = |provider: Option<&str>, tier: Option<&str>| {
+        let config = tiers.as_ref()?.get(provider?)?;
+        let model = match tier? {
+            "fast" => config.fast.as_ref(),
+            "standard" => config.standard.as_ref(),
+            "strong" => config.strong.as_ref(),
+            _ => None,
+        }?;
+        Some(model.trim().to_string()).filter(|m| !m.is_empty())
+    };
+    let estimate = super::workflow_estimate::estimate_workflow_run(
+        &definition,
+        &values,
+        threshold,
+        &provider_for,
+        &tier_model,
+    );
     Ok(json!({
         "parameters": definition.get("parameters").cloned().unwrap_or_else(|| json!([])),
         "requiresMeasurableGoal": definition["requiresMeasurableGoal"] == json!(true),
-        "estimate": {
-            "agentSessions": { "typical": agent_stages, "worst": agent_stages },
-            "needsConfirmation": false,
-        },
+        "estimate": estimate,
         "issues": issues,
     }))
 }
