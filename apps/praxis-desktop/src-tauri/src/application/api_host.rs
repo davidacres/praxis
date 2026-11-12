@@ -176,13 +176,15 @@ async fn post_stream(connection: &ApiConnection, model: &str, body: &Value) -> s
 }
 
 /// One completion from a stream, whichever wire it arrived on.
-async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl FnMut(&str)) -> std::result::Result<ChatCompletionResult, String> {
+async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl FnMut(&str), mut on_reasoning: impl FnMut(&str)) -> std::result::Result<ChatCompletionResult, String> {
     if connection.wire == Wire::OpenAi {
         let mut seen = 0usize;
         let _ = &mut seen;
         return consume_chat_stream(&mut sse, |event| {
-            if let ChatStreamEvent::Text { text } = event {
-                on_text(&text);
+            match event {
+                ChatStreamEvent::Text { text } => on_text(&text),
+                ChatStreamEvent::Reasoning { text } => on_reasoning(&text),
+                _ => {}
             }
         })
         .await;
@@ -231,6 +233,7 @@ async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl
                 };
             }
             Some(ChatStreamEvent::Done { result }) => done = Some(result),
+            Some(ChatStreamEvent::Reasoning { .. }) => {}
             None => {}
         }
     }
@@ -637,6 +640,7 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
         let cancelled = task.cancel.notified();
         tokio::pin!(cancelled);
         let task_for_text = Arc::clone(task);
+        let task_for_reasoning = Arc::clone(task);
         let step = async {
             let sse = post_stream(connection, &wire_model, &body).await?;
             collect(connection, sse, |piece| {
@@ -651,6 +655,13 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                         record["planText"] = json!(buffer);
                     }
                 });
+            }, |piece| {
+                let buffer = {
+                    let mut buffer = task_for_reasoning.reasoning.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    buffer.push_str(piece);
+                    buffer.clone()
+                };
+                task_for_reasoning.mutate(false, move |record| record["reasoningText"] = json!(buffer));
             })
             .await
         };
@@ -1052,6 +1063,6 @@ pub(super) async fn run_provider_prompt(connection: &ApiConnection, model: &str,
         Wire::Gemini => gemini_request_body(&messages, &GeminiRequestOptions { tools: Vec::new(), ..GeminiRequestOptions::default() }),
     };
     let sse = post_stream(connection, &wire_model, &body).await?;
-    let result = collect(connection, sse, on_text).await?;
+    let result = collect(connection, sse, on_text, |_| {}).await?;
     Ok((result.text, result.usage))
 }

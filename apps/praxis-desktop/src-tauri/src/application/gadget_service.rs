@@ -556,6 +556,16 @@ mod tests {
     }
 
     #[test]
+    fn an_artifact_gadget_without_actions_is_published() {
+        let text = "Here is the evidence.\n\n```praxis-gadget\n{\n  \"version\": 1,\n  \"kind\": \"artifact\",\n  \"gadgetId\": \"turn-evidence\",\n  \"payload\": {\n    \"title\": \"Evidence\",\n    \"artifacts\": [\n      {\"name\": \"shot.png\", \"path\": \"shot.png\", \"mediaType\": \"image/png\", \"description\": \"A screenshot\"}\n    ]\n  },\n  \"actions\": []\n}\n```\n";
+        let _unused = "Here.\n\n```praxis-gadget\n{\"version\":1,\"kind\":\"artifact\",\"gadgetId\":\"turn-evidence\",\"payload\":{\"title\":\"Evidence\",\"artifacts\":[{\"name\":\"shot.png\",\"path\":\"shot.png\",\"mediaType\":\"image/png\"}]},\"actions\":[]}\n```\n";
+        let options = ChatBlockParseOptions { scope: GadgetScope { host_id: "h".into(), session_id: "s".into(), ..GadgetScope::default() }, issued_at: "2026-01-01T00:00:00Z".into(), id_prefix: "m".into() };
+        let parsed = parse_chat_blocks(text, &options);
+        assert!(parsed.contains_gadget, "{:?}", parsed.blocks);
+        assert!(parsed.blocks.iter().any(|b| matches!(b, praxis_ai::gadgets::contracts::ChatBlock::Gadget { .. })), "{:?}", parsed.blocks);
+    }
+
+    #[test]
     fn the_same_key_with_a_different_answer_is_not_a_retry() {
         assert_ne!(digest(&json!({ "kind": "choice", "selected": "a" })), digest(&json!({ "kind": "choice", "selected": "b" })));
         assert_eq!(digest(&json!({ "a": 1, "b": 2 })), digest(&json!({ "b": 2, "a": 1 })));
