@@ -3483,6 +3483,7 @@ name = "praxis-desktop"
 version = "0.6.1"
 dependencies = [
  "async-trait",
+ "axum",
  "base64 0.22.1",
  "chrono",
  "chrono-tz",

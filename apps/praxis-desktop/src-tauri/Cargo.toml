@@ -19,6 +19,7 @@ praxis-trackers.workspace = true
 praxis-ai.workspace = true
 praxis-workflows.workspace = true
 praxis-host = { path = "../../../crates/praxis-host" }
+axum.workspace = true
 base64.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true

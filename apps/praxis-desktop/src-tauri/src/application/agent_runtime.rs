@@ -8,34 +8,10 @@ use praxis_host::HostContext;
 use serde_json::{Value, json};
 
 use praxis_core::agent_runtime::authoring::{self, CreationPlan, GeneratedFile, NewAgentInput, NewAgentProfileInput, NewSkillInput};
+use praxis_core::agent_runtime::native_sources::{self, NativeSourceOptions};
 use praxis_core::agent_runtime::{CatalogOptions, bundled, refresh_catalog};
 
-use super::storage::{parse, read, write_atomic};
 use super::{Result, failure, text};
-
-fn agent_runtime_file(user_data_dir: &Path) -> std::path::PathBuf {
-    user_data_dir.join("agent-runtime-state.json")
-}
-
-fn read_runtime_state(user_data_dir: &Path) -> Result<Value> {
-    let path = agent_runtime_file(user_data_dir);
-    if let Some(content) = read(&path)? {
-        let val = parse(&path, Some(&content))?;
-        return Ok(val);
-    }
-    Ok(json!({
-        "activeAgents": {},
-        "approvedProjects": {},
-        "customItems": []
-    }))
-}
-
-fn save_runtime_state(user_data_dir: &Path, val: &Value) -> Result<()> {
-    let path = agent_runtime_file(user_data_dir);
-    let encoded = super::storage::encoded(val)?;
-    write_atomic(&path, &encoded, false)
-}
-
 
 // ── roots ────────────────────────────────────────────────────────────────
 
@@ -84,6 +60,55 @@ fn roots(host: &HostContext, user_data_dir: &Path) -> Roots {
         profiles: Scoped { global: user_data_dir.join("profiles"), project: project.join("profiles") },
         skills: Scoped { global: user_data_dir.join("skills"), project: project.join("skills") },
     }
+}
+
+/// Home folder other tools keep user-level files in (overridable so tests never read a real home).
+fn native_home_dir() -> PathBuf {
+    std::env::var("PRAXIS_NATIVE_SOURCES_HOME")
+        .ok()
+        .filter(|home| !home.trim().is_empty())
+        .or_else(|| std::env::var("HOME").ok())
+        .or_else(|| std::env::var("USERPROFILE").ok())
+        .map(PathBuf::from)
+        .unwrap_or_default()
+}
+
+/// Where to look for other AI tools' files. With no working folder there is no project (never the
+/// app's own cwd) and only the user-level files are discovered.
+pub(super) fn native_source_options(host: &HostContext, working_directory: Option<&str>) -> NativeSourceOptions {
+    let settings = host.settings().read();
+    let config = &settings.ai.native_sources;
+    let start = working_directory
+        .map(str::trim)
+        .filter(|dir| !dir.is_empty())
+        .map(str::to_owned)
+        .or_else(|| Some(settings.ai.working_directory.trim().to_owned()).filter(|dir| !dir.is_empty()))
+        .or_else(|| std::env::var("PRAXIS_AI_WORKING_DIR").ok().map(|dir| dir.trim().to_owned()).filter(|dir| !dir.is_empty()));
+    let project_root = start.map(|dir| native_sources::find_project_root(Path::new(&dir)));
+    let project_approved = project_root.as_ref().is_some_and(|root| config.approved_projects.iter().any(|approved| Path::new(approved) == root.as_path()));
+    NativeSourceOptions {
+        project_root,
+        home_dir: native_home_dir(),
+        enabled: config.ecosystems.clone(),
+        project_approved,
+        extra_skill_paths: config.extra_skill_paths.iter().map(PathBuf::from).collect(),
+        extra_agent_paths: config.extra_agent_paths.iter().map(PathBuf::from).collect(),
+    }
+}
+
+/// The project instructions a session on `runtime` in `working_directory` should carry.
+pub(super) fn session_instructions(host: &HostContext, runtime: &str, working_directory: Option<&str>) -> Option<String> {
+    let (inject, source) = {
+        let settings = host.settings().read();
+        (settings.ai.native_sources.inject_instructions, settings.ai.native_sources.instruction_source.clone())
+    };
+    if !inject {
+        return None;
+    }
+    let options = native_source_options(host, working_directory);
+    let found = native_sources::discover_native_sources(&options);
+    let built = native_sources::build_session_instructions(&found.instructions, runtime, options.project_approved, &source);
+    Some(built.text).filter(|text| !text.is_empty())
 }
 
 fn catalog_options(roots: &Roots) -> CatalogOptions {
@@ -199,7 +224,8 @@ fn running_status(entry: &HostEntry) -> Value {
 
 fn refresh(host: &HostContext, user_data_dir: &Path) -> Value {
     let roots = roots(host, user_data_dir);
-    let options = catalog_options(&roots);
+    let mut options = catalog_options(&roots);
+    options.native_sources = Some(native_source_options(host, None));
     let first = with_state(user_data_dir, |state| !std::mem::replace(&mut state.mirrored, true));
     if first {
         // Built-ins are mirrored on first use so users can see and edit them.
@@ -208,7 +234,7 @@ fn refresh(host: &HostContext, user_data_dir: &Path) -> Value {
     }
     let catalog = refresh_catalog(&options);
     with_state(user_data_dir, |state| {
-        let snapshot = json!({
+        let mut snapshot = json!({
             "agents": catalog.hosts,
             "runtimeHosts": catalog.hosts,
             "profiles": catalog.profiles,
@@ -217,6 +243,12 @@ fn refresh(host: &HostContext, user_data_dir: &Path) -> Value {
             "hosts": state.status,
             "refreshedAt": super::now()
         });
+        if let Some(instructions) = catalog.instructions {
+            snapshot["instructions"] = json!(instructions);
+        }
+        if let Some(project) = catalog.native_project {
+            snapshot["nativeProject"] = project;
+        }
         state.snapshot = Some(snapshot.clone());
         snapshot
     })
@@ -413,6 +445,174 @@ fn import_item(host: &HostContext, user_data_dir: &Path, args: &[Value]) -> Resu
     Ok(refresh(host, user_data_dir))
 }
 
+// ── bindings: an agent profile on a runtime host ─────────────────────────
+
+/// A validated profile + host (+ skills) ready to launch (`AgentRuntimeManager.createBinding`).
+pub(super) struct Binding {
+    /// The discovered host definition (`manifest`, `rootPath`, `followsSessionRuntime`, ...).
+    pub host: Value,
+    /// `buildProfileContext`: the profile's instructions and the skills that carry theirs.
+    pub context: String,
+    /// `{ skillId, mode, version? }` per requested skill.
+    pub skill_activations: Vec<Value>,
+}
+
+fn skill_read_natively(skill: &Value, provider: &str) -> bool {
+    skill["source"]["readBy"].as_array().is_some_and(|read_by| read_by.iter().any(|runtime| runtime == provider))
+}
+
+/// Resolves and validates one binding immediately before launch: the host must be discovered,
+/// trusted and error-free; the profile valid and trusted; every skill discovered and valid.
+pub(super) fn create_binding(
+    host: &HostContext,
+    user_data_dir: &Path,
+    profile_id: &str,
+    host_id: &str,
+    provider: &str,
+    skill_names: &[String],
+) -> Result<Binding> {
+    let snapshot = list(host, user_data_dir);
+    let definition = snapshot["runtimeHosts"]
+        .as_array()
+        .and_then(|hosts| hosts.iter().find(|candidate| candidate["manifest"]["id"] == host_id))
+        .cloned()
+        .ok_or_else(|| failure(format!("Runtime host \"{host_id}\" was not discovered.")))?;
+    if definition["trusted"] != true {
+        return Err(failure(format!("Runtime host \"{host_id}\" is not trusted.")));
+    }
+    if let Some(errors) = definition["errors"].as_array().filter(|errors| !errors.is_empty()) {
+        let listed: Vec<String> = errors.iter().map(|error| format!("{}: {}", error["path"].as_str().unwrap_or_default(), error["message"].as_str().unwrap_or_default())).collect();
+        return Err(failure(format!("Runtime host \"{host_id}\" has manifest errors: {}", listed.join("; "))));
+    }
+    let profile = snapshot["profiles"]
+        .as_array()
+        .and_then(|profiles| profiles.iter().find(|candidate| candidate["profile"]["id"] == profile_id))
+        .cloned()
+        .ok_or_else(|| failure(format!("Agent profile {profile_id} was not discovered.")))?;
+    if let Some(error) = profile["error"].as_str() {
+        return Err(failure(format!("Agent profile {profile_id} is invalid: {error}")));
+    }
+    if profile["trusted"] != true {
+        return Err(failure(format!("Agent profile {profile_id} is not trusted.")));
+    }
+
+    let mut sections = vec![
+        format!("## Praxis agent profile: {}", profile["profile"]["name"].as_str().unwrap_or_default()),
+        profile["profile"]["instructions"].as_str().unwrap_or_default().to_owned(),
+    ];
+    let mut skill_activations = Vec::new();
+    for name in skill_names {
+        let skill = snapshot["skills"]
+            .as_array()
+            .and_then(|skills| skills.iter().find(|candidate| candidate["metadata"]["name"] == name.as_str()))
+            .ok_or_else(|| failure(format!("Skill {name} was not discovered.")))?;
+        if let Some(error) = skill["error"].as_str() {
+            return Err(failure(format!("Skill {name} is invalid: {error}")));
+        }
+        let instructions = fs::read_to_string(skill["instructionsPath"].as_str().unwrap_or_default()).map_err(|error| failure(error.to_string()))?;
+        // A skill from a tool's own folder is loaded by that tool's runtime itself, and a host
+        // can confirm native activation; adding the instructions again would double them.
+        let confirmed = with_state(user_data_dir, |state| state.skill_modes.get(host_id).and_then(|modes| modes.get(name)).cloned());
+        let mode = if skill_read_natively(skill, provider) { "native".to_owned() } else { confirmed.unwrap_or_else(|| "context".to_owned()) };
+        if mode != "native" {
+            sections.push(format!("## Praxis skill: {name} ({mode})"));
+            sections.push(instructions);
+        }
+        let mut activation = json!({ "skillId": name, "mode": mode });
+        if let Some(version) = skill["metadata"]["version"].as_str().filter(|v| !v.is_empty()) {
+            activation["version"] = json!(version);
+        }
+        skill_activations.push(activation);
+    }
+    let context = sections.into_iter().filter(|section| !section.is_empty()).collect::<Vec<_>>().join("\n\n");
+    Ok(Binding { host: definition, context, skill_activations })
+}
+
+/// Paths discovery found: the only ones the renderer may ask to reveal.
+fn discovered_paths(snapshot: &Value) -> Vec<String> {
+    let strings = |value: &Value| value.as_str().map(str::to_owned);
+    let mut paths = Vec::new();
+    for profile in snapshot["profiles"].as_array().into_iter().flatten() {
+        paths.extend(strings(&profile["source"]["path"]));
+    }
+    for skill in snapshot["skills"].as_array().into_iter().flatten() {
+        if skill.get("source").is_some_and(|source| !source.is_null()) {
+            paths.extend(strings(&skill["source"]["path"]));
+            paths.extend(strings(&skill["instructionsPath"]));
+        }
+    }
+    for file in snapshot["instructions"].as_array().into_iter().flatten() {
+        paths.extend(strings(&file["path"]));
+    }
+    paths
+}
+
+fn reveal_native(host: &HostContext, user_data_dir: &Path, item_path: &str) -> Result<Value> {
+    if !discovered_paths(&list(host, user_data_dir)).iter().any(|path| path == item_path) {
+        return Err(failure("That file was not found by discovery."));
+    }
+    #[cfg(target_os = "macos")]
+    let _ = Command::new("open").arg("-R").arg(item_path).spawn();
+    #[cfg(target_os = "windows")]
+    let _ = Command::new("explorer").arg(format!("/select,\"{item_path}\"")).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = Command::new("xdg-open").arg(Path::new(item_path).parent().unwrap_or(Path::new(item_path))).spawn();
+    Ok(Value::Null)
+}
+
+fn yaml_text(value: &str) -> String {
+    let plain = value.chars().all(|c| c.is_alphanumeric() || c == '_' || matches!(c, ' ' | '.' | ',' | '(' | ')' | '&' | '\'' | '/' | '-'));
+    if plain { value.to_owned() } else { serde_json::to_string(value).unwrap_or_default() }
+}
+
+/// Copies an agent or skill found in another tool's folder into Praxis's own global folder,
+/// where it can be edited; Praxis's own items take precedence, so the copy replaces the original.
+fn copy_native(host: &HostContext, user_data_dir: &Path, kind: &str, id: &str) -> Result<Value> {
+    let snapshot = refresh(host, user_data_dir);
+    let roots = roots(host, user_data_dir);
+    let has_source = |entry: &Value| entry.get("source").is_some_and(|source| !source.is_null());
+    if kind == "agent" {
+        let entry = snapshot["profiles"]
+            .as_array()
+            .and_then(|profiles| profiles.iter().find(|entry| entry["profile"]["id"] == id && has_source(entry)))
+            .ok_or_else(|| failure(format!("No agent \u{201c}{id}\u{201d} from another AI tool was found.")))?;
+        if entry["trusted"] != true {
+            return Err(failure("Approve this project\u{2019}s files before copying its agents."));
+        }
+        let target = roots.hosts.global.join(id);
+        if target.exists() {
+            return Err(failure(format!("Praxis already has an agent folder named \u{201c}{id}\u{201d}.")));
+        }
+        fs::create_dir_all(&target).map_err(|error| failure(error.to_string()))?;
+        let profile = &entry["profile"];
+        let name = profile["name"].as_str().unwrap_or_default();
+        let mut lines = vec!["---".to_owned(), format!("id: {}", profile["id"].as_str().unwrap_or_default()), format!("name: {}", yaml_text(name))];
+        if let Some(description) = profile["description"].as_str().filter(|d| !d.is_empty()) {
+            lines.push(format!("description: {}", yaml_text(description)));
+        }
+        lines.push(format!("copiedFrom: {}", yaml_text(entry["source"]["path"].as_str().unwrap_or_default())));
+        lines.extend(["---".to_owned(), String::new(), profile["instructions"].as_str().unwrap_or_default().trim().to_owned(), String::new()]);
+        fs::write(target.join("AGENT.md"), lines.join("\n")).map_err(|error| failure(error.to_string()))?;
+        // `entry: session` runs on the session's runtime, like the built-in agents.
+        let manifest = json!({ "schemaVersion": 1, "id": profile["id"], "name": name, "type": "gateway", "entry": "session" });
+        fs::write(target.join("agent.json"), serde_json::to_string_pretty(&manifest).unwrap_or_default()).map_err(|error| failure(error.to_string()))?;
+    } else {
+        let skill = snapshot["skills"]
+            .as_array()
+            .and_then(|skills| skills.iter().find(|skill| skill["metadata"]["name"] == id && has_source(skill)))
+            .ok_or_else(|| failure(format!("No skill \u{201c}{id}\u{201d} from another AI tool was found.")))?;
+        if skill["trusted"] != true {
+            return Err(failure("Approve this project\u{2019}s files before copying its skills."));
+        }
+        let target = roots.skills.global.join(id);
+        if target.exists() {
+            return Err(failure(format!("Praxis already has a skill folder named \u{201c}{id}\u{201d}.")));
+        }
+        copy_tree(Path::new(skill["skillPath"].as_str().unwrap_or_default()), &target)?;
+    }
+    Ok(refresh(host, user_data_dir))
+}
+
 pub fn dispatch(
     host: &HostContext,
     user_data_dir: &Path,
@@ -466,16 +666,17 @@ pub fn dispatch(
         "agentRuntime:importItem" => import_item(host, user_data_dir, args),
         "agentRuntime:approveNativeProject" => {
             let project_root = text(args, 0)?;
-            let approved = args.get(1).and_then(Value::as_bool).unwrap_or(true);
-            let mut state = read_runtime_state(user_data_dir)?;
-            if state.get("approvedProjects").is_none() {
-                state["approvedProjects"] = json!({});
+            let approved = args.get(1).and_then(Value::as_bool) == Some(true);
+            let mut next = host.settings().read().ai.native_sources.approved_projects.clone();
+            next.retain(|root| root != project_root);
+            if approved {
+                next.push(project_root.to_owned());
             }
-            state["approvedProjects"][project_root] = json!(approved);
-            save_runtime_state(user_data_dir, &state)?;
-            Ok(json!({ "ok": true, "approved": approved }))
+            super::ai_providers::write_settings(host, &json!({ "ai": { "nativeSources": { "approvedProjects": next } } }))?;
+            Ok(refresh(host, user_data_dir))
         }
-        "agentRuntime:revealNative" | "agentRuntime:copyNative" => Ok(json!({ "ok": true })),
+        "agentRuntime:revealNative" => reveal_native(host, user_data_dir, text(args, 0)?),
+        "agentRuntime:copyNative" => copy_native(host, user_data_dir, text(args, 0)?, text(args, 1)?),
         _ => Err(failure(format!("Unknown agentRuntime channel: {channel}"))),
     }
 }

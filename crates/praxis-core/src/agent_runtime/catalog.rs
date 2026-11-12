@@ -1,7 +1,6 @@
 //! Discovery of runtime hosts, agent profiles and skills, and the merged catalog snapshot.
 //! Mirrors `discovery.ts`, `skillRegistry.ts`, `profileRegistry.ts` and the catalog half of
-//! `AgentRuntimeManager.refresh()`. Other AI tools' folders (`nativeSources.ts`) are not
-//! discovered yet.
+//! `AgentRuntimeManager.refresh()`. Other AI tools' folders live in `native_sources`.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -10,6 +9,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value, json};
 
 use super::manifest::validate_agent_manifest;
+use super::native_sources::{self, NativeInstructionFile, NativeSourceOptions};
 use super::{bundled, directories, fingerprint, front_matter_pair, locale_cmp, resolve};
 
 #[derive(Debug, Clone, Default)]
@@ -23,6 +23,8 @@ pub struct CatalogOptions {
     pub trusted_profile_roots: Option<Vec<PathBuf>>,
     pub skill_roots: Vec<PathBuf>,
     pub trusted_skill_roots: Option<Vec<PathBuf>>,
+    /// Where to look for other AI tools' agents, skills and instructions.
+    pub native_sources: Option<NativeSourceOptions>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -30,6 +32,11 @@ pub struct CatalogSnapshot {
     pub hosts: Vec<Value>,
     pub profiles: Vec<Value>,
     pub skills: Vec<Value>,
+    /// Snapshot rows for other tools' instruction files (no contents); `None` without native options.
+    pub instructions: Option<Vec<Value>>,
+    pub native_project: Option<Value>,
+    /// The instruction files with contents, for building session prompts.
+    pub native_instructions: Vec<NativeInstructionFile>,
 }
 
 fn str_of<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -381,7 +388,24 @@ pub fn refresh_catalog(options: &CatalogOptions) -> CatalogSnapshot {
             "legacy": true
         }));
     }
-    CatalogSnapshot { hosts, profiles: aligned, skills }
+    // Other AI tools' agents and skills join the catalog; one entry per id.
+    let native = options.native_sources.as_ref().map(native_sources::discover_native_sources);
+    let (mut hosts, mut aligned, mut skills) = (hosts, aligned, skills);
+    let (mut instructions, mut native_project, mut native_instructions) = (None, None, Vec::new());
+    if let Some(found) = native {
+        aligned.extend(found.agents.iter().cloned());
+        skills.extend(found.skills.iter().cloned());
+        aligned = native_sources::merge_by_id(aligned, |entry| str_of(&entry["profile"], "id").to_owned());
+        skills = native_sources::merge_by_id(skills, |skill| str_of(&skill["metadata"], "name").to_owned());
+        // An agent from another tool has no host of its own: give it one that runs on whatever
+        // runtime the session uses, like the built-in agents.
+        let existing = hosts.iter().map(|host| str_of(&host["manifest"], "id").to_owned()).collect();
+        hosts.extend(native_sources::session_hosts(&aligned, &existing));
+        instructions = Some(found.instructions.iter().map(NativeInstructionFile::to_snapshot_json).collect());
+        native_project = native_sources::native_project_json(&found, options.native_sources.as_ref().is_some_and(|o| o.project_approved));
+        native_instructions = found.instructions;
+    }
+    CatalogSnapshot { hosts, profiles: aligned, skills, instructions, native_project, native_instructions }
 }
 
 #[cfg(test)]

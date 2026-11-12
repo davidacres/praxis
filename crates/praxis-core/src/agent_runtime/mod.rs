@@ -11,6 +11,7 @@ pub mod authoring;
 pub mod bundled;
 pub mod catalog;
 pub mod manifest;
+pub mod native_sources;
 
 pub use catalog::{CatalogOptions, CatalogSnapshot, refresh_catalog};
 
@@ -44,6 +45,25 @@ pub(crate) fn directories(root: &Path) -> Vec<PathBuf> {
 /// `path.resolve` for an absolute-or-relative path without touching the filesystem.
 pub(crate) fn resolve(path: &Path) -> PathBuf {
     std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// `path.resolve(root, child)`: `child` joined onto `root` (unless absolute) with `.` and `..`
+/// folded away, without touching the filesystem.
+#[must_use]
+pub fn resolve_against(root: &Path, child: &str) -> String {
+    use std::path::Component;
+    let joined = if Path::new(child).is_absolute() { PathBuf::from(child) } else { resolve(root).join(child) };
+    let mut normalized = PathBuf::new();
+    for component in joined.components() {
+        match component {
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::CurDir => {}
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    normalized.to_string_lossy().into_owned()
 }
 
 /// One `key: value` front-matter line (`^([A-Za-z][\w-]*):\s*(.*)$` on the trimmed line).
