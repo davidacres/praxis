@@ -254,39 +254,46 @@ and fails on drift. Copies, not symlinks, so Windows checkouts work.
 ## Build and test
 
 Root scripts are prefixed by the surface they act on. `build` runs **everything**,
-in dependency order. `test` runs every unit suite but only the e2e **smoke** set.
-`test:full` runs everything, including the full functional and theme e2e suites.
+in dependency order (Rust, core, code-intelligence, mobile packages, renderer, the Tauri
+binary). `test` and `test:full` run every unit suite, the Tauri contract gate and the
+functional e2e suite.
 
 ```bash
-npm run build          # core -> renderer -> copy-renderer -> desktop
-npm run test           # all unit suites + test:desktop:smoke (governed workflows run this)
-npm run test:full      # all unit suites + test:desktop + test:desktop:themes
-npm run check-types    # every workspace
+npm run build          # rust -> core -> services -> renderer -> praxis-desktop binary
+npm run test           # build + Rust, core, renderer, skills, mobile units + test:desktop:tauri + test:desktop:e2e
+npm run check-types    # every workspace + cargo check
 
 # or one surface at a time
 npm run build:core     # must precede the others: they consume its emitted types
-npm run build:renderer
-npm run desktop:copy-renderer   # REQUIRED before e2e
-npm run build:desktop
+npm run build:renderer # REQUIRED before e2e: the e2e server serves renderer/dist
+npm run build:desktop  # cargo build of the praxis-desktop binary
 
 npm run test:core             # node:test
-npm run test:renderer         # renderer node:test units (run by test and test:full)
-npm run test:desktop          # Playwright e2e, full functional suite
-npm run test:desktop:smoke    # Playwright e2e, smoke set (~185 tests)
-npm run test:desktop:git      # gitService unit tests
+npm run test:renderer         # renderer node:test units
+npm run test:desktop          # test:desktop:tauri (headless contract gate) + test:desktop:e2e
+npm run test:desktop:e2e      # Playwright, functional project (= test:desktop:functional)
+npm run test:desktop:smoke    # Playwright, smoke project
+npm run test:desktop:themes   # Playwright, themes project (appearance, surface packs, looks, overview)
+npm run test:desktop:git      # Rust git tests
 ```
 
-**The smoke set** (`SMOKE_SPECS` in `apps/praxis-desktop/main/playwright.config.ts`)
-covers each product area with one or two spec files and no theme tests. It is
-what unattended workflow runs use. A spec in it must not use hover,
-`page.mouse`, drag or `toHaveScreenshot`. Those depend on the real pointer and
-pixels, and fail when the suite shares a desktop with a person or with other
-test windows. The config throws if a listed file is missing. The smoke set does
-not replace `test:desktop` for a UI change.
+**The smoke set** (`SMOKE_SPECS` in `apps/praxis-desktop/playwright.config.ts`)
+covers each product area with one or two spec files and no theme tests. A spec in it
+must not use hover, `page.mouse`, drag or `toHaveScreenshot`: those depend on the real
+pointer and pixels. The smoke set does not replace the functional project for a UI change.
 
-**The e2e suite loads the pre-built renderer** from `apps/praxis-desktop/main/renderer/`, not
-a dev server. A frontend change is invisible to e2e until you rebuild **and** run
-`copy-renderer`.
+**What the e2e suite runs.** Not Electron: `apps/praxis-desktop/e2e/launchTestApp.ts`
+starts the real `praxis-desktop` binary in `--e2e-server` mode (the same composition the
+GUI uses, answering every channel from Rust) and opens the real renderer's `tauri.html`
+in Chromium at 1440x900, with `window.praxis` bridged to that server. The renderer comes
+from `apps/praxis-desktop/renderer/dist`, served by `vite preview` (Playwright starts it;
+`PRAXIS_E2E_PORT` picks the port, so parallel checkouts must each set their own). A frontend
+change is invisible to e2e until you `npm run build:renderer`. A Rust change needs a
+rebuilt binary; point `PRAXIS_TAURI_BIN` at your own copy when several agents share a
+target dir (see `scripts/agent-build.sh`). Specs replace what used to be Electron main-process
+stubs with `app.overrideChannel(channel, handler)`; there is no main process to evaluate in.
+Snapshots are captured at the harness viewport (1440x900, light colour scheme), not an
+OS window, so a baseline from another size will fail on dimensions alone.
 
 **No test may point a Praxis write path at the working tree.** `journey.spec.ts`
 deliberately runs the "adopt a folder of real plans" journey against the Praxis

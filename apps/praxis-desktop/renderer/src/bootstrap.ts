@@ -17,11 +17,7 @@ try {
     try {
       const settings = await window.praxis.settings.get();
       if (settings?.appearance) {
-        const activeLook = settings.appearance.looks?.find((l: { id: string }) => l.id === settings.appearance.activeLookId);
-        const themeId = activeLook?.themeId ?? settings.appearance.themeId;
-        const themeMode = activeLook?.themeMode ?? settings.appearance.themeMode;
-        const surfacePackId = activeLook?.surfacePackId ?? settings.appearance.surfacePackId;
-        const surface = activeLook?.surface ?? settings.appearance.surface;
+        const { themeId, themeMode, surfacePackId, surface } = settings.appearance;
         if (themeId) localStorage.setItem('tm-theme-id', themeId);
         if (themeMode) localStorage.setItem('tm-theme-mode', themeMode);
         if (surfacePackId) localStorage.setItem('tm-surface-id', surfacePackId);

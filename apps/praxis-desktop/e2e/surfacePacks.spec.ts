@@ -700,6 +700,10 @@ test('a user can swap the material by picking a pattern — no code, no new CSS'
 
 test('the Window-blur toggle is present on a vibrancy-capable OS and persists', async () => {
   test.skip(process.platform === 'linux', 'no OS vibrancy on Linux');
+  // The Tauri host reports no OS vibrancy yet (window:supportsVibrancy is false); the toggle itself is
+  // renderer + settings behaviour, so answer the capability probe as a vibrancy-capable OS would.
+  await app.overrideChannel('window:supportsVibrancy', () => true);
+  await window.reload();
   await openSurface();
   await window.locator('[data-testid="surface-card-aurora-glass"]').click();
 

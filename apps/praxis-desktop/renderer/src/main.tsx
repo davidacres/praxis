@@ -106,11 +106,10 @@ async function applySavedAppearance(settings: AppSettings): Promise<void> {
   registerCustomSurfacePacks(settings.appearance.customSurfacePacks);
   await applyMarketplaceAppearance();
   applyAccentColor(settings.appearance.accentColor);
-  const activeLook = settings.appearance.looks?.find(look => look.id === settings.appearance.activeLookId);
-  const themeId = activeLook?.themeId ?? settings.appearance.themeId;
-  const themeMode = activeLook?.themeMode ?? settings.appearance.themeMode;
-  const surfacePackId = activeLook?.surfacePackId ?? settings.appearance.surfacePackId;
-  const surface = activeLook?.surface ?? settings.appearance.surface;
+  // The top-level appearance fields are authoritative: selecting a Look writes its theme and surface into
+  // them. Reading the active Look's own copy instead would repaint a fresh profile with the Look's dark
+  // theme while Settings reports the light default.
+  const { themeId, themeMode, surfacePackId, surface } = settings.appearance;
   applyThemePreference(themeId, themeMode);
   applySurfacePack(surfacePackId, {
     intensity: surface.intensity,
