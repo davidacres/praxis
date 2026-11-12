@@ -81,7 +81,12 @@ async fn praxis_rpc(
                 .ok_or_else(|| {
                     error("INVALID_ARGUMENT", "Zoom factor must be between 0.5 and 3.")
                 })?;
+            let factor = (factor * 100.0).round() / 100.0;
             window.set_zoom(factor).map_err(shell_error)?;
+            let _ = state
+                .host
+                .settings()
+                .write(&json!({ "appearance": { "zoomFactor": factor } }));
             *state.zoom.lock().map_err(shell_error)? = factor;
             window
                 .emit(
