@@ -1,378 +1,236 @@
+//! `assistant:*` channels: the Virtual Team's durable chats and turns. Ports `assistantIpc.ts`
+//! and `teamChatCommands.ts`; the coordinator and storage live in `team_chat.rs`.
+
 use std::path::Path;
 
 use praxis_host::HostContext;
 use serde_json::{Value, json};
-use uuid::Uuid;
 
-use super::storage::{parse, read, write_atomic};
-use super::{Result, failure, now, text};
+use super::runtime::block_on;
+use super::team_chat::{self as chat, Coordinator};
+use super::team_chat_core::*;
+use super::{Result, failure, now};
 
-fn team_chats_file(user_data_dir: &Path) -> std::path::PathBuf {
-    user_data_dir.join("team-chats.json")
+fn required(value: &Value, name: &str) -> Fallible<String> {
+    match value.as_str() {
+        Some(text) if !text.trim().is_empty() => Ok(text.to_owned()),
+        _ => Err(format!("{name} is required.")),
+    }
 }
 
-#[derive(Default, Clone)]
-struct ChatsDocument {
-    source: Value,
-    schema_version: i64,
-    revision: i64,
-    activation: Value,
-    conversations: Vec<Value>,
-    team_chats: Vec<Value>,
+fn activate_and_coordinate(host: &HostContext) -> Fallible<std::sync::Arc<Coordinator>> {
+    chat::activate(&host.config().user_data_dir)?;
+    Ok(chat::coordinator(host))
 }
 
-fn load_chats_doc(user_data_dir: &Path) -> Result<ChatsDocument> {
-    let path = team_chats_file(user_data_dir);
-    if let Some(content) = read(&path)? {
-        let val = parse(&path, Some(&content))?;
-        if val.is_object() {
-            let schema_version = val
-                .get("schemaVersion")
-                .and_then(Value::as_i64)
-                .unwrap_or(2);
-            let revision = val.get("revision").and_then(Value::as_i64).unwrap_or(0);
-            let activation = val.get("activation").cloned().unwrap_or(Value::Null);
-            for key in ["conversations", "teamChats"] {
-                if val.get(key).is_some_and(|value| !value.is_array()) {
-                    return Err(failure(format!(
-                        "Invalid team chat storage: {key} must be an array. The file was left unchanged."
-                    )));
+fn fenced(command: &Value) -> Fallible {
+    required(&command["conversationId"], "A conversation ID")?;
+    required(&command["commandId"], "A command ID")?;
+    required(&command["turnId"], "A turn ID")?;
+    if !command["expectedRevision"].is_i64() {
+        return Err("An expected revision is required.".into());
+    }
+    Ok(())
+}
+
+/// Run a control command through the coordinator; returns the full outcome.
+fn control(host: &HostContext, command: &Value) -> Fallible<Value> {
+    activate_and_coordinate(host)?.control_with_outcome(command)
+}
+
+fn typed_control(host: &HostContext, channel: &str, command: &Value) -> Fallible<Value> {
+    fenced(command)?;
+    let mut base = json!({ "conversationId": command["conversationId"], "commandId": command["commandId"], "expectedRevision": command["expectedRevision"], "turnId": command["turnId"] });
+    match channel {
+        "assistant:cancelTurn" => {
+            base["action"] = json!("cancel");
+            if command["attemptId"].as_str().is_some_and(|a| !a.is_empty()) {
+                base["attemptId"] = command["attemptId"].clone();
+            }
+        }
+        "assistant:retryParticipant" => {
+            required(&command["participantId"], "A participant ID")?;
+            required(&command["attemptId"], "An attempt ID")?;
+            base["action"] = json!("retry");
+            base["attemptId"] = command["attemptId"].clone();
+            base["participantId"] = command["participantId"].clone();
+        }
+        _ => {
+            required(&command["attemptId"], "An attempt ID")?;
+            let resolution = command["resolution"].as_str();
+            if resolution != Some("reconcile") && resolution != Some("retry") {
+                return Err("Unknown attempt resolution.".into());
+            }
+            base["attemptId"] = command["attemptId"].clone();
+            if resolution == Some("reconcile") {
+                base["action"] = json!("reconcile");
+                base["reconciliationNote"] = json!(command["reconciliationNote"].as_str().unwrap_or_default());
+            } else {
+                base["action"] = json!("retry");
+                base["acknowledgeDuplicateActionRisk"] = json!(command["acknowledgeDuplicateActionRisk"] == true);
+                if command["reconciliationEvidenceId"].as_str().is_some_and(|a| !a.is_empty()) {
+                    base["reconciliationEvidenceId"] = command["reconciliationEvidenceId"].clone();
                 }
             }
-            let conversations = if let Some(arr) =
-                val.get("conversations").and_then(Value::as_array)
-            {
-                arr.clone()
-            } else if let Some(map) = val.get("praxis.teamChats.v1").and_then(Value::as_object) {
-                map.values().cloned().collect()
-            } else if let Some(arr) = val.get("teamChats").and_then(Value::as_array) {
-                arr.clone()
-            } else {
-                Vec::new()
-            };
-            let team_chats = val
-                .get("teamChats")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            return Ok(ChatsDocument {
-                source: val,
-                schema_version,
-                revision,
-                activation,
-                conversations,
-                team_chats,
-            });
         }
     }
-    Ok(ChatsDocument {
-        source: json!({}),
-        schema_version: 2,
-        revision: 0,
-        activation: json!({"version": 1, "acceptedNewTurns": false}),
-        conversations: Vec::new(),
-        team_chats: Vec::new(),
-    })
+    control(host, &base)
 }
 
-fn save_chats_doc(user_data_dir: &Path, doc: &ChatsDocument) -> Result<()> {
-    let path = team_chats_file(user_data_dir);
-    let mut payload = doc.source.clone();
-    payload["schemaVersion"] = json!(doc.schema_version);
-    payload["revision"] = json!(doc.revision + 1);
-    if !doc.activation.is_null() {
-        payload["activation"] = doc.activation.clone();
-    }
-    payload["teamChats"] = json!(doc.team_chats);
-    payload["conversations"] = json!(doc.conversations);
-    let encoded = super::storage::encoded(&payload)?;
-    write_atomic(&path, &encoded, false)
+fn new_chat_id() -> String {
+    format!("chat-{}", &uuid::Uuid::new_v4().simple().to_string()[..12])
 }
 
-pub fn dispatch(
-    host: &HostContext,
-    user_data_dir: &Path,
-    channel: &str,
-    args: &[Value],
-) -> Result<Value> {
+fn changed(host: &HostContext) {
+    host.events().emit("assistant:chatsChanged", None);
+}
+
+fn chat_by_id(dir: &Path, id: &str) -> Fallible<Value> {
+    let snapshot = chat::read_snapshot(dir)?;
+    let record = if snapshot["activation"].is_null() {
+        arr_of(&snapshot, "teamChats").iter().find(|c| c["id"] == id).cloned()
+    } else {
+        arr_of(&snapshot, "conversations").iter().find(|c| c["id"] == id).map(chat_record)
+    };
+    Ok(record.unwrap_or(Value::Null))
+}
+
+fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
+    let dir = host.config().user_data_dir.clone();
+    let arg = |index: usize| args.get(index).cloned().unwrap_or(Value::Null);
     match channel {
         "assistant:listChats" => {
-            let project_id = text(args, 0).unwrap_or("");
-            let doc = load_chats_doc(user_data_dir)?;
-            let mut list = Vec::new();
-            for chat in &doc.conversations {
-                let matches_project = if project_id.is_empty() {
-                    true
-                } else {
-                    chat.get("projectId")
-                        .and_then(Value::as_str)
-                        .is_some_and(|p| p == project_id)
-                };
-                if matches_project {
-                    let messages = chat
-                        .get("messages")
-                        .and_then(Value::as_array)
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut personas: Vec<String> = Vec::new();
-                    for msg in &messages {
-                        if let Some(role) = msg.get("role").and_then(Value::as_str)
-                            && role != "user"
-                            && !personas.iter().any(|p| p == role)
-                        {
-                            personas.push(role.to_string());
-                        }
-                    }
-                    list.push(json!({
-                        "id": chat.get("id").unwrap_or(&Value::Null),
-                        "projectId": chat.get("projectId").unwrap_or(&Value::Null),
-                        "title": chat.get("title").unwrap_or(&Value::Null),
-                        "issueKey": chat.get("issueKey"),
-                        "createdAt": chat.get("createdAt").unwrap_or(&Value::Null),
-                        "updatedAt": chat.get("updatedAt").unwrap_or(&Value::Null),
-                        "archived": chat.get("archived").and_then(Value::as_bool).unwrap_or(false),
-                        "messageCount": messages.len(),
-                        "personas": personas,
-                    }));
-                }
-            }
-            list.sort_by(|a, b| {
-                let ut_a = a.get("updatedAt").and_then(Value::as_str).unwrap_or("");
-                let ut_b = b.get("updatedAt").and_then(Value::as_str).unwrap_or("");
-                ut_b.cmp(ut_a)
-            });
-            Ok(json!(list))
+            chat::activate(&dir)?;
+            Ok(json!(summaries_for(&chat::read_snapshot(&dir)?, arg(0).as_str().unwrap_or_default())))
         }
-        "assistant:getChat" | "assistant:getConversation" => {
-            let chat_id = text(args, 0)?;
-            let doc = load_chats_doc(user_data_dir)?;
-            let chat = doc
-                .conversations
-                .iter()
-                .find(|c| c.get("id").and_then(Value::as_str) == Some(chat_id))
-                .cloned()
-                .unwrap_or(Value::Null);
-            Ok(chat)
+        "assistant:getChat" => {
+            chat::activate(&dir)?;
+            chat_by_id(&dir, arg(0).as_str().unwrap_or_default())
+        }
+        "assistant:getConversation" => {
+            let coordinator = activate_and_coordinate(host)?;
+            coordinator.initialize()?;
+            Ok(coordinator.get_conversation(&required(&arg(0), "A conversation ID")?)?.unwrap_or(Value::Null))
         }
         "assistant:createChat" => {
-            let project_id = text(args, 0)?;
-            let issue_key = args.get(1).and_then(Value::as_str);
-            let chat_id = format!("chat-{}", Uuid::new_v4());
-            let timestamp = now();
-            let title = if let Some(key) = issue_key {
-                format!("Chat for {key}")
-            } else {
-                "New Conversation".to_string()
-            };
-            let new_chat = json!({
-                "id": chat_id,
-                "projectId": project_id,
-                "issueKey": issue_key,
-                "title": title,
-                "archived": false,
-                "createdAt": timestamp,
-                "updatedAt": timestamp,
-                "messages": [],
-                "schemaVersion": 2,
-                "revision": 0,
-                "participants": [],
-                "turns": [],
-                "bindings": []
-            });
-            let mut doc = load_chats_doc(user_data_dir)?;
-            doc.conversations.push(new_chat.clone());
-            save_chats_doc(user_data_dir, &doc)?;
-            host.events().emit("assistant:chatsChanged", None);
-            Ok(new_chat)
+            chat::activate(&dir)?;
+            let stamp = now();
+            let mut record = json!({ "id": new_chat_id(), "projectId": arg(0).as_str().unwrap_or_default(), "title": "New team chat", "createdAt": stamp, "updatedAt": stamp, "messages": [] });
+            if let Some(key) = arg(1).as_str().filter(|k| !k.is_empty()) {
+                record["issueKey"] = json!(key);
+            }
+            let conversation = import_legacy_chat(&record)?;
+            chat::transaction(&dir, |snapshot| {
+                arr_mut(snapshot, "conversations").push(conversation);
+                Ok(())
+            })?;
+            changed(host);
+            Ok(record)
         }
         "assistant:saveChat" => {
-            let chat_id = text(args, 0)?;
-            let messages = args.get(1).cloned().unwrap_or_else(|| json!([]));
-            let mut doc = load_chats_doc(user_data_dir)?;
-            let mut updated = None;
-            for chat in &mut doc.conversations {
-                if chat.get("id").and_then(Value::as_str) == Some(chat_id) {
-                    chat["messages"] = messages.clone();
-                    chat["updatedAt"] = json!(now());
-                    updated = Some(chat.clone());
-                    break;
-                }
+            if !chat::read_snapshot(&dir)?["activation"].is_null() {
+                return Err("Legacy assistant writes are disabled after durable activation.".into());
             }
-            if let Some(chat) = updated {
-                save_chats_doc(user_data_dir, &doc)?;
-                host.events().emit("assistant:chatsChanged", None);
-                Ok(chat)
-            } else {
-                Err(failure(format!("Chat {chat_id} was not found.")))
-            }
+            Err("Whole-transcript replacement is rejected for durable conversations.".into())
         }
         "assistant:renameChat" => {
-            let chat_id = text(args, 0)?;
-            let new_title = text(args, 1)?;
-            let mut doc = load_chats_doc(user_data_dir)?;
-            let mut updated = None;
-            for chat in &mut doc.conversations {
-                if chat.get("id").and_then(Value::as_str) == Some(chat_id) {
-                    chat["title"] = json!(new_title);
-                    chat["updatedAt"] = json!(now());
-                    updated = Some(chat.clone());
-                    break;
-                }
+            chat::activate(&dir)?;
+            let id = arg(0).as_str().unwrap_or_default().to_owned();
+            let title = arg(1).as_str().unwrap_or_default().trim().to_owned();
+            if title.is_empty() {
+                return Err("A chat needs a name.".into());
             }
-            if let Some(chat) = updated {
-                save_chats_doc(user_data_dir, &doc)?;
-                host.events().emit("assistant:chatsChanged", None);
-                Ok(chat)
-            } else {
-                Err(failure(format!("Chat {chat_id} was not found.")))
-            }
+            chat::transaction(&dir, |snapshot| {
+                let conversation = arr_mut(snapshot, "conversations").iter_mut().find(|c| c["id"] == id.as_str()).ok_or_else(|| format!("Conversation {id} was not found."))?;
+                conversation["title"] = json!(title.chars().take(120).collect::<String>());
+                conversation["revision"] = json!(conversation["revision"].as_i64().unwrap_or(0) + 1);
+                Ok(())
+            })?;
+            changed(host);
+            chat_by_id(&dir, &id)
         }
         "assistant:archiveChat" => {
-            let chat_id = text(args, 0)?;
-            let archived = args.get(1).and_then(Value::as_bool).unwrap_or(true);
-            let mut doc = load_chats_doc(user_data_dir)?;
-            let mut updated = None;
-            for chat in &mut doc.conversations {
-                if chat.get("id").and_then(Value::as_str) == Some(chat_id) {
-                    chat["archived"] = json!(archived);
-                    chat["updatedAt"] = json!(now());
-                    updated = Some(chat.clone());
-                    break;
+            chat::activate(&dir)?;
+            let id = arg(0).as_str().unwrap_or_default().to_owned();
+            let archived = arg(1) == true;
+            chat::transaction(&dir, |snapshot| {
+                let conversation = arr_mut(snapshot, "conversations").iter_mut().find(|c| c["id"] == id.as_str()).ok_or_else(|| format!("Team chat {id} was not found."))?;
+                if archived {
+                    conversation["archived"] = json!(true);
+                } else {
+                    conversation.as_object_mut().map(|o| o.remove("archived"));
                 }
-            }
-            if let Some(chat) = updated {
-                save_chats_doc(user_data_dir, &doc)?;
-                host.events().emit("assistant:chatsChanged", None);
-                Ok(chat)
-            } else {
-                Err(failure(format!("Chat {chat_id} was not found.")))
-            }
+                conversation["revision"] = json!(conversation["revision"].as_i64().unwrap_or(0) + 1);
+                Ok(())
+            })?;
+            changed(host);
+            chat_by_id(&dir, &id)
         }
         "assistant:deleteChat" => {
-            let chat_id = text(args, 0)?;
-            let mut doc = load_chats_doc(user_data_dir)?;
-            doc.conversations
-                .retain(|c| c.get("id").and_then(Value::as_str) != Some(chat_id));
-            save_chats_doc(user_data_dir, &doc)?;
-            host.events().emit("assistant:chatsChanged", None);
+            let coordinator = activate_and_coordinate(host)?;
+            coordinator.remove_conversation(arg(0).as_str().unwrap_or_default())?;
+            changed(host);
             Ok(Value::Null)
         }
-        "assistant:sessionTurn" | "assistant:turn" => {
-            let user_msg_id = format!("msg-{}", Uuid::new_v4());
-            let assistant_msg_id = format!("msg-{}", Uuid::new_v4());
-            let timestamp = now();
-            Ok(json!({
-                "messages": [
-                    {
-                        "id": user_msg_id,
-                        "role": "user",
-                        "content": "Turn processed",
-                        "createdAt": timestamp
-                    },
-                    {
-                        "id": assistant_msg_id,
-                        "role": "assistant",
-                        "personaId": "lead",
-                        "content": "Ready to assist.",
-                        "createdAt": timestamp
-                    }
-                ]
-            }))
-        }
-        "assistant:teamReview" => {
-            let timestamp = now();
-            Ok(json!({
-                "reviews": [],
-                "summary": "Team review complete",
-                "completedAt": timestamp
-            }))
-        }
-        "assistant:control" => {
-            let command = args.first().cloned().unwrap_or_else(|| json!({}));
-            Ok(json!({
-                "ok": true,
-                "command": command
-            }))
-        }
         "assistant:stageAttachments" => {
-            let conversation_id = text(args, 0)?;
-            let attachments_dir = user_data_dir
-                .join("team-chat-attachments")
-                .join(conversation_id);
-            std::fs::create_dir_all(&attachments_dir).map_err(failure)?;
-            let images = args
-                .get(1)
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            let staged_refs: Vec<Value> = images
-                .iter()
-                .enumerate()
-                .map(|(i, img)| {
-                    json!({
-                        "id": format!("att-{i}-{}", Uuid::new_v4()),
-                        "mediaType": img.get("mediaType").and_then(Value::as_str).unwrap_or("image/png"),
-                        "name": img.get("name").and_then(Value::as_str).unwrap_or("attachment")
-                    })
-                })
-                .collect();
-            Ok(json!(staged_refs))
+            let coordinator = activate_and_coordinate(host)?;
+            let id = arg(0).as_str().unwrap_or_default().to_owned();
+            if coordinator.get_conversation(&id)?.is_none() {
+                return Err("Conversation was not found.".into());
+            }
+            Ok(json!(chat::stage_attachments(&dir, &id, arg(1).as_array().map_or(&[], Vec::as_slice))?))
         }
         "assistant:submitTurn" => {
-            let command = args
-                .first()
-                .ok_or_else(|| failure("SubmitTurn command required"))?;
-            let conversation_id = command
-                .get("conversationId")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let content = command.get("content").and_then(Value::as_str).unwrap_or("");
-            let timestamp = now();
-            let mut doc = load_chats_doc(user_data_dir)?;
-            let updated = if let Some(chat) = doc
-                .conversations
-                .iter_mut()
-                .find(|c| c.get("id").and_then(Value::as_str) == Some(conversation_id))
-            {
-                let msg_id = format!("msg-{}", Uuid::new_v4());
-                let user_msg = json!({
-                    "id": msg_id,
-                    "role": "user",
-                    "content": content,
-                    "createdAt": timestamp
-                });
-                if let Some(msgs) = chat.get_mut("messages").and_then(Value::as_array_mut) {
-                    msgs.push(user_msg);
-                }
-                chat["updatedAt"] = json!(timestamp);
-                Some(chat.clone())
-            } else {
-                None
-            };
-            if let Some(chat) = updated {
-                save_chats_doc(user_data_dir, &doc)?;
-                host.events().emit("assistant:chatsChanged", None);
-                host.events().emit(
-                    "assistant:conversationUpdate",
-                    Some(json!({
-                        "conversationId": conversation_id,
-                        "type": "message",
-                        "message": {
-                            "id": format!("reply-{}", Uuid::new_v4()),
-                            "role": "assistant",
-                            "content": "Turn recorded.",
-                            "createdAt": now()
-                        }
-                    })),
-                );
-                Ok(chat)
-            } else {
-                Ok(json!({ "id": conversation_id, "messages": [] }))
+            let command = arg(0);
+            let coordinator = activate_and_coordinate(host)?;
+            let id = required(&command["conversationId"], "A conversation ID")?;
+            coordinator.initialize()?;
+            let target = coordinator.get_conversation(&id)?.ok_or_else(|| format!("Conversation {id} was not found."))?;
+            if command["context"]["projectId"].as_str().is_some_and(|p| !p.is_empty()) && target["projectId"].as_str().is_some_and(|p| !p.is_empty()) && command["context"]["projectId"] != target["projectId"] {
+                return Err("Page context belongs to a different project.".into());
             }
+            let refs = command["attachmentRefs"].as_array().cloned().unwrap_or_default();
+            chat::resolve_attachments(&dir, &id, &refs).map_err(|message| if message == "ENOENT" || message.contains("Invalid attachment digest") { "Unknown attachment reference.".to_owned() } else { message })?;
+            if !refs.is_empty() {
+                let options = &command["runtimeOptions"];
+                if options["mode"].as_str().unwrap_or("chat") == "chat" && options["toolMode"].as_str().unwrap_or("project-only") == "project-only" {
+                    return Err("Choose an image-capable agent runtime before attaching images.".into());
+                }
+            }
+            coordinator.submit_turn(&command)
         }
-        "assistant:cancelTurn" | "assistant:retryParticipant" | "assistant:resolveAttempt" => {
-            Ok(json!({ "ok": true }))
+        "assistant:control" => {
+            let command = arg(0);
+            required(&command["conversationId"], "A conversation ID")?;
+            required(&command["commandId"], "A command ID")?;
+            let action = command["action"].as_str().unwrap_or_default();
+            if !["cancel", "retry", "pin", "unpin", "resume-context", "reconcile"].contains(&action) {
+                return Err("Unknown control action.".into());
+            }
+            if !command["expectedRevision"].is_i64() {
+                return Err("An expected revision is required.".into());
+            }
+            if matches!(action, "cancel" | "retry" | "reconcile") {
+                required(&command["turnId"], "A turn ID")?;
+            }
+            if matches!(action, "pin" | "unpin") {
+                required(&command["messageId"], "A message ID")?;
+            }
+            Ok(control(host, &command)?["conversation"].clone())
         }
-        _ => Err(failure(format!("Unknown assistant channel: {channel}"))),
+        "assistant:cancelTurn" | "assistant:retryParticipant" | "assistant:resolveAttempt" => typed_control(host, channel, &arg(0)),
+        "assistant:turn" => {
+            if !chat::read_snapshot(&dir)?["activation"].is_null() {
+                return Err("Legacy assistant turns are disabled.".into());
+            }
+            block_on(chat::run_assistant_turn(host, &arg(0)))
+        }
+        "assistant:sessionTurn" => block_on(chat::run_assistant_turn(host, &arg(0))),
+        "assistant:teamReview" => block_on(chat::run_team_review(host, &arg(0))),
+        _ => Err(format!("Unknown assistant channel: {channel}")),
     }
+}
+
+pub fn dispatch(host: &HostContext, _user_data_dir: &Path, channel: &str, args: &[Value]) -> Result<Value> {
+    run(host, channel, args).map_err(failure)
 }

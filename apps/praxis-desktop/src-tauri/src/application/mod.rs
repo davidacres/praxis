@@ -12,6 +12,8 @@ mod ai_providers;
 mod ai_usage;
 mod artifacts;
 mod assistant;
+mod team_chat;
+mod team_chat_core;
 mod board_prefs;
 mod boards;
 mod builtin_mcp;
@@ -420,6 +422,9 @@ impl Application {
             webviews: webviews::WebviewManager::new(),
             version: version.into(),
         });
+        // Queued turns resume at launch, before any window asks for the chat.
+        let recovery_host = host.clone();
+        std::thread::spawn(move || team_chat::recover_on_startup(&recovery_host));
         for &channel in CHANNELS.iter().chain(std::iter::once(&"settings:set")) {
             let application = Arc::clone(&application);
             host.register_handler(channel, move |host, args| {
@@ -443,7 +448,7 @@ impl Application {
                     return result;
                 }
             }
-            "assistant:listChats" | "assistant:getChat" | "assistant:getConversation" => {
+            _ if channel.starts_with("assistant:") => {
                 return assistant::dispatch(host, &host.config().user_data_dir, channel, args);
             }
             // Marketplace work is network- and disk-bound and never touches the project catalog,
