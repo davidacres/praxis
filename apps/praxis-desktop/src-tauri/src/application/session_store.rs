@@ -112,6 +112,7 @@ impl SessionStore {
         state.records.insert(issue_key.to_owned(), record.clone());
         state.dirty.insert(issue_key.to_owned());
         self.persist_locked(&mut state, Some(issue_key))?;
+        super::ai_usage_stats::track_session(&self.dir, &record);
         Ok(record)
     }
 
@@ -135,6 +136,7 @@ impl SessionStore {
         state.records.insert(issue_key.to_owned(), record.clone());
         state.dirty.insert(issue_key.to_owned());
         drop(state);
+        super::ai_usage_stats::track_session(&self.dir, &record);
         if persist {
             self.queue_flush();
         }

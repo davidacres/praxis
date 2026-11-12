@@ -10,6 +10,7 @@ mod session_store;
 mod user_mcp;
 mod ai_providers;
 mod ai_usage;
+mod ai_usage_stats;
 mod artifacts;
 mod assistant;
 mod board_prefs;

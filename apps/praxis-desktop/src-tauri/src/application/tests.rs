@@ -1517,8 +1517,8 @@ fn ai_usage_and_provider_snapshots() {
     // 1. Dashboard summary
     let summary = profile.rpc("aiUsage:dashboardSummary", vec![]);
     assert!(summary.get("today").is_some());
-    assert!(summary.get("thisWeek").is_some());
-    assert!(summary.get("byModel").is_some());
+    assert!(summary.get("week").is_some());
+    assert!(summary["allTime"]["models"].is_array());
 
     // 2. Series and compare
     let series = profile.rpc("aiUsage:series", vec![json!("day"), json!(7)]);

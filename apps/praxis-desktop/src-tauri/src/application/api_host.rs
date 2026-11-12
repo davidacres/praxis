@@ -395,7 +395,26 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
             if task.request_permission(request).await == super::acp_host::Decision::Deny {
                 return failed("Permission denied for run_shell");
             }
-            let child = tokio::process::Command::new("/bin/sh").arg("-c").arg(&command).current_dir(root).env("PATH", praxis_ai::providers::environment::effective_path()).stdin(std::process::Stdio::null()).kill_on_drop(true).output();
+            // Its own process group, killed as a whole if the step is cancelled or times out.
+            let mut shell = tokio::process::Command::new("/bin/sh");
+            shell.arg("-c").arg(&command).current_dir(root).env("PATH", praxis_ai::providers::environment::effective_path()).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).kill_on_drop(true);
+            #[cfg(unix)]
+            shell.process_group(0);
+            let spawned = match shell.spawn() {
+                Ok(child) => child,
+                Err(error) => return failed(error.to_string()),
+            };
+            struct GroupGuard(Option<u32>);
+            impl Drop for GroupGuard {
+                fn drop(&mut self) {
+                    #[cfg(unix)]
+                    if let Some(pid) = self.0 {
+                        praxis_ai::acp::connection::signal_group(pid, nix::sys::signal::Signal::SIGKILL);
+                    }
+                }
+            }
+            let _group = GroupGuard(spawned.id());
+            let child = spawned.wait_with_output();
             match tokio::time::timeout(SHELL_TIMEOUT, child).await {
                 Err(_) => failed(format!("exit error: command timed out after {}s", SHELL_TIMEOUT.as_secs())),
                 Ok(Err(error)) => failed(error.to_string()),
@@ -626,7 +645,15 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 if is_read {
                     duplicate_reads = 0;
                 }
-                run_tool(task, call).await
+                let cancelled = task.cancel.notified();
+                tokio::pin!(cancelled);
+                if task.ending.load(Ordering::SeqCst) {
+                    return (Outcome::Aborted, history);
+                }
+                tokio::select! {
+                    () = &mut cancelled => return (Outcome::Aborted, history),
+                    outcome = run_tool(task, call) => outcome,
+                }
             };
             let mut data = outcome.data.clone().unwrap_or_else(|| json!({}));
             data["toolName"] = json!(call.name);
