@@ -139,6 +139,7 @@ impl DesktopState {
 
     pub fn shutdown(&self) {
         self.host.events().off_event(self.event_subscription);
+        crate::application::dispose();
         self.services.shutdown();
         if let Ok(mut runtime) = self.runtime.lock()
             && let Some(runtime) = runtime.take()

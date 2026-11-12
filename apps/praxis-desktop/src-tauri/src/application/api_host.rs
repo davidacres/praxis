@@ -24,7 +24,10 @@ use praxis_core::unified_diff::create_unified_diff;
 use praxis_host::HostContext;
 use serde_json::{Value, json};
 
+use praxis_ai::coordination::{ClaimMode, Lifetime, RequestItem, Resource, refusal_for_agent};
+
 use super::acp_host::{Task, evt, fail, finish_task, register_api_task, stop_task};
+use super::coordination::Decision;
 use super::runtime::runtime;
 use super::session_store::store;
 use super::{Result, failure, now};
@@ -252,7 +255,7 @@ async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl
 
 // ── local tools ──────────────────────────────────────────────────────────
 
-fn tool_definitions(tool_mode: &str, tracker: bool) -> Vec<GatewayToolDefinition> {
+fn tool_definitions(tool_mode: &str, tracker: bool, coordinated: bool) -> Vec<GatewayToolDefinition> {
     let tool = |name: &str, description: &str, schema: Value| GatewayToolDefinition { name: name.into(), description: Some(description.into()), input_schema: Some(schema) };
     let path = json!({ "type": "string", "description": "File path relative to the working directory" });
     let read = vec![
@@ -279,6 +282,14 @@ fn tool_definitions(tool_mode: &str, tracker: bool) -> Vec<GatewayToolDefinition
             all.extend(tracker_tools);
             all.push(tool("write_file", "Write a UTF-8 text file relative to the working directory (creates parents).", json!({ "type": "object", "properties": { "path": path, "content": { "type": "string", "description": "Full file contents to write" } }, "required": ["path", "content"] })));
             all.push(tool("run_shell", "Run a shell command in the working directory and return stdout/stderr.", json!({ "type": "object", "properties": { "command": { "type": "string", "description": "Shell command to execute" } }, "required": ["command"] })));
+            if coordinated {
+                // Offered only to a coordinated session that can change files (FX-BF-048 / TASK-394).
+                all.push(tool(
+                    "wait_for_files",
+                    "Wait for files or folders another session is changing, after a write was refused because of it. Waits in turn, at most the seconds given (max 120), then either hands them to you until your turn ends or says what is still in the way. Use it once, not in a loop; do other work instead if you can.",
+                    json!({ "type": "object", "properties": { "paths": { "type": "array", "items": { "type": "string" }, "description": "Files or folders relative to the working directory" }, "reason": { "type": "string", "description": "What you will do with them, in a few words" }, "seconds": { "type": "number", "description": "How long to wait, 1-120 (default 60)" } }, "required": ["paths", "reason"] }),
+                ));
+            }
             all
         }
     }
@@ -381,6 +392,10 @@ async fn run_browser_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> To
             }
         }
     }
+    // The browser is held for the session's whole sequence of calls; a person using it, or another session, refuses it.
+    if let Err(reason) = super::coordination::hold_browser_for_sequence(&task.key).await {
+        return failed(reason);
+    }
     let (ok, content) = super::ai_browser::run_tool(&task.host, &call.name, &call.arguments).await;
     ToolOutcome { ok, content, data: None }
 }
@@ -401,6 +416,12 @@ async fn run_tracker_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> To
         Ok(result) => ToolOutcome { ok: result.ok, content: result.content, data: None },
         Err(message) => failed(message),
     }
+}
+
+/// The session's coordination gate: every write and command of an API-provider session runs
+/// through Praxis, so its coverage is `enforced`.
+fn coordination_gate(task: &Task) -> Option<super::coordination::Gate> {
+    super::coordination::gate_for(&task.key, &task.working_directory, praxis_ai::coordination::Coverage::Enforced)
 }
 
 async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
@@ -487,12 +508,33 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
             match resolve_sandboxed_path(root, &path) {
                 Err(error) => failed(error),
                 Ok(full) => {
+                    // Owned before it is written: a file another session holds is not touched.
+                    let gate = coordination_gate(task);
+                    let grant = match &gate {
+                        Some(gate) => {
+                            let item = match gate.file_item(&full, false) {
+                                Ok(item) => item,
+                                Err(error) => return failed(error),
+                            };
+                            match gate.acquire(vec![item], &format!("write {path}"), Lifetime::Tool).await {
+                                Decision::Granted(grant) => Some(grant),
+                                Decision::Refused(reason) => return failed(refusal_for_agent(&reason, Some("wait_for_files"))),
+                            }
+                        }
+                        None => None,
+                    };
                     let before = std::fs::read_to_string(&full).ok();
-                    if let Some(parent) = full.parent() {
-                        let _ = std::fs::create_dir_all(parent);
+                    let written = (|| {
+                        if let Some(parent) = full.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        std::fs::write(&full, &content).map_err(|error| format!("{}: {error}", full.display()))
+                    })();
+                    if let Some(grant) = grant {
+                        grant.release(None).await;
                     }
-                    if let Err(error) = std::fs::write(&full, &content) {
-                        return failed(format!("{}: {error}", full.display()));
+                    if let Err(error) = written {
+                        return failed(error);
                     }
                     let diff = (before.as_deref().map_or(0, str::len) + content.len() <= MAX_DIFF_BYTES).then(|| create_unified_diff(&path, before.as_deref().unwrap_or_default(), &content, 3));
                     let mut data = json!({ "kind": "write", "fileChanges": [{ "path": path, "oldText": before.clone().unwrap_or_default(), "newText": content }] });
@@ -504,6 +546,30 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
                 }
             }
         }
+        "wait_for_files" => {
+            let Some(gate) = coordination_gate(task) else { return failed("wait_for_files is only available to a coordinated session.") };
+            let paths: Vec<String> = args["paths"].as_array().map(|all| all.iter().filter_map(Value::as_str).filter(|p| !p.trim().is_empty()).map(str::to_owned).collect()).unwrap_or_default();
+            if paths.is_empty() {
+                return failed("Name at least one path.");
+            }
+            if paths.len() > 50 {
+                return failed("Wait for at most 50 paths at once; name a folder instead.");
+            }
+            let mut items = Vec::new();
+            for entry in &paths {
+                match resolve_sandboxed_path(root, entry).and_then(|absolute| gate.file_item(&absolute, true)) {
+                    Ok(item) => items.push(item),
+                    Err(error) => return failed(error),
+                }
+            }
+            let seconds = args["seconds"].as_f64().filter(|n| n.is_finite()).unwrap_or(60.0);
+            let timeout_ms = ((seconds * 1000.0).round() as i64).clamp(1000, praxis_ai::coordination::COORDINATION_MAX_WAIT_MS);
+            let reason = Some(text("reason").trim().chars().take(200).collect::<String>()).filter(|r| !r.is_empty()).unwrap_or_else(|| "waiting to edit".into());
+            match gate.wait(items, &reason, timeout_ms).await {
+                Decision::Granted(_) => ToolOutcome { ok: true, content: format!("You now hold {} until your turn ends. Re-read them before changing them: another session just finished with them.", paths.join(", ")), data: None },
+                Decision::Refused(why) => failed(format!("Not granted: {why} Do other work, or stop and report what is blocking you; do not wait again in a loop.")),
+            }
+        }
         "run_shell" => {
             let command = text("command");
             if command.trim().is_empty() {
@@ -513,34 +579,35 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
             if task.request_permission(request).await == super::acp_host::Decision::Deny {
                 return failed("Permission denied for run_shell");
             }
-            // Its own process group, killed as a whole if the step is cancelled or times out.
-            let mut shell = tokio::process::Command::new("/bin/sh");
-            shell.arg("-c").arg(&command).current_dir(root).env("PATH", praxis_ai::providers::environment::effective_path()).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).kill_on_drop(true);
-            #[cfg(unix)]
-            shell.process_group(0);
-            let spawned = match shell.spawn() {
-                Ok(child) => child,
-                Err(error) => return failed(error.to_string()),
-            };
-            struct GroupGuard(Option<u32>);
-            impl Drop for GroupGuard {
-                fn drop(&mut self) {
-                    #[cfg(unix)]
-                    if let Some(pid) = self.0 {
-                        praxis_ai::acp::connection::signal_group(pid, nix::sys::signal::Signal::SIGKILL);
+            // A shell command can touch anything in the checkout, so it owns the whole worktree while it runs.
+            let gate = coordination_gate(task);
+            let grant = match &gate {
+                Some(gate) => {
+                    let clipped = if command.chars().count() > 80 { format!("{}…", command.chars().take(80).collect::<String>()) } else { command.clone() };
+                    let items = vec![RequestItem { resource: Resource::Worktree { worktree: gate.worktree.clone() }, mode: ClaimMode::Exclusive }];
+                    match gate.acquire(items, &format!("run `{clipped}`"), Lifetime::Tool).await {
+                        Decision::Granted(grant) => Some(grant),
+                        Decision::Refused(reason) => return failed(refusal_for_agent(&reason, Some("wait_for_files"))),
                     }
                 }
+                None => None,
+            };
+            // Its own process group, killed as a whole if the step is cancelled or times out.
+            let run = super::shell_services::run_shell_command(&command, root, SHELL_TIMEOUT, praxis_ai::providers::environment::effective_path().to_owned()).await;
+            let output = [run.stdout.as_str(), run.stderr.as_str()].into_iter().filter(|part| !part.trim().is_empty()).collect::<Vec<_>>().join("\n").trim().to_owned();
+            let mut parts = vec![output.clone(), run.error.as_ref().map(|error| format!("exit error: {error}")).unwrap_or_default()];
+            // Processes the command left running are a service: they keep a claim until they exit.
+            if let Some(pgid) = run.pgid.filter(|_| !run.survivors.is_empty()) {
+                parts.push(super::shell_services::track_service(task, gate.as_ref(), &command, pgid, run.survivors.clone()).await);
             }
-            let _group = GroupGuard(spawned.id());
-            let child = spawned.wait_with_output();
-            match tokio::time::timeout(SHELL_TIMEOUT, child).await {
-                Err(_) => failed(format!("exit error: command timed out after {}s", SHELL_TIMEOUT.as_secs())),
-                Ok(Err(error)) => failed(error.to_string()),
-                Ok(Ok(output)) => {
-                    let combined = [String::from_utf8_lossy(&output.stdout).into_owned(), String::from_utf8_lossy(&output.stderr).into_owned()].into_iter().filter(|p| !p.trim().is_empty()).collect::<Vec<_>>().join("\n").trim().to_owned();
-                    let parts = [combined, if output.status.success() { String::new() } else { format!("exit error: exited with {}", output.status.code().map_or("a signal".into(), |c| c.to_string())) }];
-                    ToolOutcome { ok: output.status.success(), content: parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join("\n"), data: None }
-                }
+            if let Some(grant) = grant {
+                grant.release(None).await;
+            }
+            let content = parts.into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join("\n").trim().to_owned();
+            ToolOutcome {
+                ok: run.error.is_none(),
+                content: if content.is_empty() { "(no output)".to_owned() } else { content },
+                data: Some(json!({ "toolName": "run_shell", "kind": "shell", "ok": run.error.is_none(), "output": output, "exitCode": run.exit_code })),
             }
         }
         other => failed(format!("Unknown tool: {other}")),
@@ -624,7 +691,7 @@ enum Outcome {
 }
 
 async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, system: String, mut history: Vec<WireMessage>, tool_mode: &str, max_steps: u64, reasoning: Option<&str>) -> (Outcome, Vec<WireMessage>) {
-    let mut tools = tool_definitions(tool_mode, !task.key.starts_with("SESSION-"));
+    let mut tools = tool_definitions(tool_mode, !task.key.starts_with("SESSION-"), tool_mode == "full" && coordination_gate(task).is_some());
     if tool_mode == "full" && task.host.settings().read().ai.browser_tools.enabled {
         tools.extend(super::ai_browser::tool_definitions().into_iter().map(|(name, description, schema)| GatewayToolDefinition { name: name.into(), description: Some(description.into()), input_schema: Some(schema) }));
     }

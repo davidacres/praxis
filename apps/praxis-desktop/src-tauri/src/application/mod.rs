@@ -26,6 +26,8 @@ mod board_prefs;
 mod boards;
 mod builtin_mcp;
 mod connections;
+mod coordination;
+mod shell_services;
 mod deployments;
 mod log_bus;
 mod mobile_host;
@@ -442,6 +444,11 @@ fn issue_connection<'a>(channel: &str, args: &'a [Value]) -> Option<&'a str> {
 }
 
 /// How many AI sessions are mid-turn, for the close guard.
+/// Stops what agents left running and leaves the coordination broker (the app is quitting).
+pub fn dispose() {
+    coordination::dispose();
+}
+
 pub fn running_session_count(dir: &std::path::Path) -> usize {
     acp_host::active_keys(dir).iter().filter(|key| acp_host::is_running(dir, key)).count()
 }
@@ -484,6 +491,8 @@ impl Application {
             webviews: webviews::WebviewManager::new(),
             version: version.into(),
         });
+        // The coordination broker is joined at startup, not on first use.
+        coordination::init(host);
         // Queued turns resume at launch, before any window asks for the chat.
         let recovery_host = host.clone();
         std::thread::spawn(move || team_chat::recover_on_startup(&recovery_host));
@@ -529,6 +538,10 @@ impl Application {
             }
             // Ticket reviews launch an agent and gadget answers call back into the tracker, so
             // neither may hold the profile lock.
+            // The broker answers from its own state, so the inspector never waits on the profile lock.
+            _ if coordination::CHANNELS.contains(&channel) => {
+                return coordination::dispatch(channel, args);
+            }
             _ if ai_review::CHANNELS.contains(&channel) => {
                 if let Some(result) = ai_review::dispatch(host, &host.config().user_data_dir, channel, args) {
                     return result;
@@ -691,7 +704,6 @@ impl Application {
             result?
         } else if channel.starts_with("settings:")
             || channel.starts_with("update:")
-            || channel.starts_with("coordination:")
         {
             system::dispatch(
                 host,

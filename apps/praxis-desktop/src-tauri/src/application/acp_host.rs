@@ -584,15 +584,33 @@ fn read_file(task: &Task, params: &Value) -> std::result::Result<Value, String> 
     Ok(json!({ "content": content }))
 }
 
-fn write_file(task: &Task, params: &Value) -> std::result::Result<Value, String> {
+async fn write_file(task: &Task, params: &Value) -> std::result::Result<Value, String> {
+    use praxis_ai::coordination::{Lifetime, refusal_for_agent};
+    use super::coordination::{Decision, gate_for};
     if matches!(task.tool_mode.as_str(), "read-only" | "project-only") {
         return Err("File writes are unavailable in read-only tool mode.".into());
     }
-    let path = resolve_sandboxed_path(&task.working_directory, params["path"].as_str().unwrap_or_default())?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let requested = params["path"].as_str().unwrap_or_default();
+    let path = resolve_sandboxed_path(&task.working_directory, requested)?;
+    // Owned before it is written: a file another session holds is not touched, and the agent is
+    // told who has it instead of retrying blind.
+    let grant = match gate_for(&task.key, &task.working_directory, praxis_ai::coordination::Coverage::Cooperative) {
+        Some(gate) => match gate.acquire(vec![gate.file_item(&path, false)?], &format!("write {requested}"), Lifetime::Tool).await {
+            Decision::Granted(grant) => Some(grant),
+            Decision::Refused(reason) => return Err(refusal_for_agent(&reason, Some("coordination_wait"))),
+        },
+        None => None,
+    };
+    let written = (|| {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&path, params["content"].as_str().unwrap_or_default()).map_err(|e| format!("{}: {e}", path.display()))
+    })();
+    if let Some(grant) = grant {
+        grant.release(None).await;
     }
-    std::fs::write(&path, params["content"].as_str().unwrap_or_default()).map_err(|e| format!("{}: {e}", path.display()))?;
+    written?;
     Ok(json!({}))
 }
 
@@ -617,7 +635,7 @@ async fn serve(task: Arc<Task>, connection: Arc<AcpConnection>, mut incoming: to
                 tokio::spawn(async move {
                     let reply = match method.as_str() {
                         "fs/read_text_file" => read_file(&task, &params),
-                        "fs/write_text_file" => write_file(&task, &params),
+                        "fs/write_text_file" => write_file(&task, &params).await,
                         "session/request_permission" => {
                             let call = &params["toolCall"];
                             let request = json!({ "toolCallId": call["toolCallId"], "title": call["title"].as_str().unwrap_or_else(|| call["toolCallId"].as_str().unwrap_or_default()), "name": call["name"], "kind": call["kind"], "rawInput": call["rawInput"] });
@@ -752,6 +770,10 @@ async fn finish(task: &Arc<Task>) {
         && all.get(&(task.dir.clone(), task.key.clone())).is_some_and(|current| Arc::ptr_eq(current, task))
     {
         all.remove(&(task.dir.clone(), task.key.clone()));
+    }
+    // The turn is over: what its tools still hold at the broker is released, and its waits end.
+    if find_task(&task.dir, &task.key).is_none() {
+        super::coordination::end_coordinated_turn(&task.key);
     }
 }
 

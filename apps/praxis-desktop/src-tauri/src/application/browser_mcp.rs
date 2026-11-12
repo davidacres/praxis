@@ -209,6 +209,10 @@ async fn call_tool(registration: &Registration, params: &Value) -> Value {
             }
         }
     }
+    // The browser is held for the session's whole sequence of calls; a person using it, or another session, refuses it.
+    if let Err(reason) = super::coordination::hold_browser_for_sequence(&registration.key).await {
+        return tool_result(false, reason);
+    }
     let (ok, text) = ai_browser::run_tool(host, &name, &arguments).await;
     if let Some(task) = &task {
         task.append(acp_host::evt("tool_complete", format!("Tool {}: {name}", if ok { "completed" } else { "failed" }), Some(text.chars().take(2000).collect()), Some(json!({ "toolName": name, "ok": ok, "kind": "fetch" }))), 1);

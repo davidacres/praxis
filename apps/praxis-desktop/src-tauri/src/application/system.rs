@@ -167,36 +167,6 @@ pub fn dispatch(
                 "reason": "Updates are only checked in a packaged build."
             }))
         }
-        "coordination:state" => Ok(json!({
-            "state": {
-                "schemaVersion": 1,
-                "epoch": "tauri-unavailable",
-                "revision": 0,
-                "sequence": 0,
-                "sessions": {},
-                "claims": [],
-                "waiters": [],
-                "events": []
-            },
-            "role": "follower",
-            "blockedReason": "The coordination broker is not connected in this Tauri build."
-        })),
-        "coordination:recover" => Ok(Value::Null),
-        "coordination:stopService" => {
-            if let Some(pgid) = args.first().and_then(Value::as_i64)
-                && pgid > 1
-            {
-                #[cfg(unix)]
-                {
-                    let _ = std::process::Command::new("kill")
-                        .arg("-TERM")
-                        .arg(format!("-{pgid}"))
-                        .status();
-                }
-                return Ok(json!(true));
-            }
-            Ok(json!(false))
-        }
         _ => Err(failure("Unknown system operation.")),
     }
 }
