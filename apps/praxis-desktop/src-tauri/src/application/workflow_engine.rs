@@ -411,7 +411,155 @@ fn evidence_dir(host: &HostContext, run: &WorkflowRun, node_id: &str) -> PathBuf
         .join(format!("attempt-{attempt}"))
 }
 
+const PACKAGE_MANAGERS: [&str; 4] = ["npm", "pnpm", "yarn", "bun"];
+
+fn program_of(command: &str) -> String {
+    let base = Path::new(command)
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let lower = base.to_lowercase();
+    lower
+        .strip_suffix(".cmd")
+        .or_else(|| lower.strip_suffix(".exe"))
+        .unwrap_or(&lower)
+        .to_string()
+}
+
+/// The workflow's install stage: a check that runs a package manager's `ci` or `install`.
+pub fn install_stage_of(nodes: &[WorkflowNode]) -> Option<&WorkflowCheckNode> {
+    nodes.iter().find_map(|node| match node {
+        WorkflowNode::Check(check)
+            if PACKAGE_MANAGERS.contains(&program_of(&check.command).as_str())
+                && check
+                    .args
+                    .as_ref()
+                    .and_then(|a| a.first())
+                    .is_some_and(|a| matches!(a.as_str(), "ci" | "install" | "i")) =>
+        {
+            Some(check)
+        }
+        _ => None,
+    })
+}
+
+/// The workflow's build stage: a check that runs a package manager's `build` script.
+pub fn build_stage_of(nodes: &[WorkflowNode]) -> Option<&WorkflowCheckNode> {
+    nodes.iter().find_map(|node| match node {
+        WorkflowNode::Check(check)
+            if PACKAGE_MANAGERS.contains(&program_of(&check.command).as_str())
+                && check.args.as_ref().is_some_and(|a| {
+                    a.first().is_some_and(|x| x == "run") && a.get(1).is_some_and(|x| x == "build")
+                }) =>
+        {
+            Some(check)
+        }
+        _ => None,
+    })
+}
+
+/// A package-manager project whose worktree has no completed install yet.
+fn needs_install(worktree: &Path) -> bool {
+    if !worktree.join("package.json").exists() {
+        return false;
+    }
+    ![
+        "node_modules/.package-lock.json",
+        "node_modules/.modules.yaml",
+        "node_modules/.yarn-state.yml",
+        "node_modules/.yarn-integrity",
+    ]
+    .iter()
+    .any(|marker| worktree.join(marker).exists())
+}
+
+fn describe_failure(result: &praxis_workflows::check_process::CheckProcessResult) -> String {
+    let why = if result.timed_out {
+        "it timed out".to_string()
+    } else if let Some(code) = result.code {
+        format!("it exited with code {code}")
+    } else {
+        result.error.clone().unwrap_or_else(|| "it did not start".to_string())
+    };
+    let lines: Vec<&str> = result.output.trim().lines().collect();
+    let tail = lines[lines.len().saturating_sub(15)..].join("\n");
+    if tail.is_empty() { format!("{why}.") } else { format!("{why}.\n{tail}") }
+}
+
 impl HostDispatcher {
+    /// Gives a run's worktree its dependencies, and its build output, before its first stage works
+    /// in it (`ensureRunDependencies`). Resolves to an error message when the install failed.
+    async fn ensure_run_dependencies(
+        &self,
+        context: &StageDispatchContext,
+        stage_name: &str,
+    ) -> Option<String> {
+        let nodes = &context.run.definition.nodes;
+        let worktree = PathBuf::from(context.worktree_path.as_deref()?);
+        let node = install_stage_of(nodes)?;
+        if !needs_install(&worktree) {
+            return None;
+        }
+        // `npm ci` empties whatever a node_modules link points at, so a link out of the worktree goes first.
+        let _ = praxis_core::git::worktree_dependency_links::remove_escaping_dependency_links(&worktree).await;
+        let vars: Vec<(String, String)> = std::env::vars().collect();
+        let env = |id: &str| {
+            check_environment(id, vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        };
+        let command_of = |n: &WorkflowCheckNode| {
+            let mut parts = vec![n.command.clone()];
+            parts.extend(n.args.clone().unwrap_or_default());
+            parts.join(" ")
+        };
+        let log = |message: &str| {
+            context.reporter.report_progress(message);
+            eprintln!("[workflow {}] {stage_name}: {message}", context.run.run_id);
+        };
+        let command = command_of(node);
+        log(&format!("Installing dependencies in this run's worktree first ({command})."));
+        let result = spawn_check(node, &worktree, &env(&node.base.id), Some(&context.cancel), None).await;
+        if context.cancel.is_cancelled() {
+            return None;
+        }
+        let ok = result.code.is_some_and(|c| {
+            node.success_exit_codes
+                .clone()
+                .filter(|codes| !codes.is_empty())
+                .unwrap_or_else(|| vec![0])
+                .contains(&c)
+        });
+        if !ok {
+            return Some(format!(
+                "Could not install this run's dependencies ({command}): {}",
+                describe_failure(&result)
+            ));
+        }
+        log("Dependencies installed.");
+        let build = build_stage_of(nodes)?;
+        let build_command = command_of(build);
+        log(&format!("Building this run's worktree ({build_command})."));
+        let built = spawn_check(build, &worktree, &env(&build.base.id), Some(&context.cancel), None).await;
+        if context.cancel.is_cancelled() {
+            return None;
+        }
+        let built_ok = built.code.is_some_and(|c| {
+            build
+                .success_exit_codes
+                .clone()
+                .filter(|codes| !codes.is_empty())
+                .unwrap_or_else(|| vec![0])
+                .contains(&c)
+        });
+        log(&if built_ok {
+            "Build finished.".to_string()
+        } else {
+            format!(
+                "The build failed ({build_command}): {} Stages start without its output; the workflow's Build stage runs it again later.",
+                describe_failure(&built)
+            )
+        });
+        None
+    }
+
     async fn run_check_node(
         &self,
         node: &WorkflowCheckNode,
@@ -430,6 +578,13 @@ impl HostDispatcher {
         };
         if node.command.trim().is_empty() {
             return Ok(StageOutcome::failure("This check has no command."));
+        }
+        if context.worktree_path.is_some()
+            && install_stage_of(&context.run.definition.nodes).is_none_or(|n| n.base.id != node.base.id)
+        {
+            if let Some(error) = self.ensure_run_dependencies(context, &node.base.name).await {
+                return Ok(StageOutcome::failure(error));
+            }
         }
         let success_codes: Vec<i32> = node
             .success_exit_codes
@@ -557,6 +712,11 @@ impl StageDispatcher for HostDispatcher {
         node: &WorkflowAgentTaskNode,
         context: &StageDispatchContext,
     ) -> Result<StageOutcome, String> {
+        if context.worktree_path.is_some() {
+            if let Some(error) = self.ensure_run_dependencies(context, &node.base.name).await {
+                return Ok(StageOutcome::failure(error));
+            }
+        }
         workflow_agent_stage::run_agent_stage(&self.host, node, context).await
     }
 

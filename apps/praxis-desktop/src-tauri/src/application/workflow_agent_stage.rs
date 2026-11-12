@@ -84,6 +84,7 @@ async fn freeze_worktree(worktree: &Path, stage_name: &str) -> Option<String> {
 // ── the stage brief ──────────────────────────────────────────────────────
 
 struct StageInput {
+    node_id: String,
     contract_id: String,
     kind: String,
     path: Option<String>,
@@ -210,6 +211,72 @@ fn build_task_definition(
         task["scheduledRun"] = json!(true);
     }
     task
+}
+
+const REFUSAL_CONTINUATION: &str = "Your last command was refused because this stage is read-only, and that ended your turn before you finished. You can still read: use your file read and search tools, or shell commands that only read (git status, log, diff and show; ls, cat, head, grep, rg, find without -exec; sed -n). Do not run tests, builds, installs or scripts. Continue the stage from where you stopped and produce every required output.";
+
+/// How many tools the stage's session has had refused for being read-only.
+fn read_only_refusals(dir: &Path, key: &str) -> usize {
+    store(dir)
+        .get(key)
+        .ok()
+        .flatten()
+        .and_then(|r| r["events"].as_array().cloned())
+        .map_or(0, |events| {
+            events
+                .iter()
+                .filter(|e| {
+                    e["type"] == "warning"
+                        && e["summary"]
+                            .as_str()
+                            .is_some_and(|s| s.starts_with("Blocked by read-only tools"))
+                })
+                .count()
+        })
+}
+
+fn stage_name(run: &WorkflowRun, node_id: &str) -> String {
+    run.definition
+        .nodes
+        .iter()
+        .find(|n| n.base().id == node_id)
+        .map_or_else(|| node_id.to_string(), |n| n.base().name.clone())
+}
+
+/// Upstream reports or logs inline, each capped to its head and tail (`formatUpstreamReports/Logs`).
+fn format_upstream(
+    heading: &str,
+    items: &[(String, String, String)],
+    max_chars: usize,
+    fenced: bool,
+) -> Option<String> {
+    let blocks: Vec<String> = items
+        .iter()
+        .filter(|(_, _, text)| !text.trim().is_empty())
+        .map(|(contract, stage, text)| {
+            let text = text.trim();
+            let chars: Vec<char> = text.chars().collect();
+            let shown = if chars.len() <= max_chars {
+                text.to_string()
+            } else {
+                let half = max_chars / 2;
+                let head: String = chars[..half].iter().collect();
+                let tail: String = chars[chars.len() - half..].iter().collect();
+                format!(
+                    "{}\n\n[… {} characters omitted …]\n\n{}",
+                    head.trim_end(),
+                    chars.len() - max_chars,
+                    tail.trim_start()
+                )
+            };
+            if fenced {
+                format!("### \"{contract}\" from {stage}\n```text\n{shown}\n```")
+            } else {
+                format!("### \"{contract}\" from {stage}\n{shown}")
+            }
+        })
+        .collect();
+    (!blocks.is_empty()).then(|| format!("{heading}\n\n{}", blocks.join("\n\n")))
 }
 
 // ── reading the session ──────────────────────────────────────────────────
@@ -679,6 +746,7 @@ async fn wait_for_session(
     host: &HostContext,
     key: &str,
     context: &StageDispatchContext,
+    after: Option<&str>,
 ) -> Option<Finished> {
     let dir = host.config().user_data_dir.clone();
     let mut aborted = false;
@@ -686,7 +754,11 @@ async fn wait_for_session(
         let record = store(&dir).get(key).ok().flatten();
         if let Some(record) = &record {
             let state = record["state"].as_str().unwrap_or("");
-            if is_terminal(state) && !acp_host::has_active_task(&dir, key) {
+            // A continued session still shows its previous turn until the next one starts.
+            let previous_turn = after.is_some_and(|a| {
+                state == "completed" && record["completedAt"].as_str() == Some(a)
+            });
+            if is_terminal(state) && !previous_turn && !acp_host::has_active_task(&dir, key) {
                 return Some(Finished {
                     state: state.to_string(),
                     response: record["responseText"].as_str().unwrap_or("").to_string(),
@@ -734,6 +806,7 @@ pub async fn run_agent_stage(
             produced.insert(
                 artifact.contract_id.clone(),
                 StageInput {
+                    node_id: artifact.node_id.clone(),
                     contract_id: artifact.contract_id.clone(),
                     kind: kind_name(artifact.kind),
                     path: artifact.path.clone(),
@@ -748,7 +821,47 @@ pub async fn run_agent_stage(
         .filter_map(|id| produced.remove(id))
         .collect();
     let snapshot = find_snapshot(run, &node.base.id).map(|s| (s.reference, s.produced_by_node_id));
-    let task = build_task_definition(run, node, &inputs, snapshot);
+    let mut task = build_task_definition(run, node, &inputs, snapshot);
+    let dir = host.config().user_data_dir.clone();
+    // What earlier stages concluded: a report's text lives on its session, a check's log in the
+    // evidence store (outside the worktree an agent's file tools are confined to).
+    let reports: Vec<(String, String, String)> = inputs
+        .iter()
+        .filter(|i| i.path.is_none())
+        .map(|i| {
+            let text = store(&dir)
+                .get(&stage_session_key(&run.run_id, &i.node_id))
+                .ok()
+                .flatten()
+                .and_then(|r| r["responseText"].as_str().map(str::to_string))
+                .unwrap_or_default();
+            (i.contract_id.clone(), stage_name(run, &i.node_id), text)
+        })
+        .collect();
+    if let Some(block) = format_upstream(
+        "Reports from earlier stages (use these rather than re-deriving them):",
+        &reports,
+        24_000,
+        false,
+    ) {
+        task["scope"] = json!(format!("{}\n\n{block}", task["scope"].as_str().unwrap_or("")));
+    }
+    let logs: Vec<(String, String, String)> = inputs
+        .iter()
+        .filter(|i| i.kind == "log" && i.path.is_some())
+        .map(|i| {
+            let text = std::fs::read_to_string(i.path.as_deref().unwrap_or("")).unwrap_or_default();
+            (i.contract_id.clone(), stage_name(run, &i.node_id), text)
+        })
+        .collect();
+    if let Some(block) = format_upstream(
+        "Output of earlier check stages (already captured — do not try to open their files):",
+        &logs,
+        12_000,
+        true,
+    ) {
+        task["scope"] = json!(format!("{}\n\n{block}", task["scope"].as_str().unwrap_or("")));
+    }
 
     let failed_attempts = run
         .nodes
@@ -829,9 +942,49 @@ pub async fn run_agent_stage(
         }
     });
 
-    let Some(finished) = wait_for_session(host, &key, context).await else {
+    let Some(mut finished) = wait_for_session(host, &key, context, None).await else {
         return Ok(StageOutcome::failure("The stage session never settled."));
     };
+    // Some agents end their whole turn when a tool is refused, so a read-only stage that tried a
+    // command which could write stopped there with nothing produced. Say why and let it carry on.
+    let mut refusals_seen = 0;
+    for _ in 0..2 {
+        if tool_mode != "read-only"
+            || finished.state != "completed"
+            || context.cancel.is_cancelled()
+        {
+            break;
+        }
+        let refusals = read_only_refusals(&dir, &key);
+        if refusals <= refusals_seen {
+            break;
+        }
+        refusals_seen = refusals;
+        if outcome_from_session(node, &finished, None, None).succeeded {
+            break;
+        }
+        let after = store(&dir)
+            .get(&key)
+            .ok()
+            .flatten()
+            .and_then(|r| r["completedAt"].as_str().map(str::to_string));
+        let (h, k) = (host.clone(), key.clone());
+        let sent = tokio::task::spawn_blocking(move || {
+            h.dispatch_rpc(praxis_contracts::RustRpcRequest {
+                id: "stage-refusal".into(),
+                channel: "ai:continueSession".into(),
+                args: vec![json!(k), json!(REFUSAL_CONTINUATION)],
+            })
+        })
+        .await;
+        if !sent.is_ok_and(|r| r.ok) {
+            break;
+        }
+        match wait_for_session(host, &key, context, after.as_deref()).await {
+            Some(next) => finished = next,
+            None => break,
+        }
+    }
     let snapshot_ref = if node.mutates_worktree
         && !context.cancel.is_cancelled()
         && finished.state == "completed"

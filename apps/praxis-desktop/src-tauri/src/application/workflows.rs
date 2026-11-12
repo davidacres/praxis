@@ -808,6 +808,134 @@ pub fn summarize(host: &HostContext, run: &WorkflowRun) -> Value {
     summarize_workflow_run(run, policy_for(host, &run.project_id).as_ref())
 }
 
+/// The live Agent Hub catalog (`agentRuntime:list`) as preflight reads it.
+fn agent_catalog(host: &HostContext) -> Value {
+    let response = host.dispatch_rpc(praxis_contracts::RustRpcRequest {
+        id: "workflow-preflight".into(),
+        channel: "agentRuntime:list".into(),
+        args: Vec::new(),
+    });
+    if response.ok { response.result.unwrap_or(Value::Null) } else { Value::Null }
+}
+
+/// Resolves each agent stage against what is discovered and trusted right now (`preflightWorkflow`).
+/// Returns the "message remediation" text of every failure.
+fn preflight_blockers(catalog: &Value, nodes: &[Value], policy: Option<&Value>) -> Vec<String> {
+    let list = |key: &str| catalog.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
+    let hosts = if catalog.get("runtimeHosts").is_some_and(Value::is_array) { list("runtimeHosts") } else { list("agents") };
+    let profiles = list("profiles");
+    let skills = list("skills");
+    let require_trust = policy
+        .and_then(|p| p.get("requireTrustedAgents"))
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let mut blockers = Vec::new();
+    for node in nodes {
+        if node["type"] != "agent-task" {
+            continue;
+        }
+        let agent_ref = &node["agent"];
+        let scope = agent_ref["scope"].as_str().unwrap_or("global");
+        let agent_id = agent_ref["agentId"].as_str().unwrap_or("");
+        let host_id = agent_ref["hostId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id);
+        let profile_id = agent_ref["profileId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id);
+        let mut add = |message: String, remediation: String| blockers.push(format!("{message} {remediation}"));
+        let Some(agent) = hosts.iter().find(|h| h["manifest"]["id"] == host_id) else {
+            add(
+                format!("Agent \"{host_id}\" is not in the {scope} catalog."),
+                format!("Install or import an agent with id \"{host_id}\", or point this stage at one that exists."),
+            );
+            continue;
+        };
+        if agent["scope"].as_str().is_some_and(|s| s != scope) {
+            add(
+                format!("Agent \"{host_id}\" belongs to the {} catalog, not the {scope} catalog.", agent["scope"].as_str().unwrap_or("")),
+                format!("Select a {scope}-scoped host with id \"{host_id}\", or change the stage scope."),
+            );
+        }
+        let profile = profiles.iter().find(|p| p["profile"]["id"] == profile_id);
+        let wants_profile = agent_ref["profileId"].as_str().is_some_and(|s| !s.is_empty()) || !profiles.is_empty();
+        if wants_profile && profile.is_none() {
+            add(
+                format!("Agent profile \"{profile_id}\" is not in the {scope} catalog."),
+                format!("Create or import an AGENT.md profile with id \"{profile_id}\", or select an existing profile."),
+            );
+        }
+        if let Some(profile) = profile {
+            if profile["scope"].as_str().is_some_and(|s| s != scope) {
+                add(
+                    format!("Agent profile \"{profile_id}\" belongs to the {} catalog, not the {scope} catalog.", profile["scope"].as_str().unwrap_or("")),
+                    format!("Select a {scope}-scoped profile with id \"{profile_id}\", or change the stage scope."),
+                );
+            }
+            if let Some(error) = profile["error"].as_str().filter(|e| !e.is_empty()) {
+                add(
+                    format!("Agent profile \"{profile_id}\" is invalid: {error}"),
+                    format!("Fix {}.", profile["profilePath"].as_str().unwrap_or("")),
+                );
+            }
+            if require_trust && profile["trusted"] != true {
+                add(
+                    format!("Agent profile \"{profile_id}\" is not trusted."),
+                    "Move the profile under the trusted profiles folder, or relax requireTrustedAgents.".into(),
+                );
+            }
+        }
+        if let Some(errors) = agent["errors"].as_array().filter(|e| !e.is_empty()) {
+            let detail: Vec<String> = errors
+                .iter()
+                .map(|e| format!("{}: {}", e["path"].as_str().unwrap_or(""), e["message"].as_str().unwrap_or("")))
+                .collect();
+            add(
+                format!("Agent \"{host_id}\" has a malformed manifest: {}", detail.join("; ")),
+                format!("Fix {}.", agent["manifestPath"].as_str().unwrap_or("")),
+            );
+        }
+        if require_trust && agent["trusted"] != true {
+            add(
+                format!("Agent \"{host_id}\" is not trusted."),
+                "Move the agent under the trusted agents folder, or relax requireTrustedAgents in the workflow policy.".into(),
+            );
+        }
+        for name in agent_ref["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            let Some(skill) = skills.iter().find(|s| s["metadata"]["name"] == name) else {
+                add(format!("Skill \"{name}\" is not discovered."), format!("Install the \"{name}\" skill, or remove it from this stage."));
+                continue;
+            };
+            if let Some(error) = skill["error"].as_str().filter(|e| !e.is_empty()) {
+                add(format!("Skill \"{name}\" is invalid: {error}"), format!("Fix {}.", skill["instructionsPath"].as_str().unwrap_or("")));
+                continue;
+            }
+            if skill["scope"].as_str().is_some_and(|s| s != scope) {
+                add(
+                    format!("Skill \"{name}\" belongs to the {} catalog, not the {scope} catalog.", skill["scope"].as_str().unwrap_or("")),
+                    format!("Select a {scope}-scoped skill, or change the stage scope."),
+                );
+                continue;
+            }
+            if require_trust && skill["trusted"] != true {
+                add(format!("Skill \"{name}\" is not trusted."), "Move the skill under a trusted skills root, or relax requireTrustedAgents.".into());
+                continue;
+            }
+            if let Some(pinned) = agent_ref["skillFingerprints"][name].as_str() {
+                if skill["fingerprint"].as_str().is_some_and(|f| f != pinned) {
+                    add(
+                        format!("Skill \"{name}\" has changed since this workflow pinned it."),
+                        format!("Review {} and re-pin the fingerprint, or restore the previous version.", skill["instructionsPath"].as_str().unwrap_or("")),
+                    );
+                }
+            }
+        }
+        if node["mutatesWorktree"] != true && agent_ref["toolMode"] == "full" {
+            add(
+                format!("Stage \"{}\" is non-mutating but requests full tool mode.", node["id"].as_str().unwrap_or("")),
+                "Set the stage to read-only or project-only, or mark it as mutating.".into(),
+            );
+        }
+    }
+    blockers
+}
+
 pub fn stored_run(host: &HostContext, run_id: &str) -> Option<WorkflowRun> {
     get_runs(host).into_iter().find(|r| r.run_id == run_id)
 }
@@ -960,6 +1088,18 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
         )));
     }
     let typed: WorkflowDefinition = serde_json::from_value(definition.clone()).map_err(failure)?;
+
+    let has_agent_stage = typed.nodes.iter().any(|n| matches!(n, WorkflowNode::AgentTask(_)));
+    if has_agent_stage {
+        let nodes = definition["nodes"].as_array().cloned().unwrap_or_default();
+        let blockers = preflight_blockers(&agent_catalog(host), &nodes, policy.as_ref());
+        if !blockers.is_empty() {
+            return Err(failure(format!(
+                "Cannot start workflow until its Agent Hub bindings are ready: {}",
+                blockers.join(" ")
+            )));
+        }
+    }
 
     // A check stage's tool that is not installed would otherwise surface only when the run
     // reaches that stage, after the agent stages have spent their time.
