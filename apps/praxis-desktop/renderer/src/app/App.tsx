@@ -588,18 +588,6 @@ export function App() {
     if (!settings || startupResolved || !workspacesLoaded || !projectsLoaded || !boardsLoaded || !agentSessionsLoaded) return;
     const savedWorkspaceId = localStorage.getItem(ACTIVE_WORKSPACE_KEY) ?? undefined;
     let savedWorkspace = workspaces.find(workspace => workspace.id === savedWorkspaceId);
-    if (!savedWorkspace && settings.startup.reopenLastWorkspace && workspaces.length > 0) {
-      savedWorkspace = workspaces.find(workspace =>
-        workspace.projectIds?.some(pid =>
-          connections?.some(connection =>
-            connection.id === `project:${pid}` || (connection.settings as Record<string, unknown> | undefined)?.projectId === pid
-          )
-        )
-      ) ?? workspaces.find(workspace => workspace.id.includes('1788215175468')) ?? workspaces[0];
-      if (savedWorkspace) {
-        try { localStorage.setItem(ACTIVE_WORKSPACE_KEY, savedWorkspace.id); } catch { /* private mode */ }
-      }
-    }
     if (settings.startup.reopenLastWorkspace && savedWorkspace) {
       setActiveWorkspaceId(savedWorkspace.id);
       const storedRoute = readLastWorkspaceRoute(savedWorkspace.id);

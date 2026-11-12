@@ -284,9 +284,32 @@ pub fn dispatch(
         "ai:assignSessionToProject" => {
             let issue_key = text(args, 0)?;
             let project_id = text(args, 1)?;
+            // Like the TS `assignAgentSession`: the ticket link and working directory are
+            // replaced (cleared when absent or blank), not merged.
+            let optional = |index: usize| {
+                args.get(index)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_owned)
+            };
+            let (ticket_key, working_directory) = (optional(2), optional(3));
             let mut sessions = read_sessions(user_data_dir)?;
             let updated = if let Some(s) = sessions.get_mut(issue_key) {
                 s["projectId"] = json!(project_id);
+                for (field, value) in [
+                    ("linkedIssueKey", &ticket_key),
+                    ("workingDirectory", &working_directory),
+                ] {
+                    match value {
+                        Some(v) => s[field] = json!(v),
+                        None => {
+                            if let Some(obj) = s.as_object_mut() {
+                                obj.remove(field);
+                            }
+                        }
+                    }
+                }
                 Some(s.clone())
             } else {
                 None
@@ -300,6 +323,8 @@ pub fn dispatch(
                     "issueKey": issue_key,
                     "sessionId": issue_key,
                     "projectId": project_id,
+                    "linkedIssueKey": ticket_key,
+                    "workingDirectory": working_directory,
                     "title": format!("Session {issue_key}"),
                     "state": "active",
                     "createdAt": now(),
