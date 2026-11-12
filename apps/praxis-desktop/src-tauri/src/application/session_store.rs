@@ -59,6 +59,20 @@ impl SessionStore {
                 if let Some(map) = sessions.and_then(Value::as_object) {
                     state.records = map.iter().map(|(key, value)| (key.clone(), value.clone())).collect();
                 }
+                // A restart kills every in-flight task, but the record still says planning/executing/awaiting.
+                // Left alone it shows a ghost "running" session that nothing can abort: settle it to `aborted`.
+                for record in state.records.values_mut() {
+                    if matches!(record["state"].as_str(), Some("planning" | "executing" | "awaiting_approval" | "awaiting_input")) {
+                        record["state"] = json!("aborted");
+                        record["interruptedByRestart"] = json!(true);
+                        if record["completedAt"].is_null() {
+                            record["completedAt"] = json!(super::now());
+                        }
+                        if record["eventsLoaded"] != false && let Some(events) = record["events"].as_array_mut() {
+                            events.push(json!({ "timestamp": super::now(), "type": "aborted", "summary": "Session interrupted by an app restart" }));
+                        }
+                    }
+                }
             }
             state.loaded = true;
         }

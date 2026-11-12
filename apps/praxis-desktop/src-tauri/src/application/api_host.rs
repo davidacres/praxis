@@ -339,12 +339,26 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
     }
     let root = &task.working_directory;
     match call.name.as_str() {
-        "read_file" => match resolve_sandboxed_path(root, &text("path")).and_then(|p| std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))) {
-            Ok(content) => ToolOutcome { ok: true, content, data: None },
-            Err(error) => failed(error),
-        },
+        "read_file" => {
+            let path = text("path");
+            if path.trim().is_empty() {
+                return failed("path is required");
+            }
+            let request = json!({ "toolCallId": call.id, "title": "Permission requested: read_file", "name": "read_file", "kind": "read", "rawInput": args });
+            if task.request_permission(request).await == super::acp_host::Decision::Deny {
+                return failed("Permission denied for read_file");
+            }
+            match resolve_sandboxed_path(root, &path).and_then(|p| std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))) {
+                Ok(content) => ToolOutcome { ok: true, content, data: None },
+                Err(error) => failed(error),
+            }
+        }
         "list_dir" => {
             let requested = Some(text("path")).filter(|p| !p.is_empty()).unwrap_or_else(|| ".".into());
+            let request = json!({ "toolCallId": call.id, "title": "Permission requested: list_dir", "name": "list_dir", "kind": "search", "rawInput": args });
+            if task.request_permission(request).await == super::acp_host::Decision::Deny {
+                return failed("Permission denied for list_dir");
+            }
             match resolve_sandboxed_path(root, &requested).and_then(|p| std::fs::read_dir(&p).map_err(|e| format!("{}: {e}", p.display()))) {
                 Ok(entries) => {
                     let mut names: Vec<String> = entries.flatten().map(|e| format!("{}{}", e.file_name().to_string_lossy(), if e.file_type().is_ok_and(|t| t.is_dir()) { "/" } else { "" })).collect();

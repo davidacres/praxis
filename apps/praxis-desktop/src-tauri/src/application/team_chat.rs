@@ -960,6 +960,7 @@ impl Coordinator {
             }
 
             if let Some(error) = execution_error {
+                eprintln!("[team-chat] {id} {turn_id} failed: {}", error.message);
                 self.transition(id, true, |c| {
                     let epoch_now = str_of(c, "coordinatorEpoch").to_owned();
                     let binding_updates: Vec<Value>;
@@ -1398,7 +1399,7 @@ impl Coordinator {
         let launch = {
             let (key, working_directory, tool_mode) = (key.clone(), working_directory.clone(), tool_mode.clone());
             let images = runtime.images.clone();
-            let message = if continued { runtime.continuation.clone() } else { user_prompt.to_owned() };
+            let message = user_prompt.to_owned();
             let input = json!({ "issue": issue, "task": task, "provider": runtime.provider, "model": runtime.model.clone().filter(|m| !m.trim().is_empty()), "workingDirectory": working_directory,
                 "toolMode": tool_mode, "images": images, "permissionMode": runtime.permission_mode.clone().unwrap_or_else(|| "manual".into()), "reasoningEffort": runtime.reasoning_effort });
             let _ = autonomous;
@@ -1411,12 +1412,14 @@ impl Coordinator {
             })
         };
         launch.await.map_err(|e| e.to_string())?.map_err(|e| e.message)?;
-        let delivery = if continued { "native" } else { "reconstruction" };
+        let delivery = "reconstruction";
         let ownership = runtime.ownership.clone();
-        let _ = sessions.mutate(&key, true, |record| {
+        if let Ok(Some(updated)) = sessions.mutate(&key, true, |record| {
             record["teamChatExecution"] = ownership;
             record["teamChatContextDelivery"] = json!(delivery);
-        });
+        }) {
+            self.host.events().emit("ai:sessionChanged", Some(updated));
+        }
 
         // Wait for the session to settle, reporting permission requests as they appear.
         let started = Instant::now();
