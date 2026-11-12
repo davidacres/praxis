@@ -29,6 +29,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 nix = { workspace = true, features = ["net"] }
 praxis-mobile.workspace = true
 async-trait.workspace = true

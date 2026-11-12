@@ -333,7 +333,9 @@ test('a gate the workflow allows bypassing, but no policy has granted, explains 
           type: 'check', id: 'verify', name: 'Verify', x: 0, y: 0, inputs: [],
           command: 'node', args: ['-e', 'process.exit(1)'], successExitCodes: [0],
           outputs: [{ id: 'verify-log', kind: 'log', required: true }],
-          satisfiesGate: 'qa'
+          satisfiesGate: 'qa',
+          // This spec is about bypassing a failed gate, not QA's changed-tests contract: run the command itself.
+          affectedTests: false
         },
         {
           type: 'approval', id: 'approve', name: 'Approve', x: 200, y: 0, inputs: ['verify-log'],
@@ -668,7 +670,10 @@ async function seedCheckWorkflow(
             successExitCodes: checkSpec.successExitCodes ?? [0],
             ...(checkSpec.timeoutMs ? { timeoutMs: checkSpec.timeoutMs } : {}),
             outputs: [{ id: 'verify-log', kind: 'log', required: true }],
-            satisfiesGate: 'qa'
+            satisfiesGate: 'qa',
+            // These specs exercise the check runner on the command itself (timeout, redaction, empty
+            // output), not QA's changed-tests contract, which would skip the command.
+            affectedTests: false
           },
           {
             type: 'approval', id: 'approve', name: 'Approve', x: 200, y: 0, inputs: ['verify-log'],

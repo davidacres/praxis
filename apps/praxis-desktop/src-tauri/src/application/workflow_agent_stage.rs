@@ -701,7 +701,7 @@ pub fn can_dispatch(host: &HostContext) -> bool {
     !host.settings().read().ai.active_provider.trim().is_empty()
 }
 
-fn launch(
+pub(super) fn launch(
     host: &HostContext,
     key: &str,
     provider: &str,

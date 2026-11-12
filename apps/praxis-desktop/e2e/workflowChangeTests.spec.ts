@@ -6,12 +6,17 @@ import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
 /**
- * QA runs the tests for the run's change, not only the project's own test command.
+ * QA runs the tests for the run's change, and only those.
  *
  * TASK-498 to TASK-502 each merged with notes tests failing, because QA ran only `npm test` (units
- * and a smoke set) and the notes specs were not in it. Here a stage changes an element's text; the
- * QA check's own command passes, and QA also picks the one test that drives that element by its
- * test id — and not the one that does not — and says why.
+ * and a smoke set) and the notes specs were not in it. QA's contract since then (5e359403) is the
+ * ticket's own changed tests: a QA check does not run its configured project command at all (that
+ * launched every unit suite plus desktop smoke for every ticket), it runs the test files the ticket
+ * added or updated, under the runner that owns each, and says which it picked and why.
+ *
+ * Here a stage updates one test file. The QA check's own command would print `project tests passed`;
+ * it must not run. The updated test is run (by `node --test`, which this repository's package.json
+ * claims), the untouched one that would fail is left alone, and the log names the file.
  */
 
 test.slow();
@@ -25,17 +30,17 @@ test.afterEach(async () => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-const shelf = (label: string) => `export function Shelf() {\n  return <span data-testid="note-save-state">${label}</span>;\n}\n`;
+const shelfTest = (label: string) => `const test = require('node:test');\ntest('shelf says ${label}', () => {});\n`;
 
-test('a QA check also picks the tests that drive what the change touched, and names why', async () => {
+test('a QA check runs only the tests this ticket changed, skips its own command, and names the files', async () => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-change-tests-'));
   roots.push(repo);
   const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
-  fs.mkdirSync(path.join(repo, 'src'));
-  fs.mkdirSync(path.join(repo, 'e2e'));
-  fs.writeFileSync(path.join(repo, 'src', 'Shelf.tsx'), shelf('Saved'));
-  fs.writeFileSync(path.join(repo, 'e2e', 'shelfNotes.spec.ts'), "test('saves', async () => { await page.getByTestId('note-save-state').waitFor(); });\n");
-  fs.writeFileSync(path.join(repo, 'e2e', 'board.spec.ts'), "test('board', async () => { await page.getByTestId('board-column').waitFor(); });\n");
+  fs.mkdirSync(path.join(repo, 'test'));
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ scripts: { test: 'node --test out/' } }));
+  fs.writeFileSync(path.join(repo, 'test', 'shelf.test.js'), shelfTest('Saved'));
+  // Untouched by the ticket, and failing: running it would fail QA, so it proves the selection.
+  fs.writeFileSync(path.join(repo, 'test', 'board.test.js'), "throw new Error('board test must not run');\n");
   git('init', '--initial-branch=main');
   git('add', '.');
   git('-c', 'user.name=E2E', '-c', 'user.email=e2e@example.com', 'commit', '-m', 'initial');
@@ -44,7 +49,7 @@ test('a QA check also picks the tests that drive what the change touched, and na
   const page = app.window;
   const editAndCommit = [
     "const fs = require('fs'); const { execFileSync } = require('child_process');",
-    `fs.writeFileSync('src/Shelf.tsx', ${JSON.stringify(shelf('Saved just now'))});`,
+    `fs.writeFileSync('test/shelf.test.js', ${JSON.stringify(shelfTest('Saved just now'))});`,
     "execFileSync('git', ['-c', 'user.name=E2E', '-c', 'user.email=e2e@example.com', 'commit', '-qam', 'Change the save state']);"
   ].join(' ');
 
@@ -78,10 +83,11 @@ test('a QA check also picks the tests that drive what the change touched, and na
     .toBe('succeeded');
   const evidence = await page.evaluate(id => window.praxis.workflows.getEvidence(id, 'qa', 1), runId);
   const log = JSON.stringify(evidence);
-  expect(log).toContain('project tests passed');
+  expect(log).toContain('QA runs only test files added or updated in this ticket.');
   expect(log).toContain('== Tests for this change ==');
-  expect(log).toContain('e2e/shelfNotes.spec.ts: uses \\"note-save-state\\" from src/Shelf.tsx');
-  expect(log).not.toContain('board.spec.ts');
-  // No Playwright, Vitest, Jest or pytest setup in this repository, so the file is named, not run.
-  expect(log).toContain('Not run here');
+  expect(log).toContain('- test/shelf.test.js: added or updated in this ticket');
+  expect(log).toContain('$ node --test test/shelf.test.js');
+  // The check's own command never ran, and the ticket's untouched test was not picked.
+  expect(log).not.toContain('project tests passed');
+  expect(log).not.toContain('board.test.js');
 });

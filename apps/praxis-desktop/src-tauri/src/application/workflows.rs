@@ -2336,8 +2336,61 @@ pub fn get_evidence(host: &HostContext, args: &[Value]) -> Result<Value> {
     ))
 }
 
-pub fn start_diagnosis(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(json!({ "sessionKey": null }))
+/// `workflows:startDiagnosis`: opens a session on the retained evidence of one check attempt, or
+/// returns `{ ok: false, reason, message }` saying why it cannot.
+pub fn start_diagnosis(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let run_id = text(args, 0)?;
+    let node_id = text(args, 1)?;
+    let attempt = args.get(2).and_then(Value::as_u64).unwrap_or(1) as usize;
+    let refuse = |message: String| Ok(json!({ "ok": false, "reason": "no-evidence", "message": message }));
+    let Some(run) = stored_run(host, run_id) else {
+        return refuse(format!("Run {run_id} was not found."));
+    };
+    if !run
+        .definition
+        .nodes
+        .iter()
+        .any(|n| n.base().id == node_id && matches!(n, WorkflowNode::Check(_)))
+    {
+        return refuse(format!("Stage {node_id} is not a check stage."));
+    }
+    let project = Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+        .ok()
+        .and_then(|catalog| catalog.require(storage::PROJECTS, &run.project_id).ok());
+    let folder = project
+        .as_ref()
+        .and_then(|p| p["workspaceFolder"].as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let tool_mode = project
+        .as_ref()
+        .and_then(|p| p["defaultAiToolMode"].as_str())
+        .unwrap_or("full")
+        .to_string();
+    let run_for_task = run.clone();
+    let host_for_task = host.clone();
+    let node_id = node_id.to_string();
+    Ok(runtime::block_on(async move {
+        let mut working_directory = folder.clone();
+        if let Some(worktree) = run_for_task.worktree_path.as_deref().filter(|w| Path::new(w).exists()) {
+            working_directory = Some(worktree.to_string());
+        } else if folder.is_some() {
+            // Fall back to the project folder when the worktree cannot be re-acquired.
+            if let Some(acquired) = workflow_engine::reacquire_worktree(&host_for_task, &run_for_task).await {
+                working_directory = Some(acquired);
+            }
+        }
+        super::workflow_diagnosis::start_diagnosis_from_evidence(
+            &host_for_task,
+            &run_for_task,
+            &node_id,
+            attempt,
+            working_directory,
+            &tool_mode,
+        )
+        .await
+    }))
 }
 
 const AGENT_SYSTEM_PROMPT: &str = "You are helping configure a stage in a governed software-delivery workflow.\nGiven the stage's name and instructions, and a list of trusted agents available to run it, pick the single\nbest-fitting agent for this specific stage. Respond with exactly one fenced JSON code block and nothing else:\n\n```json\n{ \"agentId\": \"<one of the listed agent ids, verbatim>\", \"rationale\": \"<one sentence, specific to this stage>\" }\n```";
