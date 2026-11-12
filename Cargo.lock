@@ -3495,6 +3495,7 @@ dependencies = [
  "praxis-contracts",
  "praxis-core",
  "praxis-host",
+ "praxis-mobile",
  "praxis-trackers",
  "praxis-workflows",
  "regex",
@@ -3518,10 +3519,12 @@ name = "praxis-host"
 version = "0.6.1"
 dependencies = [
  "aes",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "cbc",
  "chrono",
+ "getrandom 0.2.17",
  "keyring",
  "napi",
  "napi-derive",
@@ -3532,12 +3535,15 @@ dependencies = [
  "praxis-mobile",
  "praxis-trackers",
  "praxis-workflows",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha1",
+ "sha2",
  "thiserror 2.0.21",
  "tokio",
  "tokio-tungstenite 0.26.2",
+ "url",
 ]
 
 [[package]]
