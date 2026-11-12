@@ -970,93 +970,132 @@ pub fn dispatch(
     }
 }
 
-fn discover_imports(catalog: &Catalog, folder_path: &str) -> Result<Value> {
-    let base = Path::new(folder_path);
-    if !base.is_dir() {
-        return Ok(json!([]));
+fn suggested_project_name(folder_path: &str) -> String {
+    let name = folder_path
+        .trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("")
+        .trim();
+    let spaced = name
+        .split(|c: char| c == '-' || c == '_')
+        .collect::<Vec<_>>()
+        .join(" ");
+    let collapsed = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        "Imported Project".into()
+    } else {
+        collapsed
     }
-    let existing_paths: BTreeSet<String> = catalog
-        .list(PROJECTS)
+}
+
+fn suggested_project_key(folder_path: &str) -> String {
+    let compact: String = suggested_project_name(folder_path)
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect();
+    if compact.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
+        compact.chars().take(15).collect::<String>().to_uppercase()
+    } else {
+        "PLANS".into()
+    }
+}
+
+fn is_same_or_inside(parent: &str, candidate: &str) -> bool {
+    match (absolute(Path::new(parent)), absolute(Path::new(candidate))) {
+        (Ok(parent), Ok(candidate)) => candidate.starts_with(parent),
+        _ => false,
+    }
+}
+
+/// Port of `planProjectImports`: one row per repository that owns a plans
+/// root (nearest enclosing repository wins, shallowest root used), or one per
+/// bare plans root when no repository was found. A repository with no
+/// discoverable plans is skipped, never guessed at.
+fn discover_imports(catalog: &Catalog, folder_path: &str) -> Result<Value> {
+    let projects = catalog.list(PROJECTS);
+    let existing_paths: BTreeSet<String> = projects
         .iter()
         .filter(|p| p["storage"] == "folder")
-        .filter_map(|p| p["workspaceFolder"].as_str().map(|s| s.to_lowercase()))
+        .filter_map(|p| p["workspaceFolder"].as_str())
+        .map(|path| to_stored(path).to_lowercase())
         .collect();
-    let existing_keys: BTreeSet<String> = catalog
-        .list(PROJECTS)
+    let mut used_keys: BTreeSet<String> = projects
         .iter()
-        .filter_map(|p| p["key"].as_str().map(|s| s.to_uppercase()))
+        .filter_map(|p| p["key"].as_str())
+        .map(|key| key.trim().to_uppercase())
+        .filter(|key| !key.is_empty())
         .collect();
 
-    let discovered = discover_plan_folders(folder_path).unwrap_or_default();
-    let mut rows = Vec::new();
-    let mut used_keys = existing_keys;
+    let plan_roots: Vec<String> = discover_plan_folders(folder_path)
+        .map_err(failure)?
+        .into_iter()
+        .map(|root| root.plans_root_path)
+        .collect();
+    let repositories = praxis_core::folder::discover_repository_folders(folder_path)
+        .map_err(failure)?;
 
-    if discovered.is_empty() {
-        let name = base
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("Project");
-        let clean_name = name.replace(['-', '_'], " ");
-        let mut key = clean_name
-            .chars()
-            .filter(|c| c.is_ascii_alphanumeric())
-            .take(15)
-            .collect::<String>()
-            .to_uppercase();
-        if key.is_empty() || !key.chars().next().unwrap_or(' ').is_ascii_alphabetic() {
-            key = "PLANS".into();
-        }
-        let base_key = key.clone();
-        let mut counter = 2;
-        while used_keys.contains(&key) {
-            key = format!("{base_key}{counter}");
-            counter += 1;
-        }
-        used_keys.insert(key.clone());
-        let plans_path = base.to_string_lossy().into_owned();
-        let already_added = existing_paths.contains(&plans_path.to_lowercase());
-        rows.push(json!({
-            "repositoryName": clean_name,
-            "repositoryRootPath": plans_path,
-            "plansFolderPath": plans_path,
-            "projectKey": key,
-            "projectName": clean_name,
-            "alreadyAdded": already_added
-        }));
+    let pairs: Vec<(String, String)> = if repositories.is_empty() {
+        plan_roots
+            .iter()
+            .map(|plans| (plans.clone(), plans.clone()))
+            .collect()
     } else {
-        for root in discovered {
-            let path_str = root.plans_root_path.clone();
-            let p = Path::new(&path_str);
-            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("Project");
-            let clean_name = name.replace(['-', '_'], " ");
-            let mut key = clean_name
-                .chars()
-                .filter(|c| c.is_ascii_alphanumeric())
-                .take(15)
-                .collect::<String>()
-                .to_uppercase();
-            if key.is_empty() || !key.chars().next().unwrap_or(' ').is_ascii_alphabetic() {
-                key = "PLANS".into();
-            }
-            let base_key = key.clone();
-            let mut counter = 2;
+        repositories
+            .iter()
+            .filter_map(|repository| {
+                let mut owned: Vec<&String> = plan_roots
+                    .iter()
+                    .filter(|plans| {
+                        repositories
+                            .iter()
+                            .filter(|candidate| is_same_or_inside(candidate, plans))
+                            .max_by_key(|candidate| candidate.len())
+                            .is_some_and(|owner| {
+                                absolute(Path::new(owner)).ok()
+                                    == absolute(Path::new(repository)).ok()
+                            })
+                    })
+                    .collect();
+                owned.sort_by_key(|plans| plans.len());
+                owned
+                    .first()
+                    .map(|plans| (repository.clone(), (*plans).clone()))
+            })
+            .collect()
+    };
+
+    let rows: Vec<Value> = pairs
+        .into_iter()
+        .map(|(repository, plans)| {
+            let repository = to_stored(&repository);
+            let plans = to_stored(&plans);
+            let name = suggested_project_name(&repository);
+            let base = suggested_project_key(&repository);
+            let mut key = base.clone();
+            let mut suffix = 2;
             while used_keys.contains(&key) {
-                key = format!("{base_key}{counter}");
-                counter += 1;
+                let suffix_text = suffix.to_string();
+                suffix += 1;
+                let keep = 15usize.saturating_sub(suffix_text.len()).max(1);
+                key = format!("{}{suffix_text}", base.chars().take(keep).collect::<String>());
             }
             used_keys.insert(key.clone());
-            let already_added = existing_paths.contains(&path_str.to_lowercase());
-            rows.push(json!({
-                "repositoryName": clean_name,
-                "repositoryRootPath": path_str,
-                "plansFolderPath": path_str,
+            json!({
+                "repositoryName": name,
+                "repositoryRootPath": repository,
+                "plansFolderPath": plans,
                 "projectKey": key,
-                "projectName": clean_name,
-                "alreadyAdded": already_added
-            }));
-        }
-    }
+                "projectName": name,
+                "alreadyAdded": existing_paths.contains(&plans.to_lowercase())
+            })
+        })
+        .collect();
     Ok(json!(rows))
+}
+
+fn to_stored(path: &str) -> String {
+    praxis_core::folder::to_stored_folder_path(path, praxis_core::folder::SupportedPathPlatform::current())
 }
 
 fn validate_imports(catalog: &Catalog, rows_val: Option<&Value>) -> Result<Value> {
@@ -1149,11 +1188,23 @@ fn create_from_imports(catalog: &mut Catalog, args: &[Value], version: &str) -> 
             "linkedBoards": [],
             "defaultAiToolMode": "full",
             "createdAt": timestamp,
-            "updatedAt": timestamp
+            "updatedAt": timestamp,
+            "projectFileStatus": "retained"
         });
         catalog.replace(PROJECTS, project.clone(), Some(workspace_id));
         use_existing(catalog, &id, workspace_id, version)?;
         sync_connection(catalog, &project, false);
+        // The plans travel self-describing: re-importing the folder elsewhere
+        // recovers the key and name rather than guessing. Best effort, as before.
+        let _ = praxis_core::folder::write_board_config_file(
+            Path::new(plans_path),
+            &praxis_core::folder::BoardConfigFile {
+                project_key: Some(key.clone()),
+                project_name: Some(name.to_string()),
+                allow_issue_creation: None,
+                workflow: None,
+            },
+        );
         created.push(project);
     }
     Ok(json!(created))

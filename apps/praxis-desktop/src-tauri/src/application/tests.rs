@@ -647,11 +647,12 @@ fn log_bus_buffers_recent_lines_and_persists() {
     let reopened = Profile::open(&profile.root);
     let recent = invoke(&reopened, "log:getRecent", vec![]).expect("getRecent");
     let arr = recent.as_array().expect("array");
-    assert_eq!(arr.len(), 3);
+    assert_eq!(arr.len(), 4);
     assert_eq!(arr[0], "first log");
     assert_eq!(arr[1], "second log");
-    assert!(arr[2].as_str().unwrap().starts_with("[app] Praxis "));
-    assert!(arr[2].as_str().unwrap().ends_with(" started"));
+    assert_eq!(arr[2], "—— previous session above ——");
+    assert!(arr[3].as_str().unwrap().starts_with("[app] Praxis "));
+    assert!(arr[3].as_str().unwrap().ends_with(" started"));
 }
 
 #[test]

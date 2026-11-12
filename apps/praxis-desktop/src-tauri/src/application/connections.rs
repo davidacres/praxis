@@ -146,7 +146,8 @@ pub fn tracker_input(host: &HostContext, connection: &Value) -> Result<Value> {
                 });
             Ok(
                 json!({"mode": "folder", "folderConfig": {"folderRoots": roots, "projectKey": settings["projectKey"].as_str().unwrap_or(""),
-                "projectName": settings["projectName"].as_str().unwrap_or(""), "allowIssueCreation": settings["allowIssueCreation"] == true, "defaultPageSize": 25}}),
+                "projectName": settings["projectName"].as_str().unwrap_or(""), "allowIssueCreation": settings["allowIssueCreation"] == true, "defaultPageSize": 25,
+                "prefersConfiguredIdentity": settings["projectId"].is_string()}}),
             )
         }
         "github" => Ok(

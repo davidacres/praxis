@@ -415,6 +415,10 @@ impl Application {
         // The Output tab backfills from this bus; the launch line proves the
         // ring buffer and `log:getRecent` end to end.
         let bus = log_bus::LogBus::new(&host.config().user_data_dir);
+        // Persisted as well, so the next session sees where this one began.
+        if !bus.recent().is_empty() {
+            bus.append(host, "—— previous session above ——");
+        }
         bus.append(host, &format!("[app] Praxis {version} started"));
         let application = Arc::new(Self {
             state: Mutex::new(ApplicationState::default()),
