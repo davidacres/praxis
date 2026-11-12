@@ -8,14 +8,47 @@ use super::{Result, failure, now, text};
 
 const USAGE_SECRET_PREFIX: &str = "ai-usage:";
 
-fn default_provider_snapshot(provider: &str) -> Value {
+/// Mirrors the Electron `providerSnapshot` fallthrough: a provider with no account-usage adapter
+/// reports `not-supported` with this reason. The CLI quota adapters (Codex, Claude Code) are not
+/// ported, so they land here too, honestly, rather than inventing windows.
+fn default_provider_snapshot(host: &HostContext, provider: &str) -> Value {
+    if provider == "openai" {
+        let has_key = std::env::var("OPENAI_ADMIN_KEY").is_ok_and(|v| !v.is_empty())
+            || host.secrets().get(&format!("{USAGE_SECRET_PREFIX}openai")).is_some_and(|v| !v.is_empty());
+        if !has_key {
+            return json!({
+                "provider": provider,
+                "fetchedAt": now(),
+                "windows": [],
+                "unavailableReason": "Add an OpenAI Admin API key to view account usage.",
+                "unavailableReasonCode": "not-configured"
+            });
+        }
+    }
     json!({
         "provider": provider,
         "fetchedAt": now(),
         "windows": [],
-        "unavailableReason": "Account usage is not connected in this Tauri build.",
+        "unavailableReason": "This provider does not expose an account usage API to Praxis yet.",
         "unavailableReasonCode": "not-supported"
     })
+}
+
+/// The providers a dashboard reports on: every built-in the user has not turned off, plus enabled
+/// custom endpoints, deduplicated (port of `enabledUsageProviders`).
+fn enabled_usage_providers(host: &HostContext) -> Vec<String> {
+    let ai = serde_json::to_value(host.settings().read().ai).unwrap_or(Value::Null);
+    let providers = ai["providers"].as_object().cloned().unwrap_or_default();
+    let is_enabled = |id: &str| providers.get(id).and_then(|p| p["enabled"].as_bool()) != Some(false);
+    let mut out: Vec<String> = providers.keys().filter(|id| is_enabled(id)).cloned().collect();
+    for endpoint in ai["customProviders"].as_array().into_iter().flatten() {
+        if let Some(id) = endpoint["id"].as_str().filter(|id| is_enabled(id)) {
+            out.push(id.to_owned());
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|id| seen.insert(id.clone()));
+    out
 }
 
 pub fn dispatch(
@@ -41,7 +74,7 @@ pub fn dispatch(
         }
         "aiUsage:providerSnapshot" => {
             let provider = text(args, 0)?;
-            Ok(default_provider_snapshot(provider))
+            Ok(default_provider_snapshot(host, provider))
         }
         "aiUsage:providerHistory" => {
             let provider = text(args, 0)?;
@@ -58,11 +91,11 @@ pub fn dispatch(
                     .map(String::from)
                     .collect()
             } else {
-                vec!["openai".into(), "anthropic".into(), "google".into()]
+                enabled_usage_providers(host)
             };
             let snapshots: Vec<Value> = providers
                 .iter()
-                .map(|p| default_provider_snapshot(p))
+                .map(|p| default_provider_snapshot(host, p))
                 .collect();
             Ok(json!({"snapshots": snapshots, "checkedAt": now()}))
         }

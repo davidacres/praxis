@@ -57,78 +57,80 @@ const POPULATED: SeedEvent[] = [
   { secondsAgo: 400 * DAY_MS / 1000, model: 'opus', provider: 'claude-code-cli', totalTokens: 6000, cost: { amount: 1.25, currency: 'USD' } }
 ];
 
-test('shows exact period totals, peaks, cost and ranked models from a seeded ledger', async () => {
+async function openAiUsage(page: import('@playwright/test').Page): Promise<void> {
+  await page.locator('[data-testid="titlebar-settings"]').click();
+  await page.getByTestId('settings-nav-ai-usage').click();
+}
+
+test('shows exact period totals, cost and ranked models from a seeded ledger', async () => {
+  // The Overview tiles were retired with OverviewPage (f977690f); the same ledger now drives the
+  // Settings -> AI Usage page: the all-time tokens card, the ranked model list and the feature list.
   app = await launchWithLedger(POPULATED);
   const page = app.window;
-  await page.getByTestId('titlebar-home').click();
-  const panel = page.getByTestId('overview-usage-panel');
-  await expect(panel).toBeVisible();
+  await openAiUsage(page);
 
-  for (const id of ['today', 'week', 'month']) {
-    await expect(page.getByTestId(`overview-usage-tokens-${id}`)).toHaveText('4.0k tokens');
-    await expect(page.getByTestId(`overview-usage-cost-${id}`)).toHaveText(/\$0\.50$/);
-  }
-  await expect(page.getByTestId('overview-usage-tokens-all')).toHaveText('10k tokens');
-  await expect(page.getByTestId('overview-usage-cost-all')).toHaveText(/\$1\.75$/);
-  await expect(page.getByTestId('overview-usage-tile-all')).toContainText('Praxis usage (since');
-
-  await expect(page.getByTestId('overview-usage-peak-today')).toContainText('peak 4.0k');
-  await expect(page.getByTestId('overview-usage-peak-week')).toContainText('peak 4.0k');
-  await expect(page.getByTestId('overview-usage-peak-all')).toContainText('peak 6.0k');
+  const allTime = page.locator('.ai-usage-stat-card', { hasText: 'Tokens recorded by Praxis' });
+  await expect(allTime.locator('strong')).toHaveText('10k');
+  await expect(allTime).toContainText('Since');
 
   // Top models, default period (this week): gpt-x outranks opus, and its missing cost is labelled, never $0.00.
-  const rows = page.getByTestId('overview-usage-model-row');
+  const rows = page.getByTestId('ai-usage-model-row');
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText('gpt-x');
-  await expect(rows.nth(0)).toContainText('3.0k tokens');
+  await expect(rows.nth(0)).toContainText('3.0k');
   await expect(rows.nth(0)).toContainText('75%');
   await expect(rows.nth(0)).toContainText('Not reported');
+  await expect(rows.nth(0)).not.toContainText('$0.00');
   await expect(rows.nth(1)).toContainText('opus');
   await expect(rows.nth(1)).toContainText('25%');
   await expect(rows.nth(1)).toContainText('$0.50');
-  await expect(rows.nth(0)).not.toContainText('$0.00');
+
+  // This week's cost by feature: only the session event reports one ($0.50), the week's 4.0k tokens in total.
+  const sourceRows = page.getByTestId('ai-usage-source-row');
+  await expect(sourceRows).toHaveCount(1);
+  await expect(sourceRows.nth(0)).toContainText('Sessions');
+  await expect(sourceRows.nth(0)).toContainText('4.0k');
+  await expect(sourceRows.nth(0)).toContainText('$0.50');
 
   // All time re-ranks: opus 7.0k (67%, $1.75) ahead of gpt-x 3.4k (33%).
-  await page.getByTestId('overview-usage-models-period-allTime').click();
+  await page.getByTestId('ai-usage-models-period-allTime').click();
   await expect(rows.nth(0)).toContainText('opus');
-  await expect(rows.nth(0)).toContainText('7.0k tokens');
+  await expect(rows.nth(0)).toContainText('7.0k');
   await expect(rows.nth(0)).toContainText('67%');
   await expect(rows.nth(0)).toContainText('$1.75');
   await expect(rows.nth(1)).toContainText('gpt-x');
-  await expect(rows.nth(1)).toContainText('3.4k tokens');
+  await expect(rows.nth(1)).toContainText('3.4k');
   await expect(rows.nth(1)).toContainText('33%');
-  await expect(page.getByTestId('overview-usage-no-cost')).toHaveCount(0);
+  await expect(rows.nth(1)).toContainText('Not reported');
+
+  await page.getByTestId('ai-usage-sources-period-allTime').click();
+  await expect(sourceRows.nth(0)).toContainText('Sessions');
+  await expect(sourceRows.nth(0)).toContainText('10k');
+  await expect(sourceRows.nth(0)).toContainText('$1.75');
 
   await page.screenshot({ path: path.join(__dirname, '..', 'output', 'playwright', 'overview-ai-usage.png'), fullPage: true });
-
-  // "View details" opens Settings → AI Usage, which shows the same model breakdown.
-  await page.getByTestId('overview-usage-details').click();
-  const settingsRows = page.getByTestId('ai-usage-model-row');
-  await expect(settingsRows).toHaveCount(2);
-  await page.getByTestId('ai-usage-models-period-allTime').click();
-  await expect(settingsRows.nth(0)).toContainText('opus');
-  await expect(settingsRows.nth(0)).toContainText('7.0k tokens');
-  await expect(settingsRows.nth(0)).toContainText('67%');
-  await expect(settingsRows.nth(0)).toContainText('$1.75');
-  await expect(settingsRows.nth(1)).toContainText('Not reported');
 });
 
-test('says cost comes from ACP agents only when no cost is reported', async () => {
+test('labels cost as not reported when the ledger carries none', async () => {
   app = await launchWithLedger([POPULATED[1], POPULATED[2]]);
   const page = app.window;
-  await page.getByTestId('titlebar-home').click();
-  await expect(page.getByTestId('overview-usage-tokens-all')).toHaveText('3.4k tokens');
-  await expect(page.getByTestId('overview-usage-cost-all')).toHaveText('Not reported');
-  await expect(page.getByTestId('overview-usage-no-cost')).toContainText('ACP agents');
-  await expect(page.getByTestId('overview-usage-cost-all')).not.toContainText('$0.00');
+  await openAiUsage(page);
+  await expect(page.locator('.ai-usage-stat-card', { hasText: 'Tokens recorded by Praxis' }).locator('strong')).toHaveText('3.4k');
+  await page.getByTestId('ai-usage-models-period-allTime').click();
+  const rows = page.getByTestId('ai-usage-model-row');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0)).toContainText('gpt-x');
+  await expect(rows.nth(0)).toContainText('3.4k');
+  await expect(rows.nth(0)).toContainText('Not reported');
+  await expect(rows.nth(0)).not.toContainText('$0.00');
 });
 
-test('invites a first conversation when the ledger is empty', async () => {
+test('shows an empty state when the ledger is empty', async () => {
   app = await launchWithLedger([]);
   const page = app.window;
-  await page.getByTestId('titlebar-home').click();
-  await expect(page.getByTestId('overview-usage-empty')).toBeVisible();
-  await expect(page.getByTestId('overview-usage-tile-today')).toHaveCount(0);
+  await openAiUsage(page);
+  await expect(page.getByTestId('ai-usage-empty')).toBeVisible();
+  await expect(page.getByTestId('ai-usage-model-row')).toHaveCount(0);
 });
 
 test('AI usage page shows costs for prompt analysis and calibration', async () => {

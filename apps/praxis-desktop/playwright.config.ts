@@ -55,7 +55,6 @@ export default defineConfig({
       name: 'functional',
       testIgnore: [
         '**/appearanceSettings.spec.ts',
-        '**/overview.spec.ts',
         '**/surfacePacks.spec.ts',
         '**/themeLooks.spec.ts',
         '**/*.live.spec.ts'
@@ -71,7 +70,6 @@ export default defineConfig({
       name: 'themes',
       testMatch: [
         '**/appearanceSettings.spec.ts',
-        '**/overview.spec.ts',
         '**/surfacePacks.spec.ts',
         '**/themeLooks.spec.ts'
       ]
