@@ -6,7 +6,7 @@
 //! The session record lives in [`super::session_store`]; every change is pushed to the renderer
 //! as `ai:sessionChanged`.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -98,6 +98,186 @@ pub struct Task {
     last_replay_ms: std::sync::atomic::AtomicU64,
     /// Wakes an API-provider turn that is waiting on the network when the session is stopped.
     pub(super) cancel: tokio::sync::Notify,
+    background: BackgroundState,
+}
+
+/// What a turn knows about provider-reported background work (`asyncTasks` extension).
+struct BackgroundState {
+    /// Identifies this process's tasks in the record (`producerId`); a later turn's never collide.
+    producer: String,
+    /// Open once the prompt starts: historical replay before it must never produce a live task.
+    accepting: AtomicBool,
+    /// The connection outlived its turn to observe work the provider is still doing.
+    monitoring: AtomicBool,
+    tool_names: Mutex<HashMap<String, String>>,
+    children: Mutex<HashSet<String>>,
+    child_results: Mutex<HashMap<String, String>>,
+    monitor: Mutex<Option<tokio::task::JoinHandle<()>>>,
+}
+
+impl Default for BackgroundState {
+    fn default() -> Self {
+        Self {
+            producer: super::coordination::epoch_ms().to_string(),
+            accepting: AtomicBool::new(false),
+            monitoring: AtomicBool::new(false),
+            tool_names: Mutex::default(),
+            children: Mutex::default(),
+            child_results: Mutex::default(),
+            monitor: Mutex::default(),
+        }
+    }
+}
+
+const MONITOR_LIMIT: Duration = Duration::from_secs(60 * 60);
+
+/// Connections kept open after their turn ended, to learn how background work finished.
+fn background_clients() -> &'static Mutex<Vec<Arc<Task>>> {
+    static CLIENTS: OnceLock<Mutex<Vec<Arc<Task>>>> = OnceLock::new();
+    CLIENTS.get_or_init(Default::default)
+}
+
+fn forget_background_client(task: &Arc<Task>) {
+    if let Ok(mut all) = background_clients().lock() {
+        all.retain(|item| !Arc::ptr_eq(item, task));
+    }
+}
+
+impl Task {
+    /// This process's background tasks the provider has not finished.
+    fn live_background(&self) -> Vec<Value> {
+        let Some(record) = self.store.get(&self.key).ok().flatten() else { return Vec::new() };
+        if record["sessionId"] != self.owner_session_id.as_str() {
+            return Vec::new();
+        }
+        record["backgroundTasks"].as_array().into_iter().flatten().filter(|item| item["producerId"] == self.background.producer.as_str() && super::background_tasks::is_live(&item["state"])).cloned().collect()
+    }
+
+    /// Reads background beats out of a `session/update`. Returns true when the notification is
+    /// extension or child-session traffic that must not reach the parent transcript.
+    fn observe_background(&self, params: &Value) -> bool {
+        use super::background_tasks::{read_provider_background_update, read_unobserved_background_launch};
+        let wire = &params["update"];
+        let kind = wire["sessionUpdate"].as_str().unwrap_or_default();
+        if let Some(call_id) = wire["toolCallId"].as_str()
+            && let Ok(mut names) = self.background.tool_names.lock()
+        {
+            let is_subagent = |s: &str| {
+                let lower = s.to_ascii_lowercase();
+                ["start subagent ", "complete subagent ", "interrupt subagent "].iter().any(|prefix| lower.starts_with(prefix))
+            };
+            let name = wire["title"].as_str().filter(|t| is_subagent(t)).or_else(|| wire["name"].as_str()).or_else(|| wire["title"].as_str());
+            if let Some(name) = name {
+                if names.len() >= 1000
+                    && let Some(oldest) = names.keys().next().cloned()
+                {
+                    names.remove(&oldest);
+                }
+                names.insert(call_id.to_owned(), name.to_owned());
+            }
+        }
+        let mut observed = wire.clone();
+        if let Some(call_id) = wire["toolCallId"].as_str()
+            && wire["title"].is_null()
+            && let Some(name) = self.background.tool_names.lock().ok().and_then(|names| names.get(call_id).cloned())
+        {
+            observed["title"] = json!(name);
+        }
+        let extension = read_provider_background_update(&observed);
+        let is_async = matches!(kind, "async_task_spawned" | "async_task_progress" | "async_task_state_update" | "subagent_spawned" | "subagent_state_update");
+        let session = params["sessionId"].as_str().unwrap_or_default();
+        let is_child = !session.is_empty() && self.background.children.lock().is_ok_and(|children| children.contains(session));
+        let own = self.agent_session_id.lock().ok().and_then(|id| id.clone()).is_some_and(|id| id == session);
+        if (own || is_child) && self.background.accepting.load(Ordering::SeqCst) {
+            if kind == "subagent_spawned"
+                && let Some(child) = wire["subagentSessionId"].as_str()
+                && let Ok(mut children) = self.background.children.lock()
+            {
+                children.insert(child.to_owned());
+            }
+            if is_child
+                && kind == "agent_message_chunk"
+                && wire["content"]["type"] == "text"
+                && let Some(text) = wire["content"]["text"].as_str()
+                && let Ok(mut results) = self.background.child_results.lock()
+            {
+                let combined = format!("{}{text}", results.get(session).cloned().unwrap_or_default());
+                let skip = combined.chars().count().saturating_sub(2000);
+                results.insert(session.to_owned(), combined.chars().skip(skip).collect());
+            }
+            if let Some(mut update) = extension.or_else(|| read_unobserved_background_launch(wire)) {
+                if update.detail.is_none()
+                    && kind == "subagent_state_update"
+                    && let Some(child) = wire["subagentSessionId"].as_str()
+                {
+                    update.detail = self.background.child_results.lock().ok().and_then(|results| results.get(child).cloned());
+                }
+                self.handle_background_update(update);
+            }
+        }
+        is_async || is_child
+    }
+
+    fn handle_background_update(&self, update: super::background_tasks::ProviderBackgroundUpdate) {
+        let Some(record) = self.store.get(&self.key).ok().flatten() else { return };
+        if record["sessionId"] != self.owner_session_id.as_str() {
+            return;
+        }
+        let id = format!("provider:{}:{}", self.background.producer, update.id);
+        let previous = record["backgroundTasks"].as_array().into_iter().flatten().find(|item| item["id"] == id.as_str()).cloned();
+        let Some(state) = update.state.clone().or_else(|| previous.as_ref().and_then(|p| p["state"].as_str().map(str::to_owned))) else { return };
+        let now = now();
+        let mut next = json!({
+            "id": id, "source": "provider", "producerId": self.background.producer,
+            "label": update.label.clone().or_else(|| previous.as_ref().and_then(|p| p["label"].as_str().map(str::to_owned))).unwrap_or_else(|| "Provider background task".into()),
+            "state": state, "startedAt": previous.as_ref().and_then(|p| p["startedAt"].as_str().map(str::to_owned)).unwrap_or_else(|| now.clone()), "updatedAt": now,
+        });
+        if matches!(state.as_str(), "completed" | "failed" | "stopped") {
+            next["completedAt"] = json!(now);
+        }
+        if let Some(detail) = update.detail.clone().or_else(|| previous.as_ref().and_then(|p| p["detail"].as_str().map(str::to_owned))) {
+            next["detail"] = json!(detail);
+        }
+        if let Some(call_id) = update.call_id.clone().or_else(|| previous.as_ref().and_then(|p| p["callId"].as_str().map(str::to_owned))) {
+            next["callId"] = json!(call_id);
+        }
+        super::shell_services::report_background(self, next);
+        if self.background.monitoring.load(Ordering::SeqCst) && self.live_background().is_empty() {
+            self.release_background_client();
+        }
+    }
+
+    /// The provider reported everything finished: the observing connection is no longer needed.
+    fn release_background_client(&self) {
+        if !self.background.monitoring.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        if let Some(monitor) = self.background.monitor.lock().ok().and_then(|mut m| m.take()) {
+            monitor.abort();
+        }
+        let connection = self.connection.lock().ok().and_then(|mut c| c.take());
+        if let Ok(mut all) = background_clients().lock() {
+            all.retain(|item| !std::ptr::eq(&**item, self));
+        }
+        if let Some(connection) = connection {
+            runtime().spawn(async move { connection.shutdown().await });
+        }
+    }
+
+    /// The connection ended (or monitoring was abandoned) before the provider said how work finished.
+    fn background_connection_lost(&self, detail: &str) {
+        for item in self.live_background() {
+            let mut lost = item.clone();
+            lost["state"] = json!("unknown");
+            lost["updatedAt"] = json!(now());
+            lost["detail"] = json!(detail);
+            super::shell_services::report_background(self, lost);
+        }
+        if let Some(monitor) = self.background.monitor.lock().ok().and_then(|mut m| m.take()) {
+            monitor.abort();
+        }
+        self.background.monitoring.store(false, Ordering::SeqCst);
+    }
 }
 
 /// What a turn starts from: a new session, or a follow-up that tries to resume the agent's own.
@@ -621,6 +801,13 @@ async fn serve(task: Arc<Task>, connection: Arc<AcpConnection>, mut incoming: to
                 if method != "session/update" {
                     continue;
                 }
+                // Provider background work is observed on its own gate: it outlives the prompt.
+                if !task.background.accepting.load(Ordering::SeqCst) {
+                    task.last_replay_ms.store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
+                }
+                if task.observe_background(&params) {
+                    continue;
+                }
                 // A resumed session replays history; only the live prompt's updates count.
                 let current = task.agent_session_id.lock().ok().and_then(|id| id.clone());
                 if current.as_deref().is_some_and(|id| params["sessionId"] != id) || !task.prompt_in_flight.load(Ordering::SeqCst) || task.ending.load(Ordering::SeqCst) {
@@ -656,6 +843,10 @@ async fn serve(task: Arc<Task>, connection: Arc<AcpConnection>, mut incoming: to
             }
             Incoming::Closed => break,
         }
+    }
+    if task.background.monitoring.load(Ordering::SeqCst) {
+        task.background_connection_lost("The provider connection ended before a completion result arrived. The outcome is unknown.");
+        forget_background_client(&task);
     }
 }
 
@@ -728,7 +919,7 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
         ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(request.auto_approve),
         auto_allow_safe: request.permission_mode.as_deref() == Some("auto"), pending: Mutex::default(), message: Mutex::default(), reasoning: Mutex::default(),
         steps: AtomicU32::new(0), started: Instant::now(), cost_before, active_tool: Mutex::default(), tool_inputs: Mutex::default(), done: tokio::sync::Notify::new(),
-        finished: AtomicBool::new(false), tool_mode: request.tool_mode.clone(), working_directory, owner_session_id: session_id.clone(), last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(),
+        finished: AtomicBool::new(false), tool_mode: request.tool_mode.clone(), working_directory, owner_session_id: session_id.clone(), last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(), background: Default::default(),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.clone()), Arc::clone(&task));
@@ -761,9 +952,27 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
 async fn finish(task: &Arc<Task>) {
     task.finished.store(true, Ordering::SeqCst);
     task.done.notify_waiters();
-    let connection = task.connection.lock().ok().and_then(|mut c| c.take());
-    if let Some(connection) = connection {
-        connection.shutdown().await;
+    // Work the provider reported as still running keeps the connection open to hear how it ended.
+    let observing = !task.ending.load(Ordering::SeqCst) && task.connection.lock().is_ok_and(|c| c.is_some()) && !task.live_background().is_empty();
+    if observing {
+        task.background.monitoring.store(true, Ordering::SeqCst);
+        if let Ok(mut all) = background_clients().lock() {
+            all.push(Arc::clone(task));
+        }
+        let watched = Arc::clone(task);
+        let handle = runtime().spawn(async move {
+            tokio::time::sleep(MONITOR_LIMIT).await;
+            // Detach rather than abort: this task is the monitor and still has to close the connection.
+            let _ = watched.background.monitor.lock().ok().and_then(|mut m| m.take());
+            watched.background_connection_lost("Background monitoring reached its one-hour limit. Completion has not been confirmed.");
+            release_connection(&watched).await;
+            forget_background_client(&watched);
+        });
+        if let Ok(mut monitor) = task.background.monitor.lock() {
+            *monitor = Some(handle);
+        }
+    } else {
+        release_connection(task).await;
     }
     let _ = task.store.flush();
     if let Ok(mut all) = tasks().lock()
@@ -774,6 +983,13 @@ async fn finish(task: &Arc<Task>) {
     // The turn is over: what its tools still hold at the broker is released, and its waits end.
     if find_task(&task.dir, &task.key).is_none() {
         super::coordination::end_coordinated_turn(&task.key);
+    }
+}
+
+async fn release_connection(task: &Arc<Task>) {
+    let connection = task.connection.lock().ok().and_then(|mut c| c.take());
+    if let Some(connection) = connection {
+        connection.shutdown().await;
     }
 }
 
@@ -816,7 +1032,7 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     let init = connection
         .request("initialize", json!({
             "protocolVersion": 1,
-            "clientCapabilities": { "fs": { "readTextFile": request.tool_mode != "project-only", "writeTextFile": request.tool_mode == "full" } },
+            "clientCapabilities": { "_meta": super::background_tasks::client_meta(), "fs": { "readTextFile": request.tool_mode != "project-only", "writeTextFile": request.tool_mode == "full" } },
             "clientInfo": { "name": "praxis", "version": "0.0.0" }
         }))
         .await
@@ -910,10 +1126,14 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     if text.chars().count() > 1_000_000 {
         return Err(format!("ACP prompt is too large ({} characters; maximum 1000000). Shorten the message or attached context before retrying.", text.chars().count()));
     }
-    if resumed {
-        // Replay notifications from the resume arrive before the prompt gate opens; let them drain.
-        let deadline = Instant::now() + Duration::from_millis(500);
-        task.last_replay_ms.store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
+    // Replay and session-setup notifications arrive before the prompt gate opens; let the ones already
+    // in flight drain so history is never mistaken for output of this turn. A fresh session can also
+    // send state before its first prompt (a provider's task log), which must not become live tasks.
+    {
+        let deadline = Instant::now() + Duration::from_millis(if resumed { 500 } else { 150 });
+        if resumed {
+            task.last_replay_ms.store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
+        }
         while Instant::now() < deadline {
             tokio::time::sleep(Duration::from_millis(20)).await;
             if task.started.elapsed().as_millis() as u64 - task.last_replay_ms.load(Ordering::SeqCst) >= 50 {
@@ -923,6 +1143,7 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     }
     let mut blocks = vec![json!({ "type": "text", "text": text })];
     blocks.extend(images.iter().map(|image| json!({ "type": "image", "data": image["dataBase64"], "mimeType": image["mimeType"] })));
+    task.background.accepting.store(true, Ordering::SeqCst);
     task.prompt_in_flight.store(true, Ordering::SeqCst);
     let reply = connection.request("session/prompt", json!({ "sessionId": agent_session, "prompt": blocks })).await;
     // The reply can overtake the last streamed chunks by a hair; let them land before the gate closes.
@@ -1081,6 +1302,7 @@ async fn stop(task: &Arc<Task>, terminal: &str, event: Value) {
 /// Aborts a running turn, then settles the session as aborted. Safe to call with nothing running.
 pub fn abort_task(host: &HostContext, dir: &Path, key: &str) {
     let _ = host;
+    abort_background(dir, key);
     if let Some(task) = find_task(dir, key) {
         let waiter = Arc::clone(&task);
         let (done, wait) = std::sync::mpsc::channel();
@@ -1090,6 +1312,22 @@ pub fn abort_task(host: &HostContext, dir: &Path, key: &str) {
             let _ = done.send(());
         });
         let _ = wait.recv_timeout(CANCEL_GRACE + STOP_GRACE + Duration::from_secs(3));
+    }
+}
+
+/// Stops observing provider background work for a session the person aborted.
+fn abort_background(dir: &Path, key: &str) {
+    let observers: Vec<Arc<Task>> = background_clients().lock().map(|all| all.iter().filter(|t| t.dir == dir && t.key == key).cloned().collect()).unwrap_or_default();
+    for task in observers {
+        task.ending.store(true, Ordering::SeqCst);
+        task.background_connection_lost("Background monitoring was cancelled. The provider task outcome has not been confirmed.");
+        forget_background_client(&task);
+        let (done, wait) = std::sync::mpsc::channel();
+        runtime().spawn(async move {
+            release_connection(&task).await;
+            let _ = done.send(());
+        });
+        let _ = wait.recv_timeout(STOP_GRACE + Duration::from_secs(3));
     }
 }
 
@@ -1204,7 +1442,7 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
         auto_allow_safe: permission_mode.as_deref() == Some("auto"), pending: Mutex::default(), message: Mutex::default(), reasoning: Mutex::default(),
         steps: AtomicU32::new(0), started: Instant::now(), cost_before: Some(record["cost"].clone()).filter(|c| !c.is_null()), active_tool: Mutex::default(), tool_inputs: Mutex::default(),
         done: tokio::sync::Notify::new(), finished: AtomicBool::new(false), tool_mode: tool_mode.clone(), working_directory, owner_session_id: session_id,
-        last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(),
+        last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(), background: Default::default(),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.to_owned()), Arc::clone(&task));
@@ -1244,7 +1482,7 @@ pub(super) fn register_api_task(host: &HostContext, dir: &Path, key: &str, sessi
         ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(allow_all), auto_allow_safe, pending: Mutex::default(),
         message: Mutex::default(), reasoning: Mutex::default(), steps: AtomicU32::new(0), started: Instant::now(), cost_before, active_tool: Mutex::default(),
         tool_inputs: Mutex::default(), done: tokio::sync::Notify::new(), finished: AtomicBool::new(false), tool_mode: tool_mode.to_owned(), working_directory,
-        owner_session_id: session_id.to_owned(), last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(),
+        owner_session_id: session_id.to_owned(), last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(), background: Default::default(),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.to_owned()), Arc::clone(&task));

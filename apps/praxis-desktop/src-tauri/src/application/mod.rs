@@ -5,6 +5,7 @@ mod browser_mcp;
 mod agent_runtime;
 mod ai;
 mod acp_host;
+mod background_tasks;
 mod api_host;
 mod ai_delegate;
 mod ai_review;

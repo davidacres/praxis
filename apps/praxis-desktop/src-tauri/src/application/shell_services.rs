@@ -246,6 +246,10 @@ fn task_id(pgid: i64, started_at: i64) -> String {
 }
 
 /// Persists a background task's lifecycle independently of the foreground turn (`updateBackgroundTask`).
+pub(super) fn report_background(task: &Task, incoming: Value) {
+    report(task, incoming);
+}
+
 fn report(task: &Task, incoming: Value) {
     // A task from an earlier run of this session must not write into the session's new one.
     if task.store.get(&task.key).ok().flatten().is_none_or(|record| record["sessionId"] != task.owner_session_id.as_str()) {
@@ -274,7 +278,9 @@ fn report(task: &Task, incoming: Value) {
         if previous.as_ref().is_some_and(|p| p["state"] == next["state"] && p["label"] == next["label"] && p["detail"] == next["detail"]) {
             return;
         }
-        let others: Vec<Value> = current.into_iter().filter(|item| item["id"] != id).collect();
+        // A provider's structured launch result is superseded once the same call reports real status.
+        let supersedes = |item: &Value| !incoming["callId"].is_null() && item["state"] == "unknown" && item["source"] == incoming["source"] && item["producerId"] == incoming["producerId"] && item["callId"] == incoming["callId"];
+        let others: Vec<Value> = current.into_iter().filter(|item| item["id"] != id && !supersedes(item)).collect();
         let (running, finished): (Vec<Value>, Vec<Value>) = others.into_iter().partition(|item| live(&item["state"]));
         let keep = finished.len().saturating_sub(49);
         let mut all = running;
