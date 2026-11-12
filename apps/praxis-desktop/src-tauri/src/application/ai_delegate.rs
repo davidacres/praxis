@@ -447,22 +447,50 @@ fn continue_session(host: &HostContext, dir: &std::path::Path, args: &[Value]) -
         return Err(failure("Stop the multi-AI conversation before sending a single-agent follow-up."));
     }
     let provider = record["provider"].as_str().map(str::to_owned).unwrap_or_else(|| host.settings().read().ai.active_provider.clone());
-    let descriptor = match built_in_descriptors().into_iter().find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent) {
-        Some(descriptor) => descriptor,
-        None => {
-            let (connection, _) = super::ai_providers::api_connection(host, &provider)?;
-            super::api_host::continue_api_task(host, dir, key, text(args, 1)?, sanitize_images(args.get(2).unwrap_or(&Value::Null)), connection)?;
-            return Ok(Value::Null);
-        }
-    };
+    let cli = built_in_descriptors().into_iter().find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent);
+    let kind = if cli.is_some() { DescriptorKind::CliAgent } else { DescriptorKind::Api };
     let override_path = host.settings().read().ai.providers.get(&provider).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
-    let command = override_path.or(descriptor.default_command.clone()).ok_or_else(|| failure("No command is configured for this provider."))?;
+    let provider_command = override_path.or(cli.as_ref().and_then(|d| d.default_command.clone()));
+    let provider_args = cli.as_ref().map(|d| d.default_args.clone()).unwrap_or_default();
+    // A bound session continues through the same compiled adapter as its first turn.
+    let skills: Vec<String> = record["activeSkills"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect();
+    let (profile_id, host_id) = (non_empty(&record, "profileId"), non_empty(&record, "hostId"));
+    let prepared = prepare_launch(host, dir, profile_id, host_id, &provider, kind, provider_command.as_deref(), &provider_args, &skills)?;
+    // Recomputed each turn: a handover can move the session to a runtime that reads different files.
+    let mut task = record["taskDefinition"].clone();
+    if task.is_object() {
+        for field in ["projectInstructions", "workingStyle"] {
+            task.as_object_mut().map(|object| object.remove(field));
+        }
+        let autonomous = record["autoApprovePermissions"] == true || record["permissionMode"] == "autopilot" || task["kind"] == "implementation";
+        let runtime = effective_runtime(&provider, kind, &prepared.plan, &cli_commands(&host.settings().read().ai));
+        apply_session_context(host, &mut task, &runtime, record["workingDirectory"].as_str(), autonomous);
+        let _ = store(dir).mutate(key, true, |stored| stored["taskDefinition"] = task);
+    }
+    if prepared.plan.state == "gateway" {
+        let (connection, _) = super::ai_providers::api_connection(host, &provider)?;
+        super::api_host::continue_api_task(host, dir, key, text(args, 1)?, sanitize_images(args.get(2).unwrap_or(&Value::Null)), connection)?;
+        let launch = runtime_launch(&prepared);
+        let _ = store(dir).mutate(key, true, |stored| stored["runtimeLaunch"] = launch);
+        return Ok(Value::Null);
+    }
+    let command = prepared.plan.command.clone().ok_or_else(|| failure("No command is configured for this provider."))?;
+    let tool_mode = record["toolMode"].as_str().unwrap_or("full").to_owned();
+    let mut mcp_servers: Vec<Value> = Vec::new();
+    // A free-form session has no tracker issue behind it.
+    if !key.starts_with("SESSION-") {
+        mcp_servers.extend(super::builtin_mcp::tracker_server(host, dir, key, non_empty(&record, "connectionId"), &tool_mode));
+    }
+    mcp_servers.extend(super::builtin_mcp::coordination_server(dir, key, record["workingDirectory"].as_str(), &tool_mode));
+    mcp_servers.extend(super::user_mcp::acp_servers(host, &tool_mode, &provider));
     acp_host::continue_task(host, dir, key, Continue {
         message: text(args, 1)?.to_owned(),
         images: sanitize_images(args.get(2).unwrap_or(&Value::Null)),
-        provider, command, args: descriptor.default_args, mcp_servers: Vec::new(),
+        provider, command, args: prepared.plan.args.clone(), mcp_servers,
         gadget_answer: args.get(3).is_some_and(|o| o["gadgetAnswer"] == true),
     })?;
+    let launch = runtime_launch(&prepared);
+    let _ = store(dir).mutate(key, true, |stored| stored["runtimeLaunch"] = launch);
     Ok(Value::Null)
 }
 

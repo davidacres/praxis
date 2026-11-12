@@ -11,32 +11,7 @@ use praxis_core::agent_runtime::authoring::{self, CreationPlan, GeneratedFile, N
 use praxis_core::agent_runtime::native_sources::{self, NativeSourceOptions};
 use praxis_core::agent_runtime::{CatalogOptions, bundled, refresh_catalog};
 
-use super::storage::{parse, read, write_atomic};
 use super::{Result, failure, text};
-
-fn agent_runtime_file(user_data_dir: &Path) -> std::path::PathBuf {
-    user_data_dir.join("agent-runtime-state.json")
-}
-
-fn read_runtime_state(user_data_dir: &Path) -> Result<Value> {
-    let path = agent_runtime_file(user_data_dir);
-    if let Some(content) = read(&path)? {
-        let val = parse(&path, Some(&content))?;
-        return Ok(val);
-    }
-    Ok(json!({
-        "activeAgents": {},
-        "approvedProjects": {},
-        "customItems": []
-    }))
-}
-
-fn save_runtime_state(user_data_dir: &Path, val: &Value) -> Result<()> {
-    let path = agent_runtime_file(user_data_dir);
-    let encoded = super::storage::encoded(val)?;
-    write_atomic(&path, &encoded, false)
-}
-
 
 // ── roots ────────────────────────────────────────────────────────────────
 

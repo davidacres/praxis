@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 
 use async_trait::async_trait;
 use axum::Router;
@@ -80,7 +80,8 @@ fn ensure_listening() -> Result<u16, String> {
 
 fn register(session: Session, name: &'static str) -> Result<Value, String> {
     let key = (session.issue_key.clone(), name);
-    if let Some((token, url)) = lock().by_session.get(&key).cloned() {
+    let existing = lock().by_session.get(&key).cloned();
+    if let Some((token, url)) = existing {
         // A follow-up turn reuses the endpoint, but its permission context may have changed.
         lock().sessions.insert(token.clone(), session);
         return Ok(json!({ "name": name, "url": url, "headers": { "authorization": format!("Bearer {token}") } }));

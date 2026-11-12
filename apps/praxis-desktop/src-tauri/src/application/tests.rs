@@ -1983,3 +1983,48 @@ fn provider_statuses_are_real_and_keys_use_the_migrated_secret_names() {
     profile.rpc("ai:resetProviderApiKeys", vec![]);
     assert!(!profile.host.secrets().has("praxis.openaiApiKey"));
 }
+
+#[test]
+fn other_tools_project_files_are_untrusted_until_approved_and_can_be_copied() {
+    let profile = Profile::new();
+    let repo = profile.root.join("repo");
+    fs::create_dir_all(repo.join(".git")).expect("git dir");
+    fs::create_dir_all(repo.join(".claude/agents")).expect("agents dir");
+    fs::create_dir_all(repo.join(".claude/skills/deploy")).expect("skills dir");
+    fs::write(repo.join(".claude/agents/release-notes.md"), "---\nname: release-notes\ndescription: Drafts notes.\ntools: Read\n---\nSign off.").expect("agent");
+    fs::write(repo.join(".claude/skills/deploy/SKILL.md"), "---\nname: deploy\ndescription: Deploys.\n---\nSteps.").expect("skill");
+    fs::write(repo.join("AGENTS.md"), "Be kind.").expect("instructions");
+    profile.rpc("settings:set", vec![json!({ "ai": { "workingDirectory": repo } })]);
+
+    let find = |snapshot: &Value, id: &str| snapshot["profiles"].as_array().expect("profiles").iter().find(|p| p["profile"]["id"] == id).cloned();
+    let snapshot = profile.rpc("agentRuntime:refresh", vec![]);
+    let agent = find(&snapshot, "release-notes").expect("discovered in place");
+    assert_eq!((agent["trusted"].as_bool(), agent["source"]["ecosystem"].as_str(), agent["profile"]["toolMode"].as_str()), (Some(false), Some("claude"), Some("read-only")));
+    assert_eq!(snapshot["nativeProject"]["approved"], false);
+    assert!(snapshot["instructions"].as_array().expect("instructions").iter().any(|file| file["displayPath"] == "AGENTS.md"));
+    assert!(profile.try_rpc("agentRuntime:copyNative", vec![json!("agent"), json!("release-notes")]).expect_err("untrusted").message.contains("Approve this project"));
+
+    let root = snapshot["nativeProject"]["root"].as_str().expect("root").to_owned();
+    let approved = profile.rpc("agentRuntime:approveNativeProject", vec![json!(root), json!(true)]);
+    assert_eq!(approved["nativeProject"]["approved"], true);
+    assert_eq!(find(&approved, "release-notes").expect("still listed")["trusted"], true);
+
+    let copied = profile.rpc("agentRuntime:copyNative", vec![json!("agent"), json!("release-notes")]);
+    assert!(profile.root.join("agents/release-notes/AGENT.md").is_file());
+    let own = find(&copied, "release-notes").expect("copy listed");
+    assert!(own.get("source").is_none_or(Value::is_null), "the copy takes over from the original");
+    assert!(own["alsoIn"].as_array().expect("also in")[0].as_str().expect("label").starts_with("Claude Code"));
+    profile.rpc("agentRuntime:copyNative", vec![json!("skill"), json!("deploy")]);
+    assert!(profile.root.join("skills/deploy/SKILL.md").is_file());
+    assert!(profile.try_rpc("agentRuntime:revealNative", vec![json!("/etc/passwd")]).expect_err("only discovered paths").message.contains("not found by discovery"));
+}
+
+#[test]
+fn a_bound_session_needs_both_halves_and_a_discovered_trusted_host() {
+    let profile = Profile::new();
+    let launch = |input: Value| profile.try_rpc("ai:delegate", vec![input]).expect_err("launch refused").message;
+    assert_eq!(launch(json!({ "profileId": "x", "goal": "g" })), "A session binding requires both an agent profile and runtime host.");
+    assert_eq!(launch(json!({ "profileId": "x", "hostId": "missing-host", "goal": "g" })), "Runtime host \"missing-host\" was not discovered.");
+    profile.rpc("agentRuntime:createAgent", vec![json!({ "scope": "global", "id": "bound-host", "name": "Bound Host", "transport": "acp", "command": "sleep" })]);
+    assert_eq!(launch(json!({ "profileId": "no-profile", "hostId": "bound-host", "goal": "g" })), "Agent profile no-profile was not discovered.");
+}
