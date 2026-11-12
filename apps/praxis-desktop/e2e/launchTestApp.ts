@@ -437,7 +437,11 @@ export async function launchTestApp(
     async requestClose() {
       let confirm!: () => void;
       const confirmed = new Promise<void>(resolve => { confirm = resolve; });
-      await testApp.overrideChannel('window:confirmClose', () => { confirm(); });
+      // Confirming is the point at which the app would exit, so the backend is stopped here.
+      await testApp.overrideChannel('window:confirmClose', async () => {
+        confirm();
+        await testApp.electronApp.close();
+      });
       const sessions = (await callBackend('ai:listSessions')) as Array<{ state?: string }>;
       const runningSessionCount = sessions.filter(session => ['planning', 'executing', 'awaiting_approval', 'awaiting_input'].includes(session.state ?? '')).length;
       const views = (await callBackend('scheduledRuns:list')) as Array<{ run: { name: string; scheduledStartAt: string; timezone: string; status: string; archived?: boolean } }>;
@@ -447,7 +451,10 @@ export async function launchTestApp(
         runningSessionCount,
         ...(next ? { nextSchedule: { name: next.name, scheduledStartAt: next.scheduledStartAt, timezone: next.timezone } } : {})
       });
-      return confirmed;
+      // An async function adopts a returned promise, which would make `await requestClose()` wait
+      // for the confirmation itself. Hand back a non-thenable so the caller can answer the dialog
+      // first; `await closed` then does not wait, and the file reads that follow find the profile at rest.
+      return { closed: confirmed } as unknown as Promise<void>;
     },
     async overrideChannel(channel, handler) { overrides.set(channel, handler); await syncOverrideNames(); },
     async restoreChannel(channel) { overrides.delete(channel); await syncOverrideNames(); },
