@@ -8,6 +8,7 @@ mod acp_host;
 mod api_host;
 mod ai_delegate;
 mod ai_review;
+mod ai_workflows;
 mod gadget_service;
 mod ai_session_ops;
 mod session_handover;
@@ -530,6 +531,19 @@ impl Application {
             "ai:listSessions" | "ai:getSession" => {
                 return ai::dispatch(host, &host.config().user_data_dir, channel, args);
             }
+            // These spawn a CLI agent or call a model endpoint and can run for many seconds when the
+            // agent is unresponsive. Holding the profile lock for that long freezes every other
+            // call, including the shutdown handshake, so they never touch it.
+            "ai:listCliModelOptions" | "ai:listApiModelOptions" | "ai:probeProviderCapability" | "ai:testCustomProvider"
+            | "ai:getLatestCliProviderVersion" | "ai:installCliProvider" | "ai:detectLocalRuntimes" | "ai:testMcpServer"
+            | "ai:testProviderApiKey" => {
+                return ai::dispatch(host, &host.config().user_data_dir, channel, args);
+            }
+            // One-shot model calls: the reply can take many seconds, and saving the result goes back
+            // through the host (taking the profile lock itself), so they must not hold it.
+            "workflows:recommendTemplate" | "workflows:recommendModelTiers" | "workflows:recommendAgent" => {
+                return workflows::dispatch(host, channel, args);
+            }
             // Launching only spawns, and an abort can take seconds: neither may hold the profile lock.
             _ if ai_delegate::CHANNELS.contains(&channel) => {
                 if let Some(result) = ai_delegate::dispatch(host, &host.config().user_data_dir, channel, args) {
@@ -544,6 +558,12 @@ impl Application {
             }
             _ if ai_review::CHANNELS.contains(&channel) => {
                 if let Some(result) = ai_review::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
+            }
+            // Workflow runs launch agents, call the tracker and GitLab, and wait on model replies.
+            _ if ai_workflows::CHANNELS.contains(&channel) => {
+                if let Some(result) = ai_workflows::dispatch(host, &host.config().user_data_dir, channel, args) {
                     return result;
                 }
             }

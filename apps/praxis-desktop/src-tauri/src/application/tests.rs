@@ -2108,3 +2108,20 @@ fn a_bound_session_needs_both_halves_and_a_discovered_trusted_host() {
     profile.rpc("agentRuntime:createAgent", vec![json!({ "scope": "global", "id": "bound-host", "name": "Bound Host", "transport": "acp", "command": "sleep" })]);
     assert_eq!(launch(json!({ "profileId": "no-profile", "hostId": "bound-host", "goal": "g" })), "Agent profile no-profile was not discovered.");
 }
+
+/// An unresponsive CLI agent makes `ai:listCliModelOptions` wait out its handshake timeout. That wait
+/// once happened under the profile lock, which froze every other call (and the shutdown handshake).
+#[cfg(unix)]
+#[test]
+fn a_hung_cli_model_listing_does_not_hold_the_profile_lock() {
+    let profile = Profile::new();
+    profile.rpc("settings:set", vec![json!({ "ai": { "providers": { "antigravity-cli": { "enabled": true, "cliPath": "/bin/cat" } } } })]);
+    let host = profile.host.clone();
+    std::thread::spawn(move || {
+        let _ = invoke(&host, "ai:listCliModelOptions", vec![json!("antigravity-cli")]);
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let started = std::time::Instant::now();
+    profile.rpc("projects:list", vec![]);
+    assert!(started.elapsed() < std::time::Duration::from_secs(4), "projects:list waited {:?} behind the model listing", started.elapsed());
+}

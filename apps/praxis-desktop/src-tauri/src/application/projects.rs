@@ -624,6 +624,7 @@ fn update(catalog: &mut Catalog, id: &str, patch: &Value) -> Result<Value> {
         "defaultAiToolMode",
         "icon",
         "color",
+        "recommendedWorkflowTemplate",
     ] {
         if let Some(change) = patch.get(field).filter(|value| !value.is_null()) {
             value[field] = change.clone();

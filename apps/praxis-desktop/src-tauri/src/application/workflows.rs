@@ -502,17 +502,69 @@ pub fn list_templates(host: &HostContext, args: &[Value]) -> Result<Value> {
     Ok(json!(list))
 }
 
-pub fn get_recommended_template(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(Value::Null)
+pub fn get_recommended_template(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let project_id = text(args, 0)?;
+    let catalog = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)?;
+    Ok(catalog.require(storage::PROJECTS, project_id).map(|p| p["recommendedWorkflowTemplate"].clone()).unwrap_or(Value::Null))
 }
 
-pub fn recommend_template(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(json!({
-        "templateId": "governed-delivery",
-        "rationale": "Governed delivery ensures code quality, linting, and automated checks.",
-        "model": "recommended",
-        "provider": "anthropic"
-    }))
+const TEMPLATE_SYSTEM_PROMPT: &str = "You are helping someone pick a workflow template for a software delivery project.\nGiven the project's name, purpose, and a short brief, and a list of available workflow templates, pick the\nsingle best-fitting template. Respond with exactly one fenced JSON code block and nothing else:\n\n```json\n{ \"templateId\": \"<one of the listed template ids, verbatim>\", \"rationale\": \"<one sentence, specific to this project>\" }\n```";
+
+/// The prompt asking which template fits (`buildPrompt` in `workflowTemplateRecommendation.ts`).
+fn template_prompt(project: &Value, candidates: &[Value]) -> String {
+    let brief: Vec<String> = project["brief"].as_object().into_iter().flatten().filter_map(|(k, v)| v.as_str().map(str::trim).filter(|v| !v.is_empty()).map(|v| format!("- {k}: {v}"))).collect();
+    let catalog: Vec<String> = candidates.iter().map(|c| format!("- {}: {}{}", c["templateId"].as_str().unwrap_or(""), c["name"].as_str().unwrap_or(""), c["description"].as_str().map(|d| format!(" — {d}")).unwrap_or_default())).collect();
+    let name = project["name"].as_str().filter(|n| !n.is_empty()).unwrap_or("(untitled project)");
+    let purpose = project["purpose"].as_str().map(str::trim).filter(|p| !p.is_empty()).unwrap_or("(none provided)");
+    let mut lines = vec![format!("Project name: {name}"), format!("Purpose: {purpose}")];
+    if !brief.is_empty() {
+        lines.push(format!("Brief:\n{}", brief.join("\n")));
+    }
+    lines.push(format!("\nAvailable workflow templates:\n{}", catalog.join("\n")));
+    lines.push("\nRecommend exactly one template id from the list above.".into());
+    lines.join("\n")
+}
+
+/// The `{ <key>, rationale }` the model answered, checked against the ids it was offered.
+fn parse_choice(reply: &str, key: &str, valid: &[String], noun: &str) -> Result<(String, String)> {
+    let parsed: Value = serde_json::from_str(&extract_json_block(reply)).map_err(|_| failure("The AI recommendation response was not valid JSON."))?;
+    if !parsed.is_object() || parsed.get(key).is_none() {
+        return Err(failure(format!("The AI recommendation response did not include a {key}.")));
+    }
+    let id = parsed[key].as_str().map(str::trim).unwrap_or("").to_owned();
+    if !valid.contains(&id) {
+        return Err(failure(format!("The AI recommended \"{id}\", which is not one of the offered {noun}.")));
+    }
+    let rationale = parsed["rationale"].as_str().map(str::trim).filter(|r| !r.is_empty()).unwrap_or("No rationale was given.").to_owned();
+    Ok((id, rationale))
+}
+
+pub fn recommend_template(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let project_id = text(args, 0)?;
+    let catalog = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)?;
+    let project = catalog.require(storage::PROJECTS, project_id).map_err(|_| failure(format!("Project {project_id} was not found.")))?;
+    // Only what the New Workflow dialog offers: project templates are excluded there, so here too.
+    let candidates: Vec<Value> = list_templates(host, &[json!(project_id)])?
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|t| t["source"] != "project")
+        .map(|t| json!({ "templateId": t["definition"]["id"], "name": t["definition"]["name"], "description": t["definition"]["description"] }))
+        .collect();
+    if candidates.is_empty() {
+        return Err(failure("No workflow templates are available to recommend from."));
+    }
+    let (connection, model) = recommendation_connection(host)?;
+    let provider = connection.provider.clone();
+    let (reply, usage) = runtime::block_on(super::api_host::run_provider_prompt(&connection, &model, TEMPLATE_SYSTEM_PROMPT, &template_prompt(&project, &candidates), None, |_| {})).map_err(failure)?;
+    let ids: Vec<String> = candidates.iter().filter_map(|c| c["templateId"].as_str().map(str::to_owned)).collect();
+    let (template_id, rationale) = parse_choice(&reply, "templateId", &ids, "templates")?;
+    let stored = json!({ "templateId": template_id, "rationale": rationale, "model": model, "computedAt": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true) });
+    let response = host.dispatch_rpc(praxis_contracts::RustRpcRequest { id: "recommend-template".into(), channel: "projects:update".into(), args: vec![json!(project_id), json!({ "recommendedWorkflowTemplate": stored })] });
+    if !response.ok {
+        return Err(response.error.unwrap_or_else(|| failure("The recommendation could not be saved.")));
+    }
+    Ok(json!({ "templateId": template_id, "rationale": rationale, "model": model, "provider": provider, "usage": usage }))
 }
 
 const TIER_SYSTEM_PROMPT: &str = "You are helping someone choose how capable a model each stage of a software delivery workflow needs.\nTiers: \"fast\" (cheap and quick: summaries, formatting, simple checks of text), \"standard\" (routine review, test\nauthoring, analysis), \"strong\" (hard reasoning: writing or changing production code, security review, subtle\ncorrectness review). A stage that fails is retried one tier higher automatically, so prefer the cheapest tier that\nwill usually succeed. Respond with exactly one fenced JSON code block and nothing else:\n\n```json\n{ \"stages\": { \"<nodeId, verbatim>\": { \"tier\": \"fast|standard|strong\", \"rationale\": \"<one short sentence>\" } } }\n```";
@@ -2288,31 +2340,78 @@ pub fn start_diagnosis(_host: &HostContext, _args: &[Value]) -> Result<Value> {
     Ok(json!({ "sessionKey": null }))
 }
 
-pub fn get_recommendation(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(json!({ "recommendation": null, "stale": false }))
+const AGENT_SYSTEM_PROMPT: &str = "You are helping configure a stage in a governed software-delivery workflow.\nGiven the stage's name and instructions, and a list of trusted agents available to run it, pick the single\nbest-fitting agent for this specific stage. Respond with exactly one fenced JSON code block and nothing else:\n\n```json\n{ \"agentId\": \"<one of the listed agent ids, verbatim>\", \"rationale\": \"<one sentence, specific to this stage>\" }\n```";
+const RECOMMENDATION_CACHE_FILE: &str = "workflow-agent-recommendations.json";
+const RECOMMENDATION_CACHE_KEY: &str = "praxis.workflowAgentRecommendations.v1";
+
+/// A digest of what would change the answer, so a stored recommendation can be flagged stale
+/// without spending another call (`computeRecommendationFingerprint`).
+pub fn recommendation_fingerprint(input: &Value) -> String {
+    use sha2::{Digest, Sha256};
+    let mut ids: Vec<&str> = input["candidates"].as_array().into_iter().flatten().filter_map(|c| c["agentId"].as_str()).collect();
+    ids.sort_unstable();
+    let payload = [input["stageName"].as_str().unwrap_or("").trim(), input["instructions"].as_str().unwrap_or("").trim(), &ids.join(",")].join(" ");
+    Sha256::digest(payload.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
 }
 
-pub fn clear_recommendation(_host: &HostContext, _args: &[Value]) -> Result<Value> {
+fn read_recommendation_cache(host: &HostContext) -> serde_json::Map<String, Value> {
+    let path = host.config().user_data_dir.join(RECOMMENDATION_CACHE_FILE);
+    let document = storage::read(&path).ok().flatten().and_then(|raw| storage::parse(&path, Some(&raw)).ok()).unwrap_or(Value::Null);
+    document[RECOMMENDATION_CACHE_KEY].as_object().cloned().unwrap_or_default()
+}
+
+fn write_recommendation_cache(host: &HostContext, cache: serde_json::Map<String, Value>) -> Result<()> {
+    let encoded = storage::encoded(&json!({ RECOMMENDATION_CACHE_KEY: cache }))?;
+    storage::write_atomic(&host.config().user_data_dir.join(RECOMMENDATION_CACHE_FILE), &encoded, false)
+}
+
+fn recommendation_key(args: &[Value]) -> Result<String> {
+    Ok(format!("{}:{}", text(args, 0)?, text(args, 1)?))
+}
+
+/// The stored recommendation for a stage, and whether the stage changed since it was computed.
+pub fn get_recommendation(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let key = recommendation_key(args)?;
+    let Some(stored) = read_recommendation_cache(host).remove(&key) else { return Ok(json!({ "recommendation": null, "stale": false })) };
+    let stale = stored["inputFingerprint"].as_str() != Some(recommendation_fingerprint(args.get(2).unwrap_or(&Value::Null)).as_str());
+    Ok(json!({ "recommendation": stored, "stale": stale }))
+}
+
+pub fn clear_recommendation(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let key = recommendation_key(args)?;
+    let mut cache = read_recommendation_cache(host);
+    if cache.remove(&key).is_some() {
+        write_recommendation_cache(host, cache)?;
+    }
     Ok(Value::Null)
 }
 
-pub fn recommend_agent(_host: &HostContext, args: &[Value]) -> Result<Value> {
-    let val = args.get(2).and_then(Value::as_object);
-    let candidates = val
-        .and_then(|o| o.get("candidates"))
-        .and_then(Value::as_array);
-    let first_agent = candidates
-        .and_then(|c| c.first())
-        .and_then(|cand| cand.get("agentId"))
-        .and_then(Value::as_str)
-        .unwrap_or("general-purpose");
-
-    Ok(json!({
-        "agentId": first_agent,
-        "rationale": "Selected best matching agent for stage",
-        "model": "recommended",
-        "provider": "anthropic"
-    }))
+pub fn recommend_agent(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let key = recommendation_key(args)?;
+    let input = args.get(2).cloned().unwrap_or(Value::Null);
+    let candidates = input["candidates"].as_array().cloned().unwrap_or_default();
+    if candidates.is_empty() {
+        return Err(failure("No trusted agents are available to recommend from."));
+    }
+    let catalog: Vec<String> = candidates.iter().map(|c| {
+        let skills: Vec<&str> = c["skills"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+        format!("- {}: {}{}", c["agentId"].as_str().unwrap_or(""), c["name"].as_str().unwrap_or(""), if skills.is_empty() { String::new() } else { format!(" (skills: {})", skills.join(", ")) })
+    }).collect();
+    let stage = input["stageName"].as_str().filter(|n| !n.is_empty()).unwrap_or("(untitled stage)");
+    let instructions = input["instructions"].as_str().map(str::trim).filter(|i| !i.is_empty()).unwrap_or("(none provided)");
+    let prompt = format!("Stage name: {stage}\nStage instructions:\n{instructions}\n\nTrusted agents available for this workflow:\n{}\n\nRecommend exactly one agent id from the list above.", catalog.join("\n"));
+    let (connection, model) = recommendation_connection(host)?;
+    let provider = connection.provider.clone();
+    let (reply, usage) = runtime::block_on(super::api_host::run_provider_prompt(&connection, &model, AGENT_SYSTEM_PROMPT, &prompt, None, |_| {})).map_err(failure)?;
+    let ids: Vec<String> = candidates.iter().filter_map(|c| c["agentId"].as_str().map(str::to_owned)).collect();
+    let (agent_id, rationale) = parse_choice(&reply, "agentId", &ids, "agents")?;
+    let mut cache = read_recommendation_cache(host);
+    cache.insert(key, json!({
+        "agentId": agent_id, "rationale": rationale, "model": model, "provider": provider,
+        "computedAt": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true), "inputFingerprint": recommendation_fingerprint(&input),
+    }));
+    write_recommendation_cache(host, cache)?;
+    Ok(json!({ "agentId": agent_id, "rationale": rationale, "model": model, "provider": provider, "usage": usage }))
 }
 
 pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Result<Value> {
@@ -2445,5 +2544,24 @@ mod tests {
         assert!(copy.get("builtIn").is_none());
         let tiers: Vec<&str> = copy["nodes"].as_array().unwrap().iter().map(|n| n["modelTier"].as_str().unwrap()).collect();
         assert_eq!(tiers, ["strong", "standard", "fast", "fast"]);
+    }
+
+    #[test]
+    fn recommendation_choices_must_be_an_offered_id() {
+        let valid = vec!["a".to_owned(), "b".to_owned()];
+        let ok = parse_choice("```json\n{\"agentId\":\"b\",\"rationale\":\" fits \"}\n```", "agentId", &valid, "agents").unwrap();
+        assert_eq!(ok, ("b".to_owned(), "fits".to_owned()));
+        assert_eq!(parse_choice("{\"agentId\":\"a\"}", "agentId", &valid, "agents").unwrap().1, "No rationale was given.");
+        assert!(parse_choice("{\"agentId\":\"z\"}", "agentId", &valid, "agents").unwrap_err().message.contains("not one of the offered agents"));
+        assert!(parse_choice("nope", "agentId", &valid, "agents").unwrap_err().message.contains("not valid JSON"));
+        assert!(parse_choice("{\"x\":1}", "agentId", &valid, "agents").unwrap_err().message.contains("did not include a agentId"));
+    }
+
+    #[test]
+    fn the_fingerprint_changes_with_the_stage_but_not_candidate_order() {
+        let input = |name: &str, ids: [&str; 2]| json!({ "stageName": name, "instructions": " do ", "candidates": [{"agentId": ids[0]}, {"agentId": ids[1]}] });
+        assert_eq!(recommendation_fingerprint(&input("Build", ["a", "b"])), recommendation_fingerprint(&input(" Build ", ["b", "a"])));
+        assert_ne!(recommendation_fingerprint(&input("Build", ["a", "b"])), recommendation_fingerprint(&input("Test", ["a", "b"])));
+        assert_eq!(recommendation_fingerprint(&input("Build", ["a", "b"])).len(), 64);
     }
 }
