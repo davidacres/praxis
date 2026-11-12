@@ -1,8 +1,8 @@
 {
   "shell": "tauri",
   "transport": "in-process",
-  "methodCount": 407,
-  "registeredCount": 407,
+  "methodCount": 408,
+  "registeredCount": 408,
   "missingCount": 0,
   "verifiedCount": 0,
   "methods": [
@@ -411,6 +411,12 @@
     {
       "method": "browser.getState",
       "channel": "browser:getState",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.personInput",
+      "channel": "browser:personInput",
       "registered": true,
       "parityVerified": false
     },
