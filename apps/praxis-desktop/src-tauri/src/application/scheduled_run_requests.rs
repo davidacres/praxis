@@ -216,7 +216,7 @@ fn write_status(file: &Path, status: &ScheduledRunRequestStatus) -> std::io::Res
 /// Reads every project's request folder once and imports new or changed requests.
 pub fn check(host: &HostContext) {
     let _serial = serial().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Ok(catalog) = storage::Catalog::load(&host.config().user_data_dir, &host.config().settings_path) else {
+    let Ok(catalog) = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path) else {
         return;
     };
     let mut by_folder: Vec<(std::path::PathBuf, Vec<String>)> = Vec::new();

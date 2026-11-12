@@ -108,7 +108,7 @@ fn rpc(host: &HostContext, channel: &str, args: Vec<Value>) -> Option<Value> {
 
 /// Whether the ticket's board has a folder to work in, when that can be known.
 fn folder_for(host: &HostContext, connection_id: &str) -> Option<bool> {
-    let catalog = storage::Catalog::load(&host.config().user_data_dir, &host.config().settings_path).ok()?;
+    let catalog = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path).ok()?;
     if let Some(project_id) = connection_id.strip_prefix("project:") {
         return Some(
             catalog

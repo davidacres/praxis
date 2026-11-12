@@ -65,7 +65,7 @@ pub fn project_workflow_stages(
     project_id: &str,
 ) -> Option<Vec<praxis_contracts::ProjectWorkflowStage>> {
     let catalog =
-        storage::Catalog::load(&host.config().user_data_dir, &host.config().settings_path).ok()?;
+        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path).ok()?;
     let project = catalog.require(storage::PROJECTS, project_id).ok()?;
     serde_json::from_value(project.get("workflowStages")?.clone()).ok()
 }
@@ -142,7 +142,7 @@ fn project_workflows_key(project_id: &str) -> String {
 /// The project's attached workspace folder, when it has one.
 pub fn project_folder(host: &HostContext, project_id: &str) -> Option<PathBuf> {
     let catalog =
-        storage::Catalog::load(&host.config().user_data_dir, &host.config().settings_path).ok()?;
+        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path).ok()?;
     let project = catalog.require(storage::PROJECTS, project_id).ok()?;
     project["workspaceFolder"]
         .as_str()
@@ -1420,7 +1420,7 @@ pub fn blocking_files(host: &HostContext, project_id: &str) -> Result<Vec<String
     match runtime::block_on(workflow_engine::base_blocking_paths(&folder)) {
         Ok(files) => Ok(files),
         Err(detail) if detail.to_lowercase().contains("not a git repository") => {
-            let project_name = Catalog::load(&host.config().user_data_dir, &host.config().settings_path)
+            let project_name = Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
                 .ok()
                 .and_then(|c| c.require(storage::PROJECTS, project_id).ok())
                 .and_then(|p| p["name"].as_str().map(str::to_string))
