@@ -22,6 +22,8 @@ mod board_prefs;
 mod boards;
 mod browser_mcp;
 mod builtin_mcp;
+mod code_intelligence;
+pub mod code_intelligence_bridge;
 mod connections;
 mod context_snapshot;
 mod coordination;
@@ -537,6 +539,10 @@ impl Application {
         });
         // The coordination broker is joined at startup, not on first use.
         coordination::init(host);
+        // An owner left running by an earlier build is replaced and removed worktrees' indexes
+        // dropped, off the startup path.
+        let maintenance_host = host.clone();
+        std::thread::spawn(move || code_intelligence::maintain_on_startup(&maintenance_host));
         // Queued turns resume at launch, before any window asks for the chat.
         let recovery_host = host.clone();
         std::thread::spawn(move || team_chat::recover_on_startup(&recovery_host));

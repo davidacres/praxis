@@ -392,6 +392,10 @@ fn resolve_user_data_dir(
 }
 
 fn main() {
+    if std::env::args().any(|arg| arg == application::code_intelligence_bridge::FLAG) {
+        let args: Vec<String> = std::env::args().collect();
+        std::process::exit(application::code_intelligence_bridge::run(&args));
+    }
     if std::env::args().any(|arg| arg == "--audit-contract") {
         if let Err(error) = state::print_contract_audit() {
             eprintln!("Desktop contract audit failed: {error}");
