@@ -522,6 +522,14 @@ impl Application {
             "ai:listSessions" | "ai:getSession" => {
                 return ai::dispatch(host, &host.config().user_data_dir, channel, args);
             }
+            // These spawn a CLI agent or call a model endpoint and can run for many seconds when the
+            // agent is unresponsive. Holding the profile lock for that long freezes every other
+            // call, including the shutdown handshake, so they never touch it.
+            "ai:listCliModelOptions" | "ai:listApiModelOptions" | "ai:probeProviderCapability" | "ai:testCustomProvider"
+            | "ai:getLatestCliProviderVersion" | "ai:installCliProvider" | "ai:detectLocalRuntimes" | "ai:testMcpServer"
+            | "ai:testProviderApiKey" => {
+                return ai::dispatch(host, &host.config().user_data_dir, channel, args);
+            }
             // Launching only spawns, and an abort can take seconds: neither may hold the profile lock.
             _ if ai_delegate::CHANNELS.contains(&channel) => {
                 if let Some(result) = ai_delegate::dispatch(host, &host.config().user_data_dir, channel, args) {
