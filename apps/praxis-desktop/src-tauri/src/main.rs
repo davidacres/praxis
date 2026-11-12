@@ -28,12 +28,7 @@ async fn praxis_rpc(
     args: Vec<Value>,
 ) -> Result<Value, RustRpcError> {
     // Capabilities also deny remote origins. Do not grant this to child browsers.
-    if window.label() != "main" {
-        return Err(error(
-            "FORBIDDEN",
-            "Only the local main webview may call the desktop contract.",
-        ));
-    }
+    DesktopState::check_caller(window.label())?;
     if channel == "desktop:capabilities" {
         return Ok(state.capabilities());
     }

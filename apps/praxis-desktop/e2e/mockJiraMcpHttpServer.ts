@@ -144,6 +144,8 @@ interface MockState {
   } | null;
   /** See the matching field on `MockJiraMcpHttpServer`. */
   confidentialClientIds: Set<string>;
+  /** Runs inside GET /authorize, before the redirect back to the app is issued. */
+  onAuthorize?: (info: { redirectUri: string; state: string }) => Promise<void>;
 }
 
 function createEmptyState(mode: 'token' | 'oauth'): MockState {
@@ -490,10 +492,11 @@ function buildMcpServer(state: MockState): { server: Server; transport: Streamab
  *     `Authorization: Bearer mock-access-token`.
  */
 export async function startMockJiraMcpHttpServer(
-  options?: { mode?: 'token' | 'oauth' }
+  options?: { mode?: 'token' | 'oauth'; onAuthorize?: MockState['onAuthorize'] }
 ): Promise<MockJiraMcpHttpServer> {
   const mode: 'token' | 'oauth' = options?.mode === 'oauth' ? 'oauth' : 'token';
   const state = createEmptyState(mode);
+  state.onAuthorize = options?.onAuthorize;
   const { server: mcpServer, transport } = buildMcpServer(state);
 
   const httpServer = http.createServer(async (req, res) => {
@@ -677,6 +680,7 @@ async function route(
     // belongs to /token, not /authorize, but a missing param is structurally
     // bogus and would have surfaced in the SDK's startAuthorization path.
     void codeChallenge;
+    if (state.onAuthorize) await state.onAuthorize({ redirectUri, state: stateParam });
     const target = new URL(redirectUri);
     target.searchParams.set('code', AUTH_CODE);
     target.searchParams.set('state', stateParam);

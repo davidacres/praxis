@@ -167,6 +167,31 @@ impl MobileHost {
         }
     }
 
+    /// The stable id the host presents to phones.
+    pub fn host_id(&self) -> String {
+        block_on(self.identity.host_id())
+    }
+
+    pub fn host_name(&self) -> String {
+        self.host_label()
+    }
+
+    /// Phone events are not streamed from this build yet, so the log has no sequence to report.
+    pub fn latest_sequence(&self) -> u64 {
+        0
+    }
+
+    /// The pairing record behind a device id, the host key's fingerprint and the access mode.
+    pub fn device_view(&self, device_id: &str) -> (Option<praxis_mobile::host::pairing::MobilePairedDevice>, Option<String>, String) {
+        let device = lock(&self.registry)
+            .list_devices()
+            .iter()
+            .find(|candidate| candidate.device_id == device_id && candidate.revoked_at.is_none())
+            .cloned();
+        let fingerprint = block_on(self.identity.static_key()).ok().map(|key| fingerprint_mobile_host_key(&hex(&key.public_key())));
+        (device, fingerprint, self.host.settings().read().mobile_access.mode.clone())
+    }
+
     fn log(&self, line: &str) {
         super::log_bus::log(&self.host, line);
     }
@@ -236,7 +261,9 @@ impl MobileHost {
                 self.rpc("mobile:stop", Value::Null)?;
             } else if let (true, Some(port)) = (change.bind, change.listener.port) {
                 let key = block_on(self.identity.static_key())?;
-                let code = block_on(self.identity.pairing_code());
+                // A Noise prologue is opt-in (`PRAXIS_MOBILE_PAIRING_CODE`): an invitation does not carry
+                // one, so a generated code the phone cannot know would refuse every real pairing.
+                let code = std::env::var("PRAXIS_MOBILE_PAIRING_CODE").ok().map(|c| c.trim().to_owned()).filter(|c| !c.is_empty());
                 let addresses: Vec<Value> = interfaces(true)
                     .into_iter()
                     .map(|(name, address)| json!({ "interfaceName": name, "address": address.to_string() }))
@@ -245,7 +272,7 @@ impl MobileHost {
                     "mobile:start",
                     json!({
                         "port": port, "policy": policy, "addresses": addresses,
-                        "hostPrivateKey": hex(key.private_key().as_ref()), "pairingCode": code.as_str()
+                        "hostPrivateKey": hex(key.private_key().as_ref()), "pairingCode": code
                     }),
                 )?;
                 if change.drop_connections {
@@ -515,14 +542,6 @@ pub fn register_internal_channels(host: &HostContext, mobile: &Arc<MobileHost>) 
         let params = args.first().cloned().unwrap_or(Value::Null);
         Ok(m.unpaired_peer(params["publicKey"].as_str().unwrap_or_default(), params["tokenId"].as_str()))
     });
-    // The phone's reads and commands need the session, run and project services behind the
-    // mobile surface; until those are adapted the listener refuses them by name.
-    for channel in ["mobile:internal:read", "mobile:internal:command"] {
-        host.register_handler(channel, |_, _| {
-            Err(praxis_contracts::RustRpcError {
-                code: "MOBILE_SERVICES_UNAVAILABLE".into(),
-                message: "The mobile host services are not available in this build.".into(),
-            })
-        });
-    }
+    // The phone's reads and commands run on the desktop's own session, run, project and schedule channels.
+    super::mobile_services::register(host, mobile);
 }

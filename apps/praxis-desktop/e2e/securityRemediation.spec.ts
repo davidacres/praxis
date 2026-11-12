@@ -4,7 +4,8 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import { chooseOption } from './chipSelect';
-import { launchTestApp, closeTestApp, type TestApp, notReproducible } from './launchTestApp';
+import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { startMockJiraMcpHttpServer } from './mockJiraMcpHttpServer';
 
 test.slow();
 const CHECK_ONLY_ENV = { AI_GATEWAY_API_KEY: 'e2e-check-only', AI_GATEWAY_URL: 'http://127.0.0.1:1', VERCEL_OIDC_TOKEN: undefined };
@@ -12,22 +13,75 @@ let app: TestApp;
 test.beforeEach(async () => { app = await launchTestApp(undefined, undefined, CHECK_ONLY_ENV, { openNewSession: false }); });
 test.afterEach(async () => { await closeTestApp(app); });
 
-test('unregistered renderers cannot read settings or emit privileged one-way messages', async () => {
+test('a renderer can only reach the desktop contract, never the host-internal channels', async () => {
+  // The trusted renderer reads settings through the contract...
   expect(await app.window.evaluate(() => window.praxis.settings.get())).toBeTruthy();
-  const result = await notReproducible('this exercises Electron-main internals (an untrusted BrowserWindow, DesktopMcpOAuthManager, ElectronSecretsStore/safeStorage) that no longer exist in the Rust backend');
-  expect(result).toContain('not a trusted application renderer');
+  // ...but secrets, event injection, mobile internals and shell-only file channels are not in it, so
+  // the webview bridge (the Rust equivalent of an unregistered Electron renderer) is refused by name.
+  for (const channel of ['host:secrets:get', 'host:secrets:set', 'host:secrets:seed', 'host:emitEvent', 'host:getConfig',
+    'mobile:internal:read', 'mobile:internal:command', 'mobile:start', 'workspaces:writeFile', 'workspaces:openFile', 'terminal:dispose']) {
+    const refused = await app.callBackend(channel, 'probe').then(() => 'unexpected grant', (error: { code?: string; message?: string }) => error);
+    expect(refused, channel).toMatchObject({ code: 'FORBIDDEN' });
+    expect((refused as { message: string }).message).toContain('not in the desktop contract');
+  }
+  // The same renderer cannot smuggle a privileged call through a contract channel's argument shape either.
+  expect(await app.callBackend('settings:get')).toBeTruthy();
 });
 
 test('OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization', async () => {
-  const result = await notReproducible('this exercises Electron-main internals (an untrusted BrowserWindow, DesktopMcpOAuthManager, ElectronSecretsStore/safeStorage) that no longer exist in the Rust backend');
-  expect(result).toEqual({ missing: 'none', mismatch: 'none', valid: 'resolved', code: 'legitimate', replay: 'none', distinct: true });
+  test.setTimeout(60_000);
+  await closeTestApp(app);
+  const attempts: Record<string, number | string> = {};
+  const probe = async (label: string, url: string) => {
+    attempts[label] = await fetch(url).then(response => response.status, () => 'refused');
+  };
+  const mock = await startMockJiraMcpHttpServer({
+    mode: 'oauth',
+    // The "browser" is the backend's own redirect follower. Before it delivers the real authorisation,
+    // another local process hits the same loopback callback with forged responses.
+    onAuthorize: async ({ redirectUri, state }) => {
+      await probe('missing', `${redirectUri}?code=attacker`);
+      await probe('mismatch', `${redirectUri}?error=attacker&state=wrong`);
+      await probe('wrongState', `${redirectUri}?code=attacker&state=${state}x`);
+      await probe('wrongPath', `${redirectUri.replace('/callback', '/elsewhere')}?code=attacker&state=${state}`);
+    },
+  });
+  const connections = [{ id: 'jira-oauth', name: 'Jira OAuth', mode: 'jiracloud',
+    settings: { connectionType: 'http', httpUrl: mock.mcpUrl, jiraAuthMethod: 'oauth', url: 'https://example.atlassian.net' } }];
+  app = await launchTestApp({ connections }, undefined, { ...CHECK_ONLY_ENV, PRAXIS_E2E_NO_BROWSER: '1' }, { openNewSession: false });
+  try {
+    const check = await app.window.evaluate(() => window.praxis.connection.check('jira-oauth')) as { status: string; message?: string };
+    expect(check.status, check.message).toBe('ok');
+    await mock.waitForEvent('initialize');
+    // Every forged callback was refused...
+    expect(attempts).toEqual({ missing: 400, mismatch: 400, wrongState: 400, wrongPath: 400 });
+    // ...and the legitimate one still resolved: the token exchange succeeded and carried the real code.
+    expect(mock.eventLog.indexOf('token')).toBeGreaterThan(mock.eventLog.indexOf('authorize'));
+    expect(mock.lastAuthorization).toBe('Bearer mock-access-token');
+    // The sign-in is single-use: once settled, its callback port is closed, so a replay finds nothing.
+    const redirect = mock.lastAuthorizeQuery!.redirect_uri!;
+    await probe('replay', `${redirect}?code=replay&state=${mock.lastAuthorizeQuery!.state}`);
+    expect(attempts.replay).toBe('refused');
+  } finally {
+    await mock.close();
+  }
 });
 
-test('secret reads repair permissive file modes and encrypted values remain retrievable', async () => {
-  const result = await notReproducible('this exercises Electron-main internals (an untrusted BrowserWindow, DesktopMcpOAuthManager, ElectronSecretsStore/safeStorage) that no longer exist in the Rust backend');
-  if (!result.windows) expect(result.repaired).toBe(0o600);
-  expect(result.plain).toBe(false);
-  if (result.encrypted) expect(result.value).toBe('fixture-only-value');
+test('secret reads repair permissive file modes and stored values remain retrievable', async () => {
+  // Store a secret through the backend's secret store, then stop the backend and leave the file
+  // group/world readable, as a copied or restored profile would.
+  await app.callHost('host:secrets:set', 'security-fixture', 'fixture-only-value');
+  const file = path.join(app.userDataDir, 'praxis-secrets.json');
+  expect(JSON.parse(fs.readFileSync(file, 'utf8'))['security-fixture']).toBe('fixture-only-value');
+  const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
+  await app.electronApp.close();
+  fs.chmodSync(file, 0o644);
+  app = await launchTestApp(undefined, reuse, CHECK_ONLY_ENV, { openNewSession: false });
+  // Loading the store tightens the mode, and the value survived the restart.
+  if (process.platform !== 'win32') expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+  expect(await app.callHost('host:secrets:get', 'security-fixture')).toBe('fixture-only-value');
+  // A value is never offered to the renderer through the contract.
+  expect(JSON.stringify(await app.window.evaluate(() => window.praxis.settings.get()))).not.toContain('fixture-only-value');
 });
 
 test('repository workflows require command review, preserve trust on restart, and revoke it after changes', async () => {

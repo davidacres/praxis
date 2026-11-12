@@ -32,6 +32,7 @@ mod shell_services;
 mod deployments;
 mod log_bus;
 mod mobile_host;
+mod mobile_services;
 mod semantic_model;
 mod task_designer_plan;
 mod task_designer_state;

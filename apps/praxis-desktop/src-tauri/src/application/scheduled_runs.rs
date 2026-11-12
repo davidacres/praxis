@@ -91,6 +91,11 @@ pub fn save_run(host: &HostContext, run: ScheduledRun) -> std::result::Result<Sc
     store(host).save(run)
 }
 
+/// Tells every window (and the phone) the scheduled runs changed.
+pub fn announce_changed(host: &HostContext) {
+    changed(host);
+}
+
 fn changed(host: &HostContext) {
     host.events().emit("scheduledRuns:changed", None);
 }
