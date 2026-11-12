@@ -860,7 +860,6 @@ pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart
     let session_id = uuid::Uuid::new_v4().to_string();
     let started_at = now();
     let mode = start.task["sessionMode"].as_str().map(str::to_owned).unwrap_or_else(|| match start.task["kind"].as_str() { Some("analysis") => "analysis".into(), Some("review") => "review".into(), _ => "chat".into() });
-    let goal_line = start.task["goal"].as_str().unwrap_or_default().lines().next().unwrap_or_default().trim().chars().take(120).collect::<String>();
     let mut record = json!({
         "issueKey": key, "sessionId": session_id, "provider": start.connection.provider, "model": start.model, "toolMode": start.tool_mode,
         "state": "not_started", "taskDefinition": start.task, "purpose": super::session_handover::purpose_from_task(&start.task, &key, None),

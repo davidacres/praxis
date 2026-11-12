@@ -123,6 +123,7 @@ pub fn dispatch(
 
         // 3. Sessions & conversations
         "ai:listSessions" => {
+            super::ai_review::recover_projects(host, user_data_dir);
             let sessions = read_sessions(user_data_dir)?;
             let mut list: Vec<Value> = sessions
                 .values()
@@ -395,31 +396,6 @@ pub fn dispatch(
             let issue_key = text(args, 0)?;
             let pack_id = args.get(1).and_then(Value::as_str);
             Ok(json!({ "issueKey": issue_key, "workflowPackId": pack_id }))
-        }
-        "ai:startTicketReview" => {
-            let input = args.first().cloned().unwrap_or_else(|| json!({}));
-            let issue_key = input
-                .get("issueKey")
-                .and_then(Value::as_str)
-                .unwrap_or("TICK-1");
-            let review = json!({
-                "issueKey": issue_key,
-                "status": "complete",
-                "findings": [],
-                "summary": "Ticket review completed with no blocking issues.",
-                "reviewedAt": now()
-            });
-            Ok(review)
-        }
-        "ai:getTicketReview" => {
-            let issue_key = text(args, 0)?;
-            Ok(json!({
-                "issueKey": issue_key,
-                "status": "complete",
-                "findings": [],
-                "summary": "Review complete",
-                "reviewedAt": now()
-            }))
         }
         "ai:localPeerReview" | "ai:localPeerReviewFollowUp" => Ok(json!({
             "comments": [],

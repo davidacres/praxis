@@ -5,6 +5,8 @@ mod ai;
 mod acp_host;
 mod api_host;
 mod ai_delegate;
+mod ai_review;
+mod gadget_service;
 mod ai_session_ops;
 mod session_handover;
 mod ai_models;
@@ -21,7 +23,6 @@ mod boards;
 mod builtin_mcp;
 mod connections;
 mod deployments;
-mod gadgets;
 mod log_bus;
 mod marketplace;
 mod notes;
@@ -450,6 +451,18 @@ impl Application {
                     return result;
                 }
             }
+            // Ticket reviews launch an agent and gadget answers call back into the tracker, so
+            // neither may hold the profile lock.
+            _ if ai_review::CHANNELS.contains(&channel) => {
+                if let Some(result) = ai_review::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
+            }
+            _ if gadget_service::CHANNELS.contains(&channel) => {
+                if let Some(result) = gadget_service::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
+            }
             _ if ai_session_ops::CHANNELS.contains(&channel) => {
                 if let Some(result) = ai_session_ops::dispatch(host, &host.config().user_data_dir, channel, args) {
                     return result;
@@ -602,8 +615,6 @@ impl Application {
             || channel.starts_with("detachedChat:")
         {
             self.webviews.dispatch(host, channel, args)?
-        } else if channel.starts_with("gadgets:") {
-            gadgets::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("aiUsage:") {
             ai_usage::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("assistant:") {

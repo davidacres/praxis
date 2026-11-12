@@ -76,8 +76,14 @@ fn non_empty<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value[key].as_str().map(str::trim).filter(|v| !v.is_empty())
 }
 
+pub(super) fn delegate_channel(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
+    delegate(host, dir, args)
+}
+
 fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
     let input = args.first().cloned().unwrap_or(Value::Null);
+    // A ticket review brings its own issue (keyed by the review session) and task contract.
+    let review = input.get("ticketReview").filter(|r| r.is_object()).cloned();
     let settings = host.settings().read();
     let ai = &settings.ai;
     let mode = input["mode"].as_str().unwrap_or(if input["purpose"] == "analysis" { "analysis" } else { "chat" }).to_owned();
@@ -115,13 +121,15 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     }
 
     // The issue: a tracker issue, or a synthesized one for a free-form session.
-    let issue = if let Some(issue_key) = non_empty(&input, "issueKey") {
+    let issue = if let Some(review) = &review {
+        review["issue"].clone()
+    } else if let Some(issue_key) = non_empty(&input, "issueKey") {
         host_call(host, "issue:get", vec![json!(issue_key), input.get("connectionId").cloned().unwrap_or(Value::Null)])?
     } else {
         let goal = non_empty(&input, "goal").or_else(|| non_empty(&input["task"], "goal")).ok_or_else(|| failure("Delegate needs either an issue key or a goal."))?;
         json!({ "key": format!("SESSION-{}", &uuid::Uuid::new_v4().to_string()[..8]), "summary": goal, "issueType": "Task", "status": "New", "projectKey": "SESSION" })
     };
-    if non_empty(&input, "issueKey").is_some() && ai.analysis_gate_enabled && input["mode"].is_null() && !is_analysis {
+    if review.is_none() && non_empty(&input, "issueKey").is_some() && ai.analysis_gate_enabled && input["mode"].is_null() && !is_analysis {
         // Mirrors the gate in Electron: confirmed analysis is required for legacy callers.
         let key = non_empty(&input, "issueKey").unwrap_or_default();
         let confirmed = host_call(host, "ai:getAnalysis", vec![json!(key)]).ok().is_some_and(|a| a["confirmed"] == true || a["state"] == "confirmed");
@@ -131,7 +139,9 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     }
 
     let task_overrides = input.get("task").filter(|t| t.is_object());
-    let task = if !input["mode"].is_null() {
+    let task = if let Some(review) = &review {
+        review["task"].clone()
+    } else if !input["mode"].is_null() {
         build_mode_task(&mode, &issue, &analysis_prompt, task_overrides.unwrap_or(&Value::Null))
     } else if let Some(overrides) = task_overrides {
         default_task(&issue, overrides)
@@ -151,6 +161,8 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
         tool_mode = Some("project-only".to_owned());
     }
     let tool_mode = tool_mode.unwrap_or_else(|| if working_directory.is_some() { "full".into() } else { "project-only".into() });
+    // A review reads and never writes, whether or not it has a folder.
+    let tool_mode = if review.is_some() { "read-only".to_owned() } else { tool_mode };
     if tool_mode == "full" && working_directory.is_none() {
         return Err(failure("Choose a working folder for this session — full-tools sessions no longer default to the app directory."));
     }

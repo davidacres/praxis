@@ -1477,6 +1477,10 @@ async fn guard_proxy_and_preview_security() {
 #[test]
 fn gadgets_publishing_and_submission() {
     let profile = Profile::new();
+    // A gadget is pinned to a live session; text published for no session mints nothing.
+    let unscoped = profile.rpc("gadgets:publishFromText", vec![json!("sess-1"), json!("pref"), json!("```praxis-gadget\n{}\n```")]);
+    assert!(unscoped.as_array().expect("blocks").is_empty());
+    super::session_store::store(&profile.root).put("SESSION-1", json!({ "issueKey": "SESSION-1", "sessionId": "sess-1", "state": "completed" })).expect("session");
 
     // 1. Publish from text with a choice gadget
     let text_with_gadget = r#"
@@ -1501,8 +1505,20 @@ Here is a choice for you:
         "actionId": "pick",
         "value": { "kind": "choice", "selected": "yes" }
     });
-    let result = profile.rpc("gadgets:submit", vec![submit_req]);
-    assert_eq!(result["status"], "applied");
+    let result = profile.rpc("gadgets:submit", vec![submit_req.clone()]);
+    assert_eq!(result["status"], "completed");
+    assert_eq!(result["replay"], false);
+    let blocks = profile.rpc("gadgets:getBlocks", vec![json!("sess-1")]);
+    let gadget = blocks.as_array().expect("blocks").iter().find(|b| b["type"] == "gadget").expect("gadget");
+    assert_eq!(gadget["gadget"]["state"], "completed");
+    assert_eq!(gadget["gadget"]["answer"]["selected"], "yes");
+
+    // The same submission again is a replay, and a different answer under that key is refused.
+    let mut again = submit_req.clone();
+    again["idempotencyKey"] = result["idempotencyKey"].clone();
+    assert_eq!(profile.rpc("gadgets:submit", vec![again.clone()])["replay"], true);
+    again["value"] = json!({ "kind": "choice", "selected": "no" });
+    assert_eq!(profile.rpc("gadgets:submit", vec![again])["error"]["code"], "duplicate-action");
 
     // 3. Clear session gadgets
     profile.rpc("gadgets:clear", vec![json!("sess-1")]);
