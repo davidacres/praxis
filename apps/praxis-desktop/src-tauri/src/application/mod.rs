@@ -458,7 +458,7 @@ impl Application {
     pub fn register(host: &HostContext, version: &str) {
         // The Output tab backfills from this bus; the launch line proves the
         // ring buffer and `log:getRecent` end to end.
-        let bus = log_bus::shared(&host.config().user_data_dir);
+        let bus = log_bus::restart(&host.config().user_data_dir);
         // Persisted as well, so the next session sees where this one began.
         if !bus.recent().is_empty() {
             bus.append(host, "—— previous session above ——");
