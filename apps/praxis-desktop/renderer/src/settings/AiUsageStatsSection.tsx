@@ -630,20 +630,22 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
           <small>Total Cost</small>
           <strong data-testid="ai-usage-stat-total-cost">
             {spendTotals.byCurrency.length === 0
-              ? '$1.25'
+              ? '—'
               : spendTotals.byCurrency
                   .map(({ currency, amount }) => formatCost({ amount, currency }))
                   .filter((value): value is string => Boolean(value))
                   .join(' + ')}
           </strong>
           <span className="stat-subtitle">
-            {spendReportingCount > 0 ? `${spendReportingCount} sessions reporting` : '13.4k tokens logged'}
+            {spendReportingCount > 0
+              ? `${spendReportingCount} sessions reporting`
+              : 'No agent has reported a cost yet'}
           </span>
         </div>
 
         <div className="ai-usage-stat-card">
           <small>Tokens this {periodNoun}</small>
-          <strong>{currentTokens > 0 ? formatTokens(currentTokens) : '8.4k'}</strong>
+          <strong>{currentTokens > 0 ? formatTokens(currentTokens) : '0'}</strong>
           <div className={`ai-usage-delta ai-usage-delta-${direction}`} data-testid="ai-usage-delta">
             {direction !== 'flat' && (
               <span className="ai-usage-delta-arrow" aria-hidden="true">
@@ -652,7 +654,7 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
             )}
             <span className="stat-subtitle">
               {deltaPercent === undefined
-                ? currentTokens > 0 ? `No AI use last ${periodNoun}` : '+14% vs last period'
+                ? currentTokens > 0 ? `No AI use last ${periodNoun}` : `No AI use this ${periodNoun}`
                 : direction === 'flat'
                   ? `Same as last ${periodNoun}`
                   : `${Math.abs(Math.round(deltaPercent))}% ${direction === 'up' ? 'more' : 'less'}`}
@@ -662,11 +664,11 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
 
         <div className="ai-usage-stat-card">
           <small>Tokens recorded by Praxis</small>
-          <strong>{summary ? (formatLargeTokenCount(summary.allTime.totalTokens) ?? formatTokenCompact(summary.allTime.totalTokens)) : '48.2k'}</strong>
+          <strong>{summary ? (formatLargeTokenCount(summary.allTime.totalTokens) ?? formatTokenCompact(summary.allTime.totalTokens)) : '—'}</strong>
           <span className="stat-subtitle">
             {summary?.allTime.firstEventAt
               ? `Since ${new Date(summary.allTime.firstEventAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
-              : 'Cumulative usage'}
+              : 'No usage recorded yet'}
           </span>
         </div>
 
@@ -674,7 +676,7 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
           <small>Active Provider Fleet</small>
           <strong>{fleetItems.length} Providers</strong>
           <span className="stat-subtitle">
-            {summary?.highs.day ? `Peak ${formatPeriodLabel(summary.highs.day.periodStart, 'day')}` : 'All quotas synchronized'}
+            {summary?.highs.day ? `Peak ${formatPeriodLabel(summary.highs.day.periodStart, 'day')}` : 'No peak recorded yet'}
           </span>
         </div>
       </div>
