@@ -1438,6 +1438,7 @@ pub fn runs_lock() -> &'static Mutex<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
