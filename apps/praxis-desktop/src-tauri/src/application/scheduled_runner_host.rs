@@ -965,6 +965,14 @@ pub fn ensure_started(host: &HostContext) {
     });
     let active = Arc::clone(runner(host));
     let host = host.clone();
+    // A run that was due while Praxis was closed shows as missed instead of starting.
+    for run in super::scheduled_runs::list_runs(&host) {
+        let before = run.status;
+        let reconciled = praxis_workflows::scheduled_run::reconcile_scheduled_run_on_launch(run, &super::now());
+        if reconciled.status != before {
+            let _ = super::scheduled_runs::save_run(&host, reconciled);
+        }
+    }
     runtime::runtime().spawn(async move {
         active.recover().await;
         let mut ticker = tokio::time::interval(tick_interval());

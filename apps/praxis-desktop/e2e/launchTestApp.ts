@@ -439,8 +439,9 @@ export async function launchTestApp(
       const confirmed = new Promise<void>(resolve => { confirm = resolve; });
       // Confirming is the point at which the app would exit, so the backend is stopped here.
       await testApp.overrideChannel('window:confirmClose', async () => {
+        // Stopped at once (not asked to close), so nothing it was scheduled to do runs after the answer.
+        testAppProcesses.get(testApp.electronApp)?.kill('SIGTERM') ?? testApp.electronApp.process().kill('SIGTERM');
         confirm();
-        await testApp.electronApp.close();
       });
       const sessions = (await callBackend('ai:listSessions')) as Array<{ state?: string }>;
       const runningSessionCount = sessions.filter(session => ['planning', 'executing', 'awaiting_approval', 'awaiting_input'].includes(session.state ?? '')).length;
