@@ -14,6 +14,7 @@ use regex::Regex;
 use serde_json::{Value, json};
 use url::Url;
 
+use super::browser_native::{self, NativeBrowser};
 use crate::webviews::blocked_browser_url_reason;
 
 const MAX_TEXT: usize = 12_000;
@@ -205,6 +206,43 @@ async fn load(url: &str) -> Result<Page, String> {
     Ok(parse_page(&final_url, &body))
 }
 
+/// The page a native webview currently shows, read through the page script.
+async fn native_page(shell: &dyn NativeBrowser) -> Result<Page, String> {
+    let read = shell.eval("window.__praxisBrowser.read()").await?;
+    let snapshot = shell.eval("window.__praxisBrowser.snapshot()").await?;
+    let text = |v: &Value, key: &str| v[key].as_str().unwrap_or_default().to_owned();
+    let elements = snapshot
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|e| Element {
+            reference: text(e, "ref"),
+            role: text(e, "role"),
+            name: text(e, "name"),
+            value: text(e, "value"),
+            href: None,
+        })
+        .collect();
+    Ok(Page {
+        url: text(&read, "url"),
+        title: text(&read, "title"),
+        text: text(&read, "text"),
+        elements,
+    })
+}
+
+/// The current page from whichever engine is installed.
+async fn current_page() -> Result<Page, String> {
+    match browser_native::shell() {
+        Some(shell) if shell.exists() => native_page(shell.as_ref()).await,
+        _ => read(),
+    }
+}
+
+fn js_string(text: &str) -> String {
+    serde_json::to_string(text).unwrap_or_else(|_| "\"\"".into())
+}
+
 fn state_value(browser: &Browser, loading: bool) -> Value {
     let page = browser.history.get(browser.index);
     json!({
@@ -217,6 +255,11 @@ fn state_value(browser: &Browser, loading: bool) -> Value {
 }
 
 fn publish(host: &HostContext) {
+    if let Some(shell) = browser_native::shell() {
+        host.events()
+            .emit("browser:didNavigate", Some(shell.state()));
+        return;
+    }
     let payload = state_value(
         &browser()
             .lock()
@@ -235,6 +278,9 @@ fn current() -> Option<Page> {
 
 /// The state `browser.getState()` reports.
 pub fn get_state() -> Value {
+    if let Some(shell) = browser_native::shell() {
+        return shell.state();
+    }
     state_value(
         &browser()
             .lock()
@@ -244,6 +290,16 @@ pub fn get_state() -> Value {
 }
 
 pub async fn navigate(host: &HostContext, url: &str) -> Result<Page, String> {
+    if let Some(shell) = browser_native::shell() {
+        if let Some(reason) = blocked_browser_url_reason(url, allow_private_hosts()) {
+            return Err(reason);
+        }
+        browser_native::reset_diagnostics();
+        shell.ensure()?;
+        shell.navigate(url).await?;
+        publish(host);
+        return native_page(shell.as_ref()).await;
+    }
     let page = load(url).await?;
     {
         let mut guard = browser()
@@ -263,6 +319,14 @@ pub async fn navigate(host: &HostContext, url: &str) -> Result<Page, String> {
 }
 
 pub async fn go_back(host: &HostContext) {
+    if let Some(shell) = browser_native::shell() {
+        if shell.exists() {
+            browser_native::reset_diagnostics();
+            let _ = shell.back().await;
+        }
+        publish(host);
+        return;
+    }
     {
         let mut guard = browser()
             .lock()
@@ -275,6 +339,14 @@ pub async fn go_back(host: &HostContext) {
 }
 
 pub async fn go_forward(host: &HostContext) {
+    if let Some(shell) = browser_native::shell() {
+        if shell.exists() {
+            browser_native::reset_diagnostics();
+            let _ = shell.forward().await;
+        }
+        publish(host);
+        return;
+    }
     {
         let mut guard = browser()
             .lock()
@@ -287,6 +359,14 @@ pub async fn go_forward(host: &HostContext) {
 }
 
 pub async fn reload(host: &HostContext) -> Result<(), String> {
+    if let Some(shell) = browser_native::shell() {
+        if shell.exists() {
+            browser_native::reset_diagnostics();
+            shell.reload().await?;
+        }
+        publish(host);
+        return Ok(());
+    }
     let Some(page) = current() else { return Ok(()) };
     let fresh = load(&page.url).await?;
     {
@@ -400,6 +480,27 @@ pub fn host_of(url: &str) -> Option<String> {
         .and_then(|u| u.host_str().map(str::to_lowercase))
 }
 
+fn native_shell() -> Option<std::sync::Arc<dyn NativeBrowser>> {
+    browser_native::shell().filter(|shell| shell.exists())
+}
+
+fn require_element(result: &Value, reference: &str) -> Result<(), String> {
+    if result == &Value::Bool(true) {
+        Ok(())
+    } else {
+        Err(format!(
+            "No element with ref \"{reference}\" — call browser_snapshot again."
+        ))
+    }
+}
+
+/// Gives an action that may have started a navigation time to land, then tells the pane.
+async fn settle(host: &HostContext, shell: &dyn NativeBrowser) {
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    shell.wait_idle().await;
+    publish(host);
+}
+
 /// Runs one tool (after the caller has dealt with host approval) and returns `(ok, text)`.
 pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, String) {
     let result: Result<String, String> = async {
@@ -412,14 +513,14 @@ pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, St
                 Ok(excerpt(&navigate(host, url).await?))
             }
             "browser_read" => {
-                let page = read()?;
+                let page = current_page().await?;
                 Ok(format!(
                     "URL: {}\nTitle: {}\n\n{}",
                     page.url, page.title, page.text
                 ))
             }
             "browser_snapshot" => {
-                let page = read()?;
+                let page = current_page().await?;
                 let needle = args["filter"].as_str().unwrap_or_default().to_lowercase();
                 let rows: Vec<String> = page
                     .elements
@@ -455,19 +556,72 @@ pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, St
                     }
                 ))
             }
-            "browser_click" => Ok(excerpt(
-                &click(host, args["ref"].as_str().unwrap_or_default()).await?,
-            )),
-            "browser_type" => Ok(excerpt(&type_text(
-                args["ref"].as_str().unwrap_or_default(),
-                args["text"].as_str().unwrap_or_default(),
-            )?)),
-            "browser_diagnostics" => Ok(
-                "Console and network diagnostics are not supported by this browser host.".into(),
-            ),
-            "browser_screenshot" => Ok(
-                "A screenshot could not be captured: this browser host renders no pixels.".into(),
-            ),
+            "browser_click" => {
+                let reference = args["ref"].as_str().unwrap_or_default();
+                if let Some(shell) = native_shell() {
+                    let clicked = shell
+                        .eval(&format!(
+                            "window.__praxisBrowser.click({})",
+                            js_string(reference)
+                        ))
+                        .await?;
+                    require_element(&clicked, reference)?;
+                    settle(host, shell.as_ref()).await;
+                    return Ok(excerpt(&native_page(shell.as_ref()).await?));
+                }
+                Ok(excerpt(&click(host, reference).await?))
+            }
+            "browser_type" => {
+                let reference = args["ref"].as_str().unwrap_or_default();
+                let text = args["text"].as_str().unwrap_or_default();
+                if let Some(shell) = native_shell() {
+                    let submit = args["submit"].as_bool().unwrap_or(false);
+                    let typed = shell
+                        .eval(&format!(
+                            "window.__praxisBrowser.type({}, {}, {submit})",
+                            js_string(reference),
+                            js_string(text)
+                        ))
+                        .await?;
+                    require_element(&typed, reference)?;
+                    if submit {
+                        settle(host, shell.as_ref()).await;
+                    }
+                    return Ok(excerpt(&native_page(shell.as_ref()).await?));
+                }
+                Ok(excerpt(&type_text(reference, text)?))
+            }
+            "browser_diagnostics" => match native_shell() {
+                Some(shell) => Ok(serde_json::to_string_pretty(
+                    &browser_native::diagnostics(shell.as_ref()).await,
+                )
+                .unwrap_or_default()),
+                None => Ok(
+                    "Console and network diagnostics are not supported by this browser host."
+                        .into(),
+                ),
+            },
+            "browser_screenshot" => match native_shell() {
+                Some(shell) => {
+                    let png = shell.screenshot_png().await?;
+                    let dir = host.config().user_data_dir.join("browser-screenshots");
+                    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                    let stamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_millis());
+                    let file = dir.join(format!("browser-{stamp}.png"));
+                    std::fs::write(&file, &png).map_err(|e| e.to_string())?;
+                    Ok(format!(
+                        "Screenshot captured for the user ({} KB) and saved to {}.",
+                        png.len() / 1024,
+                        file.display()
+                    ))
+                }
+                None => Ok(
+                    "A screenshot could not be captured: this browser host renders no pixels."
+                        .into(),
+                ),
+            },
             other => Err(format!("Unknown browser tool: {other}")),
         }
     }

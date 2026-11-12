@@ -75,11 +75,19 @@ impl WebviewManager {
                         width: 800.0,
                         height: 600.0,
                     });
+                if let Some(shell) = super::browser_native::shell() {
+                    shell
+                        .set_bounds(bounds.x, bounds.y, bounds.width, bounds.height)
+                        .map_err(failure)?;
+                }
                 *self.browser_bounds.lock().map_err(failure)? = Some(bounds);
                 Ok(Value::Null)
             }
             "browser:setVisible" => {
                 let visible = args.first().and_then(Value::as_bool).unwrap_or(false);
+                if let Some(shell) = super::browser_native::shell() {
+                    shell.set_visible(visible).map_err(failure)?;
+                }
                 *self.browser_visible.lock().map_err(failure)? = visible;
                 Ok(Value::Null)
             }

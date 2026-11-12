@@ -21,6 +21,7 @@ mod background_tasks;
 mod board_prefs;
 mod boards;
 mod browser_mcp;
+pub mod browser_native;
 mod builtin_mcp;
 mod code_intelligence;
 pub mod code_intelligence_bridge;

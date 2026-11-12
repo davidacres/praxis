@@ -567,6 +567,15 @@ pub fn dispatch(
                 let b64 = BASE64.encode(&bytes);
                 return Ok(json!(format!("data:image/jpeg;base64,{b64}")));
             }
+            // The shell asks for the page it should draw: the source under the restricted
+            // document policy, so a thumbnail runs no more than a preview does.
+            if args.get(2).is_some_and(|v| v["prepare"] == true) {
+                if !super::html_preview::is_html_path(path) || meta.len() > 2 * 1024 * 1024 {
+                    return Ok(Value::Null);
+                }
+                let source = fs::read_to_string(&abs_path).map_err(failure)?;
+                return Ok(json!({ "html": super::html_preview::apply_policy(&source) }));
+            }
             // The shell that drew the page offers its JPEG (a `data:` URL) for the cache, keyed
             // by the same path/size/mtime so an edit to the page refreshes it.
             if let Some(drawn) = args

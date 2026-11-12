@@ -3,6 +3,9 @@
 mod alibaba_window;
 mod application;
 mod e2e_server;
+#[cfg(target_os = "macos")]
+mod macos_snapshot;
+mod native_browser;
 mod state;
 pub mod webviews;
 
@@ -318,6 +321,26 @@ async fn praxis_rpc(
             .map_err(shell_error)?;
             Ok(Value::Null)
         }
+        "artifacts:pageThumbnail" => {
+            // The host serves a cached thumbnail; on a miss the shell draws the page and hands the
+            // JPEG back so the host can cache it.
+            let cached = invoke_host(state.host.clone(), channel.clone(), args.clone()).await?;
+            if !cached.is_null() || args.len() < 2 {
+                return Ok(cached);
+            }
+            let mut prepare = args[..2].to_vec();
+            prepare.push(json!({ "prepare": true }));
+            let prepared = invoke_host(state.host.clone(), channel.clone(), prepare).await?;
+            let Some(html) = prepared["html"].as_str() else {
+                return Ok(Value::Null);
+            };
+            let Some(drawn) = native_browser::thumbnail(window.app_handle(), html).await else {
+                return Ok(Value::Null);
+            };
+            let mut offer = args[..2].to_vec();
+            offer.push(json!(drawn));
+            invoke_host(state.host.clone(), channel, offer).await
+        }
         _ => invoke_host(state.host.clone(), channel, args).await,
     }
 }
@@ -471,6 +494,9 @@ fn main() {
                     eprintln!("Task notification clicks are unavailable: {error}");
                 }
             }
+            application::browser_native::install(native_browser::TauriBrowser::new(
+                app.handle().clone(),
+            ));
             app.manage(state);
             app.set_menu(tauri::menu::Menu::default(app.handle())?)?;
             if let Ok(dev_url) = std::env::var("PRAXIS_DEV_SERVER_URL")

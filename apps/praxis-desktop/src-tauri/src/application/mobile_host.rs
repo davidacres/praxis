@@ -333,8 +333,11 @@ impl MobileHost {
             .flatten();
         let Some(url) = url else {
             *lock(&self.relay) = RelayView::default();
-            self.rpc("mobile:relayStop", Value::Null)?;
-            return Ok(());
+            // With no listener there is no relay channel to stop, so a missing channel is not a failure.
+            match self.rpc("mobile:relayStop", Value::Null) {
+                Err(message) if !message.contains("is not registered") => return Err(message),
+                _ => return Ok(()),
+            }
         };
         let key = block_on(self.identity.static_key())?;
         let relay = block_on(self.identity.relay_identity());
