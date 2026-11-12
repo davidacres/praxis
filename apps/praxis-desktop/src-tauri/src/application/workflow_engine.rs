@@ -936,7 +936,9 @@ pub fn engine(host: &HostContext) -> &'static Engine {
                     if run.scheduled_launch_token.is_some() {
                         super::scheduled_runner_host::workflow_changed(&events_host, &run.run_id);
                     }
-                    let _ = is_run_settled(run);
+                    if is_run_settled(run) {
+                        super::workflow_write_back::write_back(&events_host, run);
+                    }
                 })),
                 choose_fallback_provider: None,
                 now: None,
