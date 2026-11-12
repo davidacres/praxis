@@ -296,6 +296,7 @@ const CHANNELS: &[&str] = &[
     "browser:forward",
     "browser:reload",
     "browser:getState",
+    "browser:personInput",
     "ai:detectLocalRuntimes",
     "ai:getStatus",
     "ai:setApiKey",
@@ -469,6 +470,13 @@ pub fn e2e_apply_session(host: &HostContext, record: Value) -> Result<()> {
     let stored = session_store::store(&host.config().user_data_dir).put(&key, record)?;
     host.events().emit("ai:sessionChanged", Some(stored));
     Ok(())
+}
+
+/// Test seam (e2e server only): a person clicks in the in-app browser. The headless backend has no
+/// native browser view to click, so this stands in for the pane reporting that input, and takes
+/// the same path (`browser:personInput`).
+pub fn e2e_person_used_browser() {
+    runtime::block_on(coordination::person_used_browser());
 }
 
 /// Test seam (e2e server only): see `scheduled_runner_host::set_usage_override`.

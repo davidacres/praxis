@@ -682,6 +682,8 @@ export interface BrowserIpc {
   forward(): Promise<void>;
   reload(): Promise<void>;
   getState(): Promise<BrowserNavigationState | undefined>;
+  /** A person pressed, clicked or scrolled in the page: the browser is theirs, not an agent's, until they stop. */
+  personInput(): Promise<void>;
   /** Subscribes to navigation updates; returns an unsubscribe function. */
   onDidNavigate(listener: (state: BrowserNavigationState) => void): () => void;
 }

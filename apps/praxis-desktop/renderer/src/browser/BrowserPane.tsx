@@ -55,6 +55,16 @@ export function BrowserPane({
   // A link opened this pane, so the persisted URL must not be restored over it.
   const restoredRef = useRef(Boolean(linkRequest));
 
+  // A person using the page (not an agent driving it) takes the browser from the agent. Reported
+  // at most once a second; the host keeps the browser theirs until they stop for a while.
+  const lastInputRef = useRef(0);
+  const reportPersonInput = useCallback(() => {
+    const now = Date.now();
+    if (now - lastInputRef.current < 1000) return;
+    lastInputRef.current = now;
+    void window.praxis.browser.personInput().catch(() => undefined);
+  }, []);
+
   const pushBounds = useCallback(() => {
     const el = surfaceRef.current;
     if (!el) return;
@@ -193,7 +203,14 @@ export function BrowserPane({
       {notice && (
         <div className="error-banner browser-pane-notice" role="alert" data-testid="browser-notice">{notice}</div>
       )}
-      <div className="browser-pane-surface" ref={surfaceRef} data-testid="browser-pane-surface">
+      <div
+        className="browser-pane-surface"
+        ref={surfaceRef}
+        data-testid="browser-pane-surface"
+        onPointerDown={reportPersonInput}
+        onKeyDown={reportPersonInput}
+        onWheel={reportPersonInput}
+      >
         {!state?.url && (
           <div className="browser-pane-empty">
             <Icon name="globe" size={26} />

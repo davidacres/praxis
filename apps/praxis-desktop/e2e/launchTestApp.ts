@@ -98,6 +98,8 @@ export interface TestApp {
   notifications(): Promise<{ shown: ShownNotification[]; opened: Array<{ window: string; target: Record<string, unknown> }> }>;
   /** Clicks the `index`th shown notification, as the person would in the OS notification centre. */
   clickNotification(index: number): Promise<void>;
+  /** A person clicks in the in-app browser: reported to the backend as the browser pane does on real input. */
+  personUsesBrowser(): Promise<void>;
   /** Whether the app window counts as focused (a notice for what it is showing is then held back). */
   setWindowFocused(focused: boolean): Promise<void>;
   /**
@@ -509,6 +511,7 @@ export async function launchTestApp(
     callHost: callRoute('host'),
     notifications: async () => (await fetch(`http://127.0.0.1:${port}/e2e/notifications?token=${token}`)).json(),
     clickNotification: index => seam('notifications/click', { index }),
+    personUsesBrowser: () => seam('browser/person-input', {}),
     setWindowFocused: focused => seam('window', { focused }),
     applySession: record => seam('sessions', record),
     setProviderUsage: usage => seam('provider-usage', { usage: usage ? JSON.stringify(usage) : null }),

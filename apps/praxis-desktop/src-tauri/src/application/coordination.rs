@@ -54,7 +54,6 @@ pub fn app_instance() -> String {
     format!("praxis:{}", std::process::id())
 }
 
-#[allow(dead_code)]
 fn person_session() -> String {
     format!("person:{}", std::process::id())
 }
@@ -504,11 +503,9 @@ pub async fn hold_browser_for_sequence(session_key: &str) -> std::result::Result
     }
 }
 
-// The takeover path below is complete and exercised by the broker's own tests, but this host has
-// no source of a person's input inside the in-app browser: its pages are fetched and parsed, not
-// rendered in a native view, so there is no pointer or key event to observe (the Electron host read
-// them from the page's `input-event`). A native browser view calls `person_used_browser`.
-#[allow(dead_code)]
+// A person's input on the in-app browser reaches `person_used_browser` through the
+// `browser:personInput` channel: the renderer's browser surface reports a real pointer, key or
+// wheel event there (the Electron host read the same signal from the page's `input-event`).
 struct PersonHold {
     request_id: String,
     last_input: Instant,
@@ -520,11 +517,9 @@ fn person_hold() -> &'static Mutex<Option<PersonHold>> {
     HOLD.get_or_init(Default::default)
 }
 
-#[allow(dead_code)]
 static PERSON_HOLD_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// How long a person's hands-off pause must last before the in-app browser is handed back.
-#[allow(dead_code)]
 fn person_idle() -> Duration {
     Duration::from_millis(std::env::var("PRAXIS_PERSON_IDLE_MS").ok().and_then(|v| v.parse::<u64>().ok()).filter(|ms| *ms > 0).unwrap_or(30_000))
 }
@@ -533,7 +528,6 @@ fn person_idle() -> Duration {
 /// it: the browser is taken over at the broker — the agent's claim moves to the person and the
 /// agent is told what it saw is out of date — and agents are refused it until the person has
 /// left it alone for the idle period.
-#[allow(dead_code)]
 pub async fn person_used_browser() {
     if off() {
         return;
@@ -574,7 +568,6 @@ pub async fn person_used_browser() {
         .await;
 }
 
-#[allow(dead_code)]
 async fn hand_browser_back(request_id: &str) {
     {
         let mut hold = lock(person_hold());
@@ -585,7 +578,6 @@ async fn hand_browser_back(request_id: &str) {
     broker().send(Command::Release { owner: Owner::session(person_session()), claim_ids: None, request_id: Some(request_id.to_owned()) }).await;
 }
 
-#[allow(dead_code)]
 trait WithRuntime {
     fn with_runtime(self, runtime: &str) -> Self;
 }
@@ -857,5 +849,24 @@ mod tests {
         run(&["checkout", "-q", "-b", "other"]);
         assert!(checkout_moved("S-move", &worktree).expect("the branch changed").contains("switched from"));
         let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn a_persons_input_on_the_browser_takes_it_from_the_agent_and_refuses_the_agent_until_idle() {
+        block_on(async {
+            let agent = "BROWSER-AGENT";
+            assert!(hold_browser_for_sequence(agent).await.is_ok(), "the agent drives the browser first");
+            person_used_browser().await;
+            let state = broker().snapshot(None, None).await;
+            let owner = state["claims"].as_array().and_then(|claims| claims.iter().find(|c| c["resource"]["kind"] == "browser")).map(|c| c["owner"]["sessionKey"].clone());
+            assert_eq!(owner, Some(json!(person_session())), "the person now holds the browser claim");
+            let refused = hold_browser_for_sequence(agent).await.expect_err("the agent is refused while the person is using it");
+            assert!(refused.contains("a person is using the in-app browser"), "{refused}");
+            // More input refreshes the hold instead of taking again.
+            person_used_browser().await;
+            let held = lock(person_hold()).as_ref().expect("held").request_id.clone();
+            hand_browser_back(&held).await;
+            assert!(hold_browser_for_sequence(agent).await.is_ok(), "handed back after the person's idle period");
+        });
     }
 }
