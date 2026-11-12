@@ -43,6 +43,11 @@ fn is_workflow_metadata_path(value: &str) -> bool {
 // ── git ──────────────────────────────────────────────────────────────────
 
 async fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
+    git_raw(cwd, args).await.map(|out| out.trim().to_string())
+}
+
+/// Like [`git`] but leaves the output as git wrote it (porcelain lines start with a space).
+async fn git_raw(cwd: &Path, args: &[&str]) -> Result<String, String> {
     let output = Command::new("git")
         .args(args)
         .current_dir(cwd)
@@ -51,7 +56,7 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
         .await
         .map_err(|e| format!("git {}: {e}", args.first().copied().unwrap_or("")))?;
     if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         Err(if stderr.is_empty() {
@@ -64,7 +69,7 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
 
 /// Paths a worktree would leave out because they are uncommitted, ignoring Praxis metadata.
 pub async fn base_blocking_paths(folder: &Path) -> Result<Vec<String>, String> {
-    let status = git(
+    let status = git_raw(
         folder,
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )
