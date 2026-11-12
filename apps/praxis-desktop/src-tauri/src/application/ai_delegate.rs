@@ -146,6 +146,9 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     let task_overrides = input.get("task").filter(|t| t.is_object());
     let task = if let Some(review) = &review {
         review["task"].clone()
+    } else if input["taskDefinition"].is_object() {
+        // A workflow run (delivery, decomposition, merge-request feedback) brings its own contract.
+        input["taskDefinition"].clone()
     } else if !input["mode"].is_null() {
         build_mode_task(&mode, &issue, &analysis_prompt, task_overrides.unwrap_or(&Value::Null))
     } else if let Some(overrides) = task_overrides {

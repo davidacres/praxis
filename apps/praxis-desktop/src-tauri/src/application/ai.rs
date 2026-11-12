@@ -58,6 +58,11 @@ fn read_analysis(user_data_dir: &Path) -> Result<BTreeMap<String, Value>> {
     Ok(BTreeMap::new())
 }
 
+/// Whether the analysis gate for `issue_key` has been confirmed.
+pub(super) fn is_analysis_confirmed(user_data_dir: &Path, issue_key: &str) -> Result<bool> {
+    Ok(read_analysis(user_data_dir)?.get(issue_key).is_some_and(|a| a["confirmed"] == true))
+}
+
 fn save_analysis(user_data_dir: &Path, analysis: &BTreeMap<String, Value>) -> Result<()> {
     let path = analysis_file(user_data_dir);
     let key = if let Some(content) = read(&path)?
@@ -397,11 +402,6 @@ pub fn dispatch(
             super::workflow_packs::assign(host, issue_key, workflow, "manual").map_err(failure)?;
             Ok(Value::Null)
         }
-        "ai:localPeerReview" | "ai:localPeerReviewFollowUp" => Ok(json!({
-            "comments": [],
-            "approved": true
-        })),
-
         // 6. Analysis
         "ai:getAnalysis" => {
             let issue_key = text(args, 0)?;
@@ -459,13 +459,7 @@ pub fn dispatch(
             Ok(Value::Null)
         }
 
-        // 7. Delivery & MR
-        "ai:startDelivery" | "ai:decomposeFeature" | "ai:startSubTaskDelivery" => {
-            Ok(json!({ "deliveryId": format!("del-{}", Uuid::new_v4()), "status": "started" }))
-        }
-        "ai:listMergeRequests" => Ok(json!([])),
-        "ai:createMergeRequest" => Ok(json!({ "id": "mr-1", "url": "https://git.example/mr/1" })),
-        "ai:checkMergeRequestFeedback" => Ok(json!({ "feedback": [] })),
+        // 7. Delivery, peer review and merge requests live in `ai_workflows`.
 
         // 8. Feedback & prompt evaluation
         "ai:evaluatePrompt" => {

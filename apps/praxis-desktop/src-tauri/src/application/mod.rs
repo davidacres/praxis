@@ -8,6 +8,7 @@ mod acp_host;
 mod api_host;
 mod ai_delegate;
 mod ai_review;
+mod ai_workflows;
 mod gadget_service;
 mod ai_session_ops;
 mod session_handover;
@@ -531,6 +532,12 @@ impl Application {
             // neither may hold the profile lock.
             _ if ai_review::CHANNELS.contains(&channel) => {
                 if let Some(result) = ai_review::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
+            }
+            // Workflow runs launch agents, call the tracker and GitLab, and wait on model replies.
+            _ if ai_workflows::CHANNELS.contains(&channel) => {
+                if let Some(result) = ai_workflows::dispatch(host, &host.config().user_data_dir, channel, args) {
                     return result;
                 }
             }
