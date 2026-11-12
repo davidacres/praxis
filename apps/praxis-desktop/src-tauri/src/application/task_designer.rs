@@ -188,18 +188,161 @@ fn generate_master_plan(host: &HostContext, state: &Value) -> Result<Value> {
     }))
 }
 
-fn flow_recommendation_error(host: &HostContext, nodes: Option<usize>) -> praxis_contracts::RustRpcError {
-    let _ = host;
-    let key_configured = ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN", "FROSTY_VERCEL_API_KEY"]
+const RECOMMENDATION_SYSTEM_PROMPT: &str = "You are an execution-planning assistant for a task designer canvas.
+Return exactly one JSON code block and nothing else.
+
+Schema:
+{
+  \"orderedNodeIds\": [\"required ordered list of canvas node ids\"],
+  \"connectors\": [
+    {
+      \"sourceNodeId\": \"canvas node id\",
+      \"targetNodeId\": \"canvas node id\"
+    }
+  ],
+  \"rationale\": \"optional short explanation\"
+}
+
+Rules:
+- Include every known node id exactly once in orderedNodeIds.
+- Keep connector directions forward according to orderedNodeIds.
+- Do not create self-links.
+- Prefer the minimum connectors needed for a clear start-to-finish flow.
+- Never include markdown outside the single JSON code block.";
+
+fn json_payload(text: &str) -> Option<String> {
+    let lower = text.to_lowercase();
+    if let Some(start) = lower.find("```json") {
+        let rest = &text[start + 7..];
+        if let Some(end) = rest.find("```") {
+            return Some(rest[..end].trim().to_owned());
+        }
+    }
+    let trimmed = text.trim();
+    trimmed.starts_with('{').then(|| trimmed.to_owned())
+}
+
+/// `parseTaskDesignerFlowRecommendation`: every canvas node exactly once, forward connectors only.
+fn parse_recommendation(text: &str, nodes: &[Value]) -> Option<Value> {
+    let parsed: Value = serde_json::from_str(&json_payload(text)?).ok()?;
+    parsed.as_object()?;
+    let ids: Vec<String> = nodes.iter().filter_map(|n| n["id"].as_str().map(str::to_owned)).collect();
+    let mut ordered: Vec<String> = Vec::new();
+    for id in parsed["orderedNodeIds"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+        let id = id.trim();
+        if !id.is_empty() && ids.iter().any(|n| n == id) && !ordered.iter().any(|n| n == id) {
+            ordered.push(id.to_owned());
+        }
+    }
+    for id in &ids {
+        if !ordered.contains(id) {
+            ordered.push(id.clone());
+        }
+    }
+    if ordered.len() != nodes.len() {
+        return None;
+    }
+    let index = |id: &str| ordered.iter().position(|n| n == id);
+    let mut connectors: Vec<(String, String)> = Vec::new();
+    for connector in parsed["connectors"].as_array().into_iter().flatten() {
+        let source = connector["sourceNodeId"].as_str().unwrap_or_default().trim().to_owned();
+        let target = connector["targetNodeId"].as_str().unwrap_or_default().trim().to_owned();
+        if source.is_empty() || target.is_empty() || source == target {
+            continue;
+        }
+        let (Some(from), Some(to)) = (index(&source), index(&target)) else { continue };
+        if from >= to || connectors.iter().any(|(s, t)| *s == source && *t == target) {
+            continue;
+        }
+        connectors.push((source, target));
+    }
+    if connectors.is_empty() {
+        for pair in ordered.windows(2) {
+            connectors.push((pair[0].clone(), pair[1].clone()));
+        }
+    }
+    let mut result = json!({
+        "orderedNodeIds": ordered,
+        "connectors": connectors.iter().map(|(s, t)| json!({ "sourceNodeId": s, "targetNodeId": t })).collect::<Vec<_>>()
+    });
+    if let Some(rationale) = parsed["rationale"].as_str().map(str::trim).filter(|r| !r.is_empty()) {
+        result["rationale"] = json!(rationale);
+    }
+    Some(result)
+}
+
+fn gateway_key_configured(host: &HostContext) -> bool {
+    super::ai_providers::api_connection(host, "vercel-gateway")
+        .map(|(connection, _)| connection.options.api_key.as_deref().is_some_and(|k| !k.trim().is_empty()))
+        .unwrap_or(false)
+}
+
+fn recommend_with_gateway(host: &HostContext, nodes: &[Value], connectors: &[Value]) -> Result<Value> {
+    let (connection, model) = super::ai_providers::api_connection(host, "vercel-gateway")?;
+    if nodes.is_empty() {
+        return Ok(json!({ "orderedNodeIds": [], "connectors": [] }));
+    }
+    let prompt = [
+        "Recommend a start-to-finish execution flow for this existing task-designer canvas.".to_owned(),
+        "Prioritize dependency-safe sequencing and practical implementation order.".to_owned(),
+        String::new(),
+        "Canvas nodes (JSON):".to_owned(),
+        serde_json::to_string_pretty(nodes).unwrap_or_default(),
+        String::new(),
+        "Existing directed connectors (JSON):".to_owned(),
+        serde_json::to_string_pretty(connectors).unwrap_or_default(),
+    ]
+    .join("\n");
+    let (content, _) = super::runtime::block_on(super::api_host::run_provider_prompt(&connection, &model, RECOMMENDATION_SYSTEM_PROMPT, &prompt, None, |_| {}))
+        .map_err(failure)?;
+    parse_recommendation(&content, nodes).ok_or_else(|| failure("Gateway flow recommendation did not return a valid JSON result."))
+}
+
+fn recommend_flow(host: &HostContext, args: &[Value]) -> Result<Value> {
+    if !gateway_key_configured(host) {
+        return Err(failure("No Vercel AI Gateway API key configured. Add one under Settings → AI Provider."));
+    }
+    let nodes = args.first().and_then(Value::as_array).cloned().unwrap_or_default();
+    if nodes.len() < 2 {
+        return Err(failure("Add at least two ticket nodes before requesting an AI recommendation."));
+    }
+    let connectors = args.get(1).and_then(Value::as_array).cloned().unwrap_or_default();
+    recommend_with_gateway(host, &nodes, &connectors)
+}
+
+fn recommend_board_flow(host: &HostContext, catalog: &mut Catalog, args: &[Value]) -> Result<Value> {
+    if !gateway_key_configured(host) {
+        return Err(failure("No Vercel AI Gateway API key configured. Add one under Settings → AI Provider."));
+    }
+    let board = args.first().cloned().unwrap_or(Value::Null);
+    let name = board["name"].as_str().unwrap_or_default().to_owned();
+    let details = boards::dispatch(host, catalog, "board:get", &[board.clone()])?;
+    let issues = details["issues"].as_array().cloned().unwrap_or_default();
+    if issues.is_empty() {
+        return Err(failure(format!("Board \"{name}\" has no tickets to recommend.")));
+    }
+    if issues.len() < 2 {
+        return Err(failure(format!("Board \"{name}\" needs at least two tickets for AI recommendation.")));
+    }
+    let nodes: Vec<Value> = issues
         .iter()
-        .any(|name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty()));
-    if !key_configured {
-        return failure("No Vercel AI Gateway API key configured. Add one under Settings → AI Provider.");
-    }
-    if nodes.is_some_and(|count| count < 2) {
-        return failure("Add at least two ticket nodes before requesting an AI recommendation.");
-    }
-    failure("AI flow recommendation through the gateway is not implemented in the desktop backend yet.")
+        .enumerate()
+        .map(|(index, issue)| {
+            let mut node = json!({
+                "id": format!("board-{}-{index}", issue["key"].as_str().unwrap_or_default()),
+                "issueKey": issue["key"], "summary": issue["summary"], "issueType": issue["issueType"],
+                "status": issue["status"], "projectKey": issue["projectKey"]
+            });
+            for field in ["assignee", "priority"] {
+                if !issue[field].is_null() {
+                    node[field] = issue[field].clone();
+                }
+            }
+            node
+        })
+        .collect();
+    let recommendation = recommend_with_gateway(host, &nodes, &[])?;
+    Ok(json!({ "boardName": name, "nodes": nodes, "recommendation": recommendation }))
 }
 
 pub fn dispatch(
@@ -250,11 +393,8 @@ pub fn dispatch(
             }
             resolve_issue(host, catalog, key, args.get(1).and_then(Value::as_str))
         }
-        "taskDesigner:recommendFlow" => {
-            let nodes = args.first().and_then(Value::as_array).map_or(0, Vec::len);
-            Err(flow_recommendation_error(host, Some(nodes)))
-        }
-        "taskDesigner:recommendBoardFlow" => Err(flow_recommendation_error(host, None)),
+        "taskDesigner:recommendFlow" => recommend_flow(host, args),
+        "taskDesigner:recommendBoardFlow" => recommend_board_flow(host, catalog, args),
         "taskDesigner:generateMasterPlan" => {
             let state = args.get(2).ok_or_else(|| failure("Canvas state is required."))?;
             generate_master_plan(host, state)

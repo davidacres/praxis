@@ -1069,38 +1069,21 @@ fn workflows_templates_runs_lifecycle_and_policies() {
 fn system_mobile_pairing_and_clear_data() {
     let profile = Profile::new();
 
-    // 1. Mobile host info snapshot
+    // 1. Mobile host snapshot: identity, an off listener, nothing paired.
     let info = profile.rpc("settings:getMobileHostInfo", vec![]);
-    assert_eq!(info["port"], 47833);
-    assert_eq!(info["status"], "listening");
+    assert_eq!(info["listener"]["listening"], false);
+    assert_eq!(info["listener"]["mode"], "off");
+    assert_eq!(info["fingerprint"].as_str().expect("fingerprint").len(), 16);
+    assert_eq!(info["devices"].as_array().expect("devices").len(), 0);
+    assert!(info.get("invitation").is_none());
 
-    // 2. Create pairing invitation
+    // 2. Create pairing invitation: a single-use token, never a private key.
     let invitation = profile.rpc("settings:createMobilePairingInvitation", vec![]);
-    assert!(invitation["pairingCode"].as_str().is_some());
-    let code = invitation["pairingCode"]
-        .as_str()
-        .expect("pairing code")
-        .to_string();
+    assert_eq!(invitation["invitation"]["tokenId"].as_str().expect("token").len(), 12);
+    assert!(!invitation.to_string().contains("rivate"));
 
-    // 3. Confirm pairing
-    let confirmed = profile.rpc(
-        "settings:confirmMobilePairing",
-        vec![
-            json!(code),
-            json!({
-                "label": "My iPhone",
-                "capabilities": ["view", "edit"],
-                "projectIds": ["proj-1"]
-            }),
-        ],
-    );
-    let devices = confirmed["devices"].as_array().expect("devices");
-    assert_eq!(devices.len(), 1);
-    assert_eq!(devices[0]["name"], "My iPhone");
-    let device_id = devices[0]["id"].as_str().expect("device id").to_string();
-
-    // 4. Revoke device
-    let revoked = profile.rpc("settings:revokeMobilePairedDevice", vec![json!(device_id)]);
+    // 3. Revoking an unknown device is harmless.
+    let revoked = profile.rpc("settings:revokeMobilePairedDevice", vec![json!("device:none")]);
     assert_eq!(revoked["devices"].as_array().expect("devices").len(), 0);
 
     // 5. Update checks and coordination
