@@ -95,7 +95,9 @@ async function launch(mode: 'unsupported' | 'vulnerable'): Promise<{ page: Page;
           outputs: [{ id: 'security-report', kind: 'report', required: true }], satisfiesGate: 'security' },
         { type: 'check', id: 'qa', name: 'QA', x: 200, y: 80, inputs: ['prep-log'], command: 'node',
           args: ['-e', "setTimeout(() => { console.log('qa ok'); process.exit(0); }, 4000)"], successExitCodes: [0],
-          outputs: [{ id: 'qa-results', kind: 'log', required: true }], satisfiesGate: 'qa' },
+          outputs: [{ id: 'qa-results', kind: 'log', required: true }], satisfiesGate: 'qa',
+          // These specs are about a slow sibling, not QA's changed-tests contract: run the command itself.
+          affectedTests: false },
         { type: 'join', id: 'gates', name: 'Gates', x: 400, y: 0, inputs: [], mode: 'all' },
         { type: 'approval', id: 'approve', name: 'Approve', x: 600, y: 0, inputs: [], prompt: 'Ship?', requiredGates: ['qa', 'security'], allowBypass: false }
       ],

@@ -54,6 +54,22 @@ interface AiReviewPageProps {
  * is a session, the same conversation is also in Sessions, and a free-text
  * follow-up here is an ordinary turn of it.
  */
+/**
+ * Which of two reads of one review session to keep. The gap-closing read above is answered over a
+ * different channel from the live pushes, so a quick review can finish and push its terminal state
+ * before a read taken while it was still running arrives; applying that read blindly left the page
+ * on "Reviewing…" for a review that was already done. A read never takes the page backwards:
+ * it loses to a finished record of the same session, or to one that already holds more events.
+ */
+function laterSessionRecord(current: AgentSessionRecord | undefined, read: AgentSessionRecord): AgentSessionRecord {
+  if (!current || current.sessionId !== read.sessionId) return read;
+  const currentDone = isTerminalAgentState(current.state);
+  const readDone = isTerminalAgentState(read.state);
+  if (currentDone !== readDone) return currentDone ? current : read;
+  const count = (record: AgentSessionRecord) => record.eventCount ?? record.events?.length ?? 0;
+  return count(read) < count(current) ? current : read;
+}
+
 export function AiReviewPage({
   issueKey,
   connectionId,
@@ -99,7 +115,7 @@ export function AiReviewPage({
     // A record can change between the snapshot we hold and the subscription
     // above; one fresh read closes that gap.
     void window.praxis.ai.getTicketReview(issueKey).then(latest => {
-      if (latest?.issueKey === sessionKey) setSession(latest);
+      if (latest?.issueKey === sessionKey) setSession(current => laterSessionRecord(current, latest));
     }).catch(() => undefined);
     return unsubscribe;
   }, [sessionKey, issueKey]);

@@ -237,6 +237,11 @@ impl WorkflowRunPersistence for FileRuns {
 
 // ── workspace ────────────────────────────────────────────────────────────
 
+/// Re-attaches (or recreates) a run's worktree, e.g. to diagnose a run whose checkout was released.
+pub async fn reacquire_worktree(host: &HostContext, run: &WorkflowRun) -> Option<String> {
+    GitWorkspace { host: host.clone() }.acquire(run).await.ok()
+}
+
 struct GitWorkspace {
     host: HostContext,
 }
@@ -723,6 +728,48 @@ impl HostDispatcher {
         None
     }
 
+    /// The ticket's own changed tests (`runChangeTests`). Selection or runner failures are QA
+    /// failures: QA never passes without running them.
+    async fn run_change_tests(
+        &self,
+        node: &WorkflowCheckNode,
+        context: &StageDispatchContext,
+        worktree: &Path,
+        project_folder: &Path,
+        on_line: &mut (dyn FnMut(&str) + Send),
+    ) -> praxis_workflows::check_process::CheckProcessResult {
+        use super::workflow_affected_tests as affected;
+        let failure = |message: String| {
+            context.reporter.report_progress(&message);
+            praxis_workflows::check_process::CheckProcessResult {
+                code: Some(1),
+                output: format!("== Tests for this change ==\n{message}"),
+                ..Default::default()
+            }
+        };
+        let base = if context.run.scheduled_launch_token.is_some() {
+            affected::scheduled_ticket_base(worktree, &context.run.started_at, context.run.worktree_base_ref.as_deref()).await
+        } else if let Some(base) = context.run.worktree_base_ref.clone() {
+            Some(base)
+        } else {
+            affected::run_fork_point(worktree, project_folder).await
+        };
+        let Some(base) = base else {
+            return failure("Could not determine this ticket\u{2019}s worktree base, so QA cannot safely identify its changed tests.".to_string());
+        };
+        match affected::select_changed_tests(worktree, &base).await {
+            Ok(selection) => {
+                context.reporter.report_progress(&match selection.tests.len() {
+                    0 => "No test files were added or updated in this ticket.".to_string(),
+                    1 => "Running the 1 test file for this change.".to_string(),
+                    n => format!("Running the {n} test files for this change."),
+                });
+                affected::run_affected_tests(worktree, &selection, Some(&context.cancel), node.timeout_ms, on_line).await
+            }
+            Err(error) => failure(format!("Could not pick or run the tests for this change: {error}")),
+        }
+    }
+
     async fn run_check_node(
         &self,
         node: &WorkflowCheckNode,
@@ -766,14 +813,35 @@ impl HostDispatcher {
                 reporter.report_progress(&format!("QA test: {trimmed}"));
             }
         };
-        let result = spawn_check(
-            node,
-            &cwd,
-            &env,
-            Some(&context.cancel),
-            Some(&mut on_line),
-        )
-        .await;
+        // QA's deterministic contract is the ticket's own changed tests; the template's historical
+        // `npm test` command would launch every unit suite plus desktop smoke for every ticket.
+        let ticket_qa = node.satisfies_gate == Some(praxis_workflows::types::WorkflowGateKind::Qa)
+            && node.affected_tests != Some(false);
+        let mut result = if ticket_qa {
+            praxis_workflows::check_process::CheckProcessResult {
+                code: Some(0),
+                output: "QA runs only test files added or updated in this ticket.".to_string(),
+                ..Default::default()
+            }
+        } else {
+            spawn_check(node, &cwd, &env, Some(&context.cancel), Some(&mut on_line)).await
+        };
+        if ticket_qa
+            && !context.cancel.is_cancelled()
+            && let Some(worktree) = &context.worktree_path
+            && result.code.is_some_and(|c| success_codes.contains(&c))
+        {
+            let fallback_folder = workflows::project_folder(&self.host, &context.run.project_id).unwrap_or_else(|| cwd.clone());
+            let affected = self
+                .run_change_tests(node, context, Path::new(worktree), &fallback_folder, &mut on_line)
+                .await;
+            result = praxis_workflows::check_process::CheckProcessResult {
+                code: if affected.code == Some(0) { result.code } else { affected.code },
+                timed_out: result.timed_out || affected.timed_out,
+                output: format!("{}\n\n{}", result.output.trim_end(), affected.output),
+                error: result.error,
+            };
+        }
 
         // Whatever the check emitted is evidence, even when it was stopped or timed out.
         let spawn_failed = result.code.is_none() && !result.timed_out && !context.cancel.is_cancelled();
