@@ -238,6 +238,7 @@ const praxis: PraxisIpc = {
     forward: () => ipcRenderer.invoke('browser:forward'),
     reload: () => ipcRenderer.invoke('browser:reload'),
     getState: () => ipcRenderer.invoke('browser:getState'),
+    personInput: () => ipcRenderer.invoke('browser:personInput'),
     onDidNavigate: (listener: (state: BrowserNavigationState) => void) => {
       const handler = (_event: unknown, state: BrowserNavigationState) => listener(state);
       ipcRenderer.on('browser:didNavigate', handler);

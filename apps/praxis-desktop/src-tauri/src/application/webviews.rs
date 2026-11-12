@@ -102,6 +102,10 @@ impl WebviewManager {
                 super::runtime::block_on(super::ai_browser::reload(host)).map_err(failure)?;
                 Ok(Value::Null)
             }
+            "browser:personInput" => {
+                super::runtime::block_on(super::coordination::person_used_browser());
+                Ok(Value::Null)
+            }
             "browser:getState" => Ok(super::ai_browser::get_state()),
             "preview:attach" => Ok(Value::Null),
             "preview:setBounds" => {

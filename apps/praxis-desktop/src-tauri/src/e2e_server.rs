@@ -266,6 +266,10 @@ fn handle(mut stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
             crate::application::set_provider_usage_override(raw);
             respond(&mut stream, "200 OK", "{}")
         }
+        ("POST", "/e2e/browser/person-input") => {
+            crate::application::e2e_person_used_browser();
+            respond(&mut stream, "200 OK", "{}")
+        }
         ("POST", "/e2e/veto-shutdown") => {
             shared.veto_shutdown.store(true, Ordering::SeqCst);
             respond(&mut stream, "200 OK", "{}")

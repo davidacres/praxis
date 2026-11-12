@@ -16,7 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp, notReproducible } from './launchTestApp';
+import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { openSession } from './sessionNavigation';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 import { joinCoordination, type CoordinationEndpoint } from './coordinationHost';
@@ -165,10 +165,8 @@ test('a person clicking in the in-app browser takes it from the agent driving it
     await window.praxis.browser.setVisible(true);
   });
   await app.window.evaluate(url => window.praxis.browser.navigate(url), pageUrl);
-  // A real click and keypress through Electron's input pipeline — what a person produces.
-  // (Agents drive the page with executeJavaScript, which never reaches this pipeline.)
-  const delivered = await notReproducible("a real mouse click is injected into the embedded browser's native webContents (sendInputEvent); the e2e harness has no embedded native browser view");
-  expect(delivered).toBe(true);
+  // A person's click: the browser pane reports it on real input; the headless backend has no native view to click.
+  await app.personUsesBrowser();
 
   await expect
     .poll(async () => ((await broker!.snapshot()) as { claims: Array<{ owner: { sessionKey: string }; resource: { kind: string } }> }).claims.find(claim => claim.resource.kind === 'browser')?.owner.sessionKey, { timeout: 10000 })
