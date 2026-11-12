@@ -21,6 +21,80 @@ use super::session_store::store;
 use super::team_chat_core::*;
 use super::now;
 
+// ── fault injection (e2e only) ───────────────────────────────────────────
+
+/// Controlled faults for the e2e suite, standing in for the Electron-era patches of the adapter and
+/// of `fs.promises`. Nothing can arm one unless the process was started with `PRAXIS_E2E=1`
+/// (the control channel is only registered then), so a shipped app never carries a live fault.
+pub mod faults {
+    use std::sync::Mutex;
+
+    use serde_json::Value;
+
+    #[derive(Default)]
+    struct Faults {
+        /// The next dispatch fails as if the provider may have accepted the request.
+        unknown_once: bool,
+        /// Every durable commit fails with this message (a full disk).
+        fail_commits: Option<String>,
+        /// Arms `fail_commits` once the next execution has finished and been accepted.
+        fail_commits_after_execute: Option<String>,
+        /// Dispatch waits until this is cleared.
+        hold_dispatch: bool,
+    }
+
+    static FAULTS: Mutex<Faults> = Mutex::new(Faults {
+        unknown_once: false,
+        fail_commits: None,
+        fail_commits_after_execute: None,
+        hold_dispatch: false,
+    });
+
+    fn faults() -> std::sync::MutexGuard<'static, Faults> {
+        FAULTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Applies a control message: a present key sets that fault (`null` clears it); `reset` clears all.
+    pub fn control(message: &Value) {
+        let mut state = faults();
+        if message["reset"] == true {
+            *state = Faults::default();
+        }
+        if let Some(flag) = message.get("unknownOnce") {
+            state.unknown_once = flag == &Value::Bool(true);
+        }
+        if let Some(text) = message.get("failCommits") {
+            state.fail_commits = text.as_str().map(str::to_owned);
+        }
+        if let Some(text) = message.get("failCommitsAfterExecute") {
+            state.fail_commits_after_execute = text.as_str().map(str::to_owned);
+        }
+        if let Some(flag) = message.get("holdDispatch") {
+            state.hold_dispatch = flag == &Value::Bool(true);
+        }
+    }
+
+    pub fn take_unknown_once() -> bool {
+        std::mem::take(&mut faults().unknown_once)
+    }
+
+    pub fn commit_failure() -> Option<String> {
+        faults().fail_commits.clone()
+    }
+
+    /// Called when an execution has finished: arms the delayed commit failure.
+    pub fn arm_after_execute() {
+        let mut state = faults();
+        if let Some(message) = state.fail_commits_after_execute.take() {
+            state.fail_commits = Some(message);
+        }
+    }
+
+    pub fn dispatch_held() -> bool {
+        faults().hold_dispatch
+    }
+}
+
 // ── storage (`teamChatRepository.ts`) ────────────────────────────────────
 
 pub fn chats_file(dir: &Path) -> PathBuf {
@@ -91,6 +165,9 @@ pub fn read_snapshot(dir: &Path) -> Fallible<Value> {
 /// Temp file, fsync, rename: a reader sees the old file or the new one, never a torn write.
 fn commit(path: &Path, serialized: &str) -> Fallible {
     use std::io::Write;
+    if let Some(message) = faults::commit_failure() {
+        return Err(message);
+    }
     let directory = path.parent().ok_or("Team chat storage has no folder.")?;
     std::fs::create_dir_all(directory).map_err(|e| e.to_string())?;
     let temp = PathBuf::from(format!("{}.{}.tmp", path.display(), uuid::Uuid::new_v4()));
@@ -897,6 +974,9 @@ impl Coordinator {
             let abort_key = format!("{id}:{turn_id}:{attempt_id}");
             self.loops().aborts.insert(abort_key.clone(), Arc::clone(&abort));
             let context = Arc::new(ExecContext { coordinator: Arc::clone(&self), conversation_id: id.to_owned(), turn_id: turn_id.clone(), attempt_id: attempt_id.clone(), epoch: epoch.clone(), accepted: Mutex::new(false) });
+            while faults::dispatch_held() {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
             let outcome = Arc::clone(&self)
                 .execute(Arc::clone(&context), &current, &turn, &attempt, &participant, &prepared.prompt, &native_prepared.prompt, Arc::clone(&abort))
                 .await;
@@ -905,6 +985,7 @@ impl Coordinator {
             match outcome {
                 Ok(value) => {
                     context.accepted();
+                    faults::arm_after_execute();
                     result = Some(value);
                 }
                 Err(error) => execution_error = Some(error),
@@ -1245,6 +1326,9 @@ impl Coordinator {
         if abort.aborted() {
             return Err(ExecError::plain("Team chat execution cancelled."));
         }
+        if faults::take_unknown_once() {
+            return Err(ExecError { message: "Controlled unknown outcome".into(), unknown: true });
+        }
         let current = self.prepare_configuration(conversation, turn, participant).map_err(ExecError::plain)?;
         let binding = arr_of(conversation, "bindings").iter().find(|b| b["id"] == attempt["bindingId"] && b["status"] == "valid");
         let expected = payload_digest(&current).map_err(ExecError::plain)?;
@@ -1581,5 +1665,23 @@ pub fn recover_on_startup(host: &HostContext) {
     let coordinator = coordinator(host);
     if let Err(message) = coordinator.initialize() {
         eprintln!("Team chat recovery failed: {message}");
+    }
+}
+
+#[cfg(test)]
+mod fault_tests {
+    use super::faults;
+    use serde_json::json;
+
+    #[test]
+    fn an_unknown_outcome_fault_fires_once_and_dispatch_hold_follows_its_flag() {
+        assert!(!faults::take_unknown_once());
+        faults::control(&json!({ "unknownOnce": true }));
+        assert!(faults::take_unknown_once());
+        assert!(!faults::take_unknown_once(), "one failure per arming");
+        faults::control(&json!({ "holdDispatch": true }));
+        assert!(faults::dispatch_held());
+        faults::control(&json!({ "holdDispatch": false }));
+        assert!(!faults::dispatch_held());
     }
 }

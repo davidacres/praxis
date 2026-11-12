@@ -33,6 +33,26 @@ fn value(args: &[Value], index: usize) -> Result<&Value, RustRpcError> {
     args.get(index)
         .ok_or_else(|| failure("Profile argument is missing."))
 }
+/// The working folder behind a project id (the renderer names projects, never paths). An absolute
+/// path is taken as the folder itself, for callers that already resolved it.
+fn project_folder(host: &HostContext, project: &str) -> Option<String> {
+    if Path::new(project).is_absolute() {
+        return Some(project.to_owned());
+    }
+    let response = host.dispatch_rpc(praxis_contracts::RustRpcRequest {
+        id: "profile-folder".into(),
+        channel: "projects:get".into(),
+        args: vec![json!(project)],
+    });
+    response
+        .result
+        .filter(|_| response.ok)
+        .and_then(|found| found["workspaceFolder"].as_str().map(str::to_owned))
+        .filter(|folder| !folder.is_empty())
+}
+fn no_folder() -> RustRpcError {
+    failure("This project has no working folder to store a run profile in.")
+}
 fn deployment_path(folder: &str, id: &str) -> PathBuf {
     Path::new(folder)
         .join(DEPLOYMENT_PROFILES_DIR)
@@ -140,25 +160,20 @@ async fn discover(folder: &str) -> Vec<Value> {
 
 pub fn register_profile_channels(host: &HostContext, runtime: &Handle) {
     let handle = runtime.clone();
-    host.register_handler("projects:getRunProfile", move |_, args| {
-        let folder = text(args, 0)?;
-        if folder.is_empty() {
+    host.register_handler("projects:getRunProfile", move |ctx, args| {
+        let Some(folder) = project_folder(ctx, text(args, 0)?) else {
             return Ok(json!({"issues": []}));
-        }
-        Ok(handle.block_on(read(&Path::new(folder).join(RUN_PROFILE_FILE_NAME), false)))
+        };
+        Ok(handle.block_on(read(&Path::new(&folder).join(RUN_PROFILE_FILE_NAME), false)))
     });
     host.register_handler("projects:validateRunProfile", |_, args| {
         let errors = validate_run_profile_value(value(args, 0)?);
         Ok(json!({"valid": errors.is_empty(), "errors": errors}))
     });
     let handle = runtime.clone();
-    host.register_handler("projects:saveRunProfile", move |_, args| {
-        let folder = text(args, 0)?;
-        if folder.is_empty() {
-            return Err(failure(
-                "This project has no working folder to store a run profile in.",
-            ));
-        }
+    host.register_handler("projects:saveRunProfile", move |ctx, args| {
+        let folder = project_folder(ctx, text(args, 0)?).ok_or_else(no_folder)?;
+        let folder = folder.as_str();
         let raw = value(args, 1)?;
         let errors = validate_run_profile_value(raw);
         if !errors.is_empty() {
@@ -190,8 +205,11 @@ pub fn register_profile_channels(host: &HostContext, runtime: &Handle) {
         Ok(Value::Null)
     });
     let handle = runtime.clone();
-    host.register_handler("projects:discoverRunServices", move |_, args| {
-        Ok(json!(handle.block_on(discover(text(args, 0)?))))
+    host.register_handler("projects:discoverRunServices", move |ctx, args| {
+        let Some(folder) = project_folder(ctx, text(args, 0)?) else {
+            return Ok(json!([]));
+        };
+        Ok(json!(handle.block_on(discover(&folder))))
     });
     host.register_handler("deployments:validateProfile", |_, args| {
         let errors = validate_deployment_profile_value(value(args, 0)?);
@@ -207,12 +225,16 @@ pub fn register_profile_channels(host: &HostContext, runtime: &Handle) {
         Ok(json!(issues))
     });
     let handle = runtime.clone();
-    host.register_handler("deployments:getProfile", move |_, args| {
-        Ok(handle.block_on(read(&deployment_path(text(args, 0)?, text(args, 1)?), true)))
+    host.register_handler("deployments:getProfile", move |ctx, args| {
+        let Some(folder) = project_folder(ctx, text(args, 0)?) else {
+            return Ok(json!({"issues": []}));
+        };
+        Ok(handle.block_on(read(&deployment_path(&folder, text(args, 1)?), true)))
     });
     let handle = runtime.clone();
-    host.register_handler("deployments:saveProfile", move |_, args| {
-        let folder = text(args, 0)?;
+    host.register_handler("deployments:saveProfile", move |ctx, args| {
+        let folder = project_folder(ctx, text(args, 0)?).ok_or_else(no_folder)?;
+        let folder = folder.as_str();
         let raw = value(args, 1)?;
         let errors = validate_deployment_profile_value(raw);
         if !errors.is_empty() {
@@ -240,8 +262,11 @@ pub fn register_profile_channels(host: &HostContext, runtime: &Handle) {
         Ok(raw.clone())
     });
     let handle = runtime.clone();
-    host.register_handler("deployments:listProfiles", move |_, args| {
-        let folder = text(args, 0)?;
+    host.register_handler("deployments:listProfiles", move |ctx, args| {
+        let Some(folder) = project_folder(ctx, text(args, 0)?) else {
+            return Ok(json!([]));
+        };
+        let folder = folder.as_str();
         Ok(handle.block_on(async {
             let Ok(mut entries) =
                 tokio::fs::read_dir(Path::new(folder).join(DEPLOYMENT_PROFILES_DIR)).await
@@ -268,4 +293,33 @@ pub fn register_profile_channels(host: &HostContext, runtime: &Handle) {
             json!(profiles)
         }))
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::HostConfig;
+
+    #[test]
+    fn project_ids_resolve_to_their_working_folder() {
+        let dir = std::env::temp_dir().join(format!("praxis-profile-folder-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let host = HostContext::new(HostConfig::for_user_data_dir(&dir, false, true).expect("config"));
+        let folder = dir.join("checkout");
+        let served = folder.to_string_lossy().into_owned();
+        host.register_handler("projects:get", move |_, args| {
+            Ok(match args.first().and_then(Value::as_str) {
+                Some("with-folder") => json!({"id": "with-folder", "workspaceFolder": served}),
+                Some("without-folder") => json!({"id": "without-folder"}),
+                _ => Value::Null,
+            })
+        });
+        assert_eq!(project_folder(&host, "with-folder").as_deref(), Some(folder.to_string_lossy().as_ref()));
+        assert_eq!(project_folder(&host, "without-folder"), None);
+        assert_eq!(project_folder(&host, "unknown"), None);
+        // A caller that already resolved the folder passes it straight through.
+        let absolute = dir.to_string_lossy().into_owned();
+        assert_eq!(project_folder(&host, &absolute).as_deref(), Some(absolute.as_str()));
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

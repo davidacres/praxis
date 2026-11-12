@@ -282,7 +282,7 @@ impl Task {
 
 /// What a turn starts from: a new session, or a follow-up that tries to resume the agent's own.
 pub enum Launch {
-    Fresh { prompt: String },
+    Fresh { prompt: String, images: Vec<Value> },
     FollowUp { prompt: String, resumed_prompt: String, resume_id: Option<String>, images: Vec<Value> },
 }
 
@@ -866,6 +866,8 @@ pub struct StartTask {
     pub command: String,
     pub args: Vec<String>,
     pub mcp_servers: Vec<Value>,
+    /// Images sent with the first prompt (a reconstructed team-chat turn starts a fresh session).
+    pub images: Vec<Value>,
 }
 
 fn purpose_of(task: &Value, issue_key: &str) -> String {
@@ -938,7 +940,7 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
         request.permission_mode.as_deref() == Some("autopilot"),
     );
     let runner = Arc::clone(&task);
-    let launch = Launch::Fresh { prompt: prompt_text };
+    let launch = Launch::Fresh { prompt: prompt_text, images: request.images.clone() };
     runtime().spawn(async move {
         let outcome = tokio::time::timeout(timeout, run_turn(Arc::clone(&runner), request, launch)).await;
         if outcome.is_err() {
@@ -1120,7 +1122,7 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     }
 
     let (text, images, follow_up) = match launch {
-        Launch::Fresh { prompt } => (prompt, Vec::new(), false),
+        Launch::Fresh { prompt, images } => (prompt, images, false),
         Launch::FollowUp { prompt, resumed_prompt, images, .. } => (if resumed { resumed_prompt } else { prompt }, images, true),
     };
     if text.chars().count() > 1_000_000 {
@@ -1462,7 +1464,7 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
 
     let start = StartTask {
         issue, task: record["taskDefinition"].clone(), provider: request.provider, model, reasoning_effort: record["reasoningEffort"].as_str().map(str::to_owned),
-        working_directory: working, tool_mode, permission_mode, auto_approve: record["autoApprovePermissions"] == true, command: request.command, args: request.args, mcp_servers: request.mcp_servers,
+        working_directory: working, tool_mode, permission_mode, auto_approve: record["autoApprovePermissions"] == true, command: request.command, args: request.args, mcp_servers: request.mcp_servers, images: Vec::new(),
     };
     let launch = Launch::FollowUp { prompt, resumed_prompt, resume_id: record["runtimeSessionId"].as_str().map(str::to_owned), images: request.images };
     let runner = Arc::clone(&task);

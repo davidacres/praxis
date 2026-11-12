@@ -1045,10 +1045,15 @@ impl ScheduledRunnerPorts for HostPorts {
     }
 }
 
-/// The process-wide runner, created on first use.
+/// The runner for this profile, created on first use. A process normally has one profile, so this is
+/// effectively process-wide; keying by profile directory keeps a second profile (as in tests that open
+/// several) from being served the first one's runs.
 pub fn runner(host: &HostContext) -> &'static Arc<ScheduledRunRunner> {
-    static RUNNER: OnceLock<Arc<ScheduledRunRunner>> = OnceLock::new();
-    RUNNER.get_or_init(|| Arc::new(ScheduledRunRunner::new(Arc::new(HostPorts { host: host.clone() }))))
+    static RUNNERS: OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, &'static Arc<ScheduledRunRunner>>>> = OnceLock::new();
+    let mut runners = RUNNERS.get_or_init(Default::default).lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    runners.entry(host.config().user_data_dir.clone()).or_insert_with(|| {
+        Box::leak(Box::new(Arc::new(ScheduledRunRunner::new(Arc::new(HostPorts { host: host.clone() })))))
+    })
 }
 
 /// Starts the tick timer once: recover what was in flight, then advance the schedules on an interval.

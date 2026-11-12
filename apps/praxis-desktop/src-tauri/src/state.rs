@@ -126,6 +126,19 @@ impl DesktopState {
         })
     }
 
+    /// The trust rule for `praxis_rpc`: only the local `main` webview speaks the desktop contract.
+    /// Child browsers and any other webview are refused, whatever channel they name.
+    pub fn check_caller(label: &str) -> Result<(), praxis_contracts::RustRpcError> {
+        if label == "main" {
+            Ok(())
+        } else {
+            Err(praxis_contracts::RustRpcError {
+                code: "FORBIDDEN".into(),
+                message: "Only the local main webview may call the desktop contract.".into(),
+            })
+        }
+    }
+
     pub fn allows(&self, channel: &str) -> bool {
         self.contract
             .methods
@@ -219,6 +232,29 @@ pub fn print_contract_audit() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_main_webview_is_a_trusted_caller() {
+        assert!(DesktopState::check_caller("main").is_ok());
+        for label in ["browser", "preview", "untrusted", "", "Main"] {
+            let refused = DesktopState::check_caller(label).expect_err(label);
+            assert_eq!(refused.code, "FORBIDDEN");
+            assert!(refused.message.contains("Only the local main webview"));
+        }
+    }
+
+    #[test]
+    fn capabilities_grant_the_contract_to_the_local_main_window_only() {
+        let main: Value = serde_json::from_str(include_str!("../capabilities/main.json")).expect("main");
+        assert_eq!(main["local"], true, "remote origins must not inherit the main capability");
+        assert_eq!(main["windows"], json!(["main"]));
+        assert!(main["permissions"].as_array().expect("permissions").iter().any(|p| p == "allow-desktop-contract"));
+        let child: Value = serde_json::from_str(include_str!("../capabilities/child-browsers.json")).expect("child");
+        assert_eq!(child["local"], false);
+        assert_eq!(child["permissions"], json!([]), "child browser webviews get no RPC permission");
+        assert!(child["windows"].as_array().expect("windows").iter().any(|w| w == crate::alibaba_window::WINDOW_LABEL), "the console sign-in window is a zero-permission child");
+        assert!(!main["windows"].as_array().expect("windows").iter().any(|w| w == crate::alibaba_window::WINDOW_LABEL));
+    }
 
     #[test]
     fn renderer_contract_excludes_internal_host_controls() {

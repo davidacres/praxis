@@ -46,6 +46,13 @@ impl FileSecretBackend {
     }
 
     fn read(&self) -> BTreeMap<String, String> {
+        // A secrets file that was left group/world-readable (copied, restored from a backup,
+        // created by an older build) is tightened every time it is read, not only on write.
+        #[cfg(unix)]
+        if self.path.exists() {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&self.path, fs::Permissions::from_mode(0o600));
+        }
         fs::read_to_string(&self.path)
             .ok()
             .and_then(|raw| serde_json::from_str(&raw).ok())
@@ -163,6 +170,21 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             assert_eq!(fs::metadata(&path).expect("meta").permissions().mode() & 0o777, 0o600);
         }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reading_repairs_a_permissive_secrets_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("praxis-secrets-repair-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("secrets.json");
+        fs::write(&path, r#"{"k":"fixture-only-value"}"#).expect("write");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).expect("chmod");
+        let backend = FileSecretBackend::new(path.clone());
+        assert_eq!(backend.load().get("k").map(String::as_str), Some("fixture-only-value"));
+        assert_eq!(fs::metadata(&path).expect("meta").permissions().mode() & 0o777, 0o600);
         let _ = fs::remove_dir_all(dir);
     }
 

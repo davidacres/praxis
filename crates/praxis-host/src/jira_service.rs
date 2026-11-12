@@ -327,15 +327,40 @@ impl HttpSession {
             authorize_url.query_pairs_mut().append_pair("audience", "api.atlassian.com").append_pair("prompt", "consent");
         }
 
+        let expected_state = state.clone();
         let waiting = tokio::spawn(async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
-            let (mut socket, _) = tokio::time::timeout(Duration::from_secs(300), listener.accept()).await.map_err(|_| "Timed out waiting for the browser sign-in.".to_owned())?.map_err(|e| e.to_string())?;
-            let mut buffer = vec![0u8; 8192];
-            let read = socket.read(&mut buffer).await.map_err(|e| e.to_string())?;
-            let head = String::from_utf8_lossy(&buffer[..read]).to_string();
-            let target = head.lines().next().unwrap_or_default().split_whitespace().nth(1).unwrap_or("/").to_owned();
-            let _ = socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body>Praxis is connected to Jira. You can close this tab.</body></html>").await;
-            Ok::<String, String>(target)
+            // Only a request carrying this sign-in's `state` may settle it. Anything else on the
+            // loopback port (a probe, a forged callback, a stale replay) is refused and the
+            // legitimate authorisation keeps waiting; the listener is dropped once settled, so
+            // a replay finds nothing listening.
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(300);
+            loop {
+                let (mut socket, _) = tokio::time::timeout_at(deadline, listener.accept())
+                    .await
+                    .map_err(|_| "Timed out waiting for the browser sign-in.".to_owned())?
+                    .map_err(|e| e.to_string())?;
+                let mut buffer = vec![0u8; 8192];
+                let read = match tokio::time::timeout(Duration::from_secs(5), socket.read(&mut buffer)).await {
+                    Ok(Ok(read)) => read,
+                    _ => continue,
+                };
+                let head = String::from_utf8_lossy(&buffer[..read]).to_string();
+                let target = head.lines().next().unwrap_or_default().split_whitespace().nth(1).unwrap_or("/").to_owned();
+                match classify_callback(&target, &expected_state) {
+                    CallbackOutcome::Unrelated => {
+                        let _ = socket.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nNot a valid sign-in response.").await;
+                    }
+                    outcome => {
+                        let _ = socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body>Praxis is connected to Jira. You can close this tab.</body></html>").await;
+                        return match outcome {
+                            CallbackOutcome::Code(code) => Ok::<String, String>(code),
+                            CallbackOutcome::Denied(reason) => Err(reason),
+                            CallbackOutcome::Unrelated => unreachable!(),
+                        };
+                    }
+                }
+            }
         });
 
         if std::env::var("PRAXIS_E2E_NO_BROWSER").as_deref() == Ok("1") {
@@ -349,17 +374,11 @@ impl HttpSession {
             let _ = std::process::Command::new(opener).arg(authorize_url.as_str()).spawn();
         }
 
-        let target = waiting.await.map_err(|e| e.to_string())??;
-        let callback = url::Url::parse(&format!("http://127.0.0.1{target}")).map_err(|e| e.to_string())?;
-        let params: BTreeMap<String, String> = callback.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
-        if params.get("state").map(String::as_str) != Some(state.as_str()) {
-            return Err("The sign-in response did not match the request.".into());
-        }
-        let code = params.get("code").ok_or_else(|| params.get("error").cloned().unwrap_or_else(|| "The sign-in returned no code.".into()))?;
+        let code = waiting.await.map_err(|e| e.to_string())??;
 
         let mut form = vec![
             ("grant_type", "authorization_code".to_owned()),
-            ("code", code.clone()),
+            ("code", code),
             ("code_verifier", verifier),
             ("redirect_uri", redirect_uri),
         ];
@@ -384,6 +403,36 @@ impl HttpSession {
         }
         self.session_id = None;
         Ok(())
+    }
+}
+
+/// What one request to the loopback callback port means for the sign-in in progress.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum CallbackOutcome {
+    /// Missing or mismatched `state`, or not the callback path: refused, the sign-in keeps waiting.
+    Unrelated,
+    /// The authorisation code, carried with this sign-in's `state`.
+    Code(String),
+    /// The authorisation server reported an error (user denied), carried with this sign-in's `state`.
+    Denied(String),
+}
+
+/// Classifies a callback request target (`/callback?code=..&state=..`) against the expected state.
+pub(crate) fn classify_callback(target: &str, expected_state: &str) -> CallbackOutcome {
+    let Ok(callback) = url::Url::parse(&format!("http://127.0.0.1{target}")) else { return CallbackOutcome::Unrelated };
+    if callback.path() != "/callback" {
+        return CallbackOutcome::Unrelated;
+    }
+    let params: BTreeMap<String, String> = callback.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
+    let matches = params.get("state").is_some_and(|got| {
+        got.len() == expected_state.len() && got.bytes().zip(expected_state.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
+    });
+    if !matches {
+        return CallbackOutcome::Unrelated;
+    }
+    match params.get("code") {
+        Some(code) if !code.is_empty() => CallbackOutcome::Code(code.clone()),
+        _ => CallbackOutcome::Denied(params.get("error").cloned().unwrap_or_else(|| "The sign-in returned no code.".into())),
     }
 }
 
@@ -894,6 +943,22 @@ pub fn unconfigured() -> Arc<dyn IssueTrackerService> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn callback_state_gates_the_authorisation_code() {
+        let state = "s3cret-state";
+        // Missing, mismatched or wrong-path requests never settle the sign-in.
+        assert_eq!(classify_callback("/callback?code=attacker", state), CallbackOutcome::Unrelated);
+        assert_eq!(classify_callback("/callback?error=attacker&state=wrong", state), CallbackOutcome::Unrelated);
+        assert_eq!(classify_callback("/callback?code=x&state=s3cret-statf", state), CallbackOutcome::Unrelated);
+        assert_eq!(classify_callback(&format!("/elsewhere?code=x&state={state}"), state), CallbackOutcome::Unrelated);
+        // The legitimate response still resolves after the forged ones.
+        assert_eq!(classify_callback(&format!("/callback?code=legitimate&state={state}"), state), CallbackOutcome::Code("legitimate".into()));
+        // A denial is only honoured when it carries the state too.
+        assert_eq!(classify_callback(&format!("/callback?error=access_denied&state={state}"), state), CallbackOutcome::Denied("access_denied".into()));
+        // A fresh sign-in has a fresh state, so the old one is dead.
+        assert_eq!(classify_callback(&format!("/callback?code=replay&state={state}"), "another-state"), CallbackOutcome::Unrelated);
+    }
 
     fn mock_config() -> Option<StaticJiraConfig> {
         let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/praxis-desktop/e2e/mockJiraMcpServer.mjs");

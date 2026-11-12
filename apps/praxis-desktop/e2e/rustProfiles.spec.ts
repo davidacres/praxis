@@ -1,22 +1,24 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { closeTestApp, launchTestApp, notReproducible } from './launchTestApp';
+import { closeTestApp, launchTestApp } from './launchTestApp';
 
 const channels = ['projects:getRunProfile', 'projects:saveRunProfile', 'projects:validateRunProfile', 'projects:discoverRunServices',
   'deployments:listProfiles', 'deployments:getProfile', 'deployments:saveProfile', 'deployments:validateProfile', 'deployments:preflightCapabilities'];
 
-for (const mode of ['typescript', 'rust'] as const) test(`${mode} profile IPC validates and persists through the real desktop`, async () => {
-  const app = await launchTestApp(undefined, undefined, {
-    PRAXIS_RUST_CHANNELS: mode === 'rust' ? channels.join(',') : 'none',
-    PRAXIS_EXPECT_RUST_MODE: undefined,
-  }, { openNewSession: false });
+// The backend is the Rust host itself, so the Electron-era 'typescript' vs 'rust' channel split has
+// no meaning. The equivalent invariant is that every profile channel is in the contract and
+// registered by the host, which the capability audit reports.
+test('profile IPC is registered by the host and validates and persists through the real desktop', async () => {
+  const app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const folder = path.join(app.userDataDir, 'project'); fs.mkdirSync(folder);
   fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ scripts: { dev: 'not executed by discovery' } }));
   try {
-    const proof = await notReproducible("reads the Electron-main Rust host bridge's migrated channel list; the backend is the Rust host itself now");
-    expect(proof.channels).toEqual(mode === 'rust' ? [...channels].sort() : []);
-    if (mode === 'rust') expect(proof.status.crateVersion).toBeTruthy();
+    const audit = await app.callBackend('desktop:capabilities') as { shell: string; methods: Array<{ channel: string; registered: boolean }> };
+    expect(audit.shell).toBe('tauri');
+    const registered = new Set(audit.methods.filter(method => method.registered).map(method => method.channel));
+    expect(channels.filter(channel => !registered.has(channel))).toEqual([]);
+    expect(audit.methods.map(method => method.channel)).toEqual(expect.arrayContaining(channels));
     const result = await app.window.evaluate(async folderPath => {
       const workspace = (await window.praxis.workspaces.list())[0];
       const project = await window.praxis.projects.create({ name: 'Profile project', key: 'PROF', type: 'software', purpose: '', brief: {},
@@ -45,6 +47,6 @@ for (const mode of ['typescript', 'rust'] as const) test(`${mode} profile IPC va
     expect(result.capabilities).toEqual([]);
     expect(result.discovered).toEqual([{ executable: 'npm', args: ['run', 'dev'], source: 'package.json', relativeDir: '.' }]);
     expect(JSON.parse(fs.readFileSync(path.join(folder, 'run.praxis.json'), 'utf8'))).toEqual(result.run);
-    console.log(`[profile-ipc] ${mode}: validated all nine controls; credentials remain in Electron.`);
+    console.log('[profile-ipc] validated all nine controls through the Rust host.');
   } finally { await closeTestApp(app); }
 });

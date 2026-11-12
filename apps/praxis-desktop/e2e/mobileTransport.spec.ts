@@ -4,23 +4,17 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { MobileSecureClient, generateKeyPair } from '@praxis/mobile-protocol';
 import type { MobileCommand, MobileReadRequest } from '@praxis/core';
-import { launchTestApp, closeTestApp, notReproducible } from './launchTestApp';
+import { launchTestApp, closeTestApp } from './launchTestApp';
 import { chooseOption } from './chipSelect';
-import { selectRustHostBinary } from './rustHostSelection';
 
-const modes = (['typescript', 'rust'] as const).filter(mode =>
-  !process.env.PRAXIS_EXPECT_MOBILE_TRANSPORT || process.env.PRAXIS_EXPECT_MOBILE_TRANSPORT === mode);
-for (const mode of modes) {
-  test(`real phone pairing, scoped reads, schedule idempotency and key rotation on ${mode}`, async () => {
+// The phone listener is the Rust host's (`mobile_bridge` + `mobile_services`). The Electron-era
+// 'typescript' transport variant has no counterpart any more, so there is one run, not two.
+{
+  test('real phone pairing, scoped reads, schedule idempotency and key rotation', async () => {
     test.setTimeout(90000);
-    const app = await launchTestApp(undefined, undefined, {
-      PRAXIS_MOBILE_TRANSPORT: mode,
-      PRAXIS_RUST_CHANNELS: mode === 'rust' ? 'default' : 'none',
-      PRAXIS_RUST_HOST_BIN: mode === 'rust' ? selectRustHostBinary(path.resolve(__dirname, '../../../..')) : undefined,
-    });
+    const app = await launchTestApp();
     const win = app.window;
     let phone: MobileSecureClient | undefined;
-    const childPids: number[] = [];
     try {
       for (const key of ['MOB', 'OTH']) fs.mkdirSync(path.join(app.userDataDir, key), { recursive: true });
       const projects = await win.evaluate(async workspaceFolder => {
@@ -35,10 +29,10 @@ for (const mode of modes) {
       await win.getByTestId('titlebar-settings').click(); await win.getByTestId('settings-nav-mobile').click();
       await chooseOption(win.getByTestId('mobile-access-mode'), 'local-only');
       await expect(win.getByTestId('mobile-listener-status')).toContainText('Listening');
-      const diagnostic = await notReproducible('reads the Electron-main mobile listener diagnostics (mobileListenerInstance); the Rust backend does not expose them');
-      expect(diagnostic.mode).toBe(mode);
-      if (mode === 'rust') { childPids.push(diagnostic.pid); expect(diagnostic.ready).toBe(true); expect(diagnostic.crateVersion).toBeTruthy(); expect(diagnostic.pid).toBeGreaterThan(0); }
-      console.log(`[mobile-dual-mode] ${JSON.stringify(diagnostic)}`);
+      // The listener is the backend itself: it reports its own state, there is no child process to inspect.
+      const hostStatus = await app.callHost('mobile:status');
+      expect(hostStatus.listening).toBe(true);
+      expect(hostStatus.port).toBeGreaterThan(0);
       await win.getByTestId('mobile-create-pairing').click();
       const pairing = await win.evaluate(() => window.praxis.settings.getMobileHostInfo());
       const invitation = pairing.invitation!;
@@ -92,14 +86,8 @@ for (const mode of modes) {
         const records = await win.evaluate(() => window.praxis.ai.listSessions());
         return records.find(record => record.sessionId === session.sessionId)?.state;
       }, { timeout: 15000 }).toBe('completed');
-      if (mode === 'rust') {
-        const served = await notReproducible('reads the Electron-main mobile listener diagnostics (mobileListenerInstance); the Rust backend does not expose them');
-        expect(served.pid).toBe(diagnostic.pid);
-        expect(served.readCalls).toBeGreaterThan(0);
-        expect(served.commandCalls).toBeGreaterThanOrEqual(4);
-        console.log(`[mobile-dual-mode] Served requests: ${JSON.stringify(served)}`);
-      }
-      if (mode === 'rust') {
+      expect((await app.callHost('mobile:status')).connectionCount).toBeGreaterThanOrEqual(1);
+      {
         const folder = path.resolve(__dirname, '../../.praxis/session-artifacts'); fs.mkdirSync(folder, { recursive: true });
         await win.screenshot({ path: path.join(folder, 'rust-mobile-desktop-connected.png') });
       }
@@ -109,15 +97,11 @@ for (const mode of modes) {
       await expect(win.getByTestId('mobile-listener-status')).toContainText('Listening');
       const rotated = await win.evaluate(() => window.praxis.settings.getMobileHostInfo());
       expect(rotated.publicKeyHex).not.toBe(previousKey); expect(rotated.listener.connectionCount).toBe(0);
-      if (mode === 'rust') {
-        const next = await notReproducible('reads the Electron-main mobile listener diagnostics (mobileListenerInstance); the Rust backend does not expose them');
-        expect(next.ready).toBe(true); expect(next.pid).not.toBe(diagnostic.pid); childPids.push(next.pid);
-      }
+      await expect.poll(async () => (await app.callHost('mobile:status')).listening).toBe(true);
       await chooseOption(win.getByTestId('mobile-access-mode'), 'off');
       await expect(win.getByTestId('mobile-listener-status')).toContainText('Not listening');
     } finally {
       phone?.close(); await closeTestApp(app);
-      await expect.poll(() => childPids.every(pid => { try { process.kill(pid, 0); return false; } catch { return true; } })).toBe(true);
     }
   });
 }

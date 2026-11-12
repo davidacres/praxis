@@ -2125,3 +2125,41 @@ fn a_hung_cli_model_listing_does_not_hold_the_profile_lock() {
     profile.rpc("projects:list", vec![]);
     assert!(started.elapsed() < std::time::Duration::from_secs(4), "projects:list waited {:?} behind the model listing", started.elapsed());
 }
+
+#[test]
+fn phone_reads_and_commands_run_on_the_desktops_own_services() {
+    let profile = Profile::new();
+    let folder = profile.root.join("source");
+    fs::create_dir_all(&folder).expect("folder");
+    let workspace = profile.rpc("workspaces:openFolder", vec![json!(folder)]);
+    let project = profile.rpc("projects:create", vec![project_input(&folder), workspace["id"].clone()]);
+    let caller = json!({"deviceId": "phone-1", "capabilities": ["view", "execute"]});
+    let host_id = profile.rpc("settings:getMobileHostInfo", vec![])["hostId"].clone();
+    let read = |operation: &str, target: Value| {
+        profile.try_rpc("mobile:internal:read", vec![json!({
+            "protocolVersion": 1, "requestId": "r-1", "operation": operation, "caller": caller, "target": target
+        })])
+    };
+
+    let info = read("host.info", json!({"hostId": host_id})).expect("host.info");
+    assert_eq!(info["surfaceRevision"], 8);
+    assert_eq!(info["scheduledRunExecution"], "planning-only");
+    assert_eq!(info["hostId"], host_id);
+
+    let snapshot = read("projects.snapshot", json!({"hostId": host_id})).expect("projects.snapshot");
+    assert_eq!(snapshot["projects"][0]["projectId"], project["id"]);
+
+    // An unregistered operation is refused by name, never silently empty.
+    assert!(read("not.an.operation", json!({"hostId": host_id})).is_err());
+
+    // A retried command id replays the recorded outcome instead of running twice.
+    let command = json!({
+        "protocolVersion": 1, "commandId": "phone-schedule-001", "issuedAt": "2026-11-12T10:00:00.000Z", "caller": caller,
+        "target": {"hostId": host_id, "projectId": project["id"]}, "operation": "scheduledRuns.save",
+        "payload": {"name": "Phone proof", "date": "2099-11-09", "time": "12:00", "timezone": "UTC", "issueKeys": []}
+    });
+    let first = profile.rpc("mobile:internal:command", vec![command.clone()]);
+    assert_eq!(profile.rpc("mobile:internal:command", vec![command]), first);
+    let saved = profile.rpc("scheduledRuns:list", vec![]);
+    assert_eq!(saved.as_array().expect("runs").iter().filter(|view| view["run"]["id"] == first["id"]).count(), 1);
+}
