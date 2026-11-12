@@ -385,15 +385,18 @@ pub fn dispatch(
         "ai:saveArtifactToWorkspace" => Ok(json!({ "saved": true })),
 
         // 5. Workflow packs & ticket review
-        "ai:listWorkflowPacks" => Ok(json!([])),
+        "ai:listWorkflowPacks" => Ok(json!(super::workflow_packs::discover(
+            super::workflow_packs::discovery_root(host).as_deref()
+        ))),
         "ai:getWorkflowAssignment" => {
             let issue_key = text(args, 0)?;
-            Ok(json!({ "issueKey": issue_key, "workflowPackId": Value::Null }))
+            Ok(super::workflow_packs::assignment(host, issue_key))
         }
         "ai:setWorkflowAssignment" => {
             let issue_key = text(args, 0)?;
-            let pack_id = args.get(1).and_then(Value::as_str);
-            Ok(json!({ "issueKey": issue_key, "workflowPackId": pack_id }))
+            let workflow = args.get(1).filter(|w| w.is_object()).cloned();
+            super::workflow_packs::assign(host, issue_key, workflow, "manual").map_err(failure)?;
+            Ok(Value::Null)
         }
         "ai:localPeerReview" | "ai:localPeerReviewFollowUp" => Ok(json!({
             "comments": [],
