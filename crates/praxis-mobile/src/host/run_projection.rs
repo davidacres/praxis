@@ -271,10 +271,43 @@ pub fn append_mobile_run_event(
     sequence
 }
 
+/// Announces that a project's schedules changed; the phone refetches `schedules.list`.
+pub fn append_mobile_schedules_event(
+    ledger: &dyn MobileCommandLedger,
+    host_id: &str,
+    project_id: &str,
+) -> u64 {
+    let sequence = ledger.latest_sequence() + 1;
+    ledger.append_event(MobileEventEnvelope {
+        protocol_version: MOBILE_PROTOCOL_VERSION,
+        event_id: format!("schedules:{sequence}"),
+        sequence,
+        emitted_at: now_iso(),
+        target: MobileTarget {
+            host_id: host_id.to_owned(),
+            project_id: Some(project_id.to_owned()),
+            ..MobileTarget::default()
+        },
+        event: json!({ "type": "scheduledRuns.changed" }),
+    });
+    sequence
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::host::ledger::{InMemoryMobileCommandLedger, MOBILE_REPLAY_LIMIT};
+
+    #[test]
+    fn a_schedules_change_is_a_project_scoped_event_with_the_next_sequence() {
+        let ledger = InMemoryMobileCommandLedger::default();
+        assert_eq!(append_mobile_schedules_event(&ledger, "host", "p1"), 1);
+        assert_eq!(append_mobile_schedules_event(&ledger, "host", "p2"), 2);
+        let events = ledger.replay(0, MOBILE_REPLAY_LIMIT);
+        assert_eq!(events[1].event_id, "schedules:2");
+        assert_eq!(events[1].target.project_id.as_deref(), Some("p2"));
+        assert_eq!(events[1].event, json!({ "type": "scheduledRuns.changed" }));
+    }
 
     fn input(node_id: &str, patch: Value) -> MobileRunStageInput {
         let mut name = node_id.to_owned();

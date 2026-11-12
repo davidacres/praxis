@@ -18,7 +18,10 @@ use praxis_mobile::host::access::{
     mobile_access_policy_from_settings, resolve_mobile_listener_change,
 };
 use praxis_mobile::host::identity::{
-    MobileHostIdentity, MobileIdentityOverrides, MobileSecretStore,
+    MobileHostIdentity, MobileIdentityOverrides, MobileSecretStore, ed25519_pkcs8_der,
+};
+use praxis_mobile::host::ledger::{
+    InMemoryMobileCommandLedger, MOBILE_EVENT_RETENTION, MobileCommandLedger, MobileCommandRecord,
 };
 use praxis_mobile::host::pairing::{
     MobileEndpoint, MobileInvitationDetails, MobileRelayRoute, fingerprint_mobile_host_key,
@@ -27,6 +30,8 @@ use praxis_mobile::host::pairing_registry::{
     JsonFilePairingPersist, MobilePairingGrant, MobilePairingRegistry, unpaired_peer_status,
 };
 use praxis_mobile::host::protocol::MobileCapability;
+use praxis_mobile::host::protocol::{MobileEventEnvelope, MobileProtocolError};
+use praxis_mobile::host::relay_client::is_allowed_relay_url;
 use praxis_mobile::wire::{MobileConnectionStatusCode, mobile_connection_status};
 use serde_json::{Value, json};
 
@@ -128,8 +133,72 @@ impl Drop for Advertiser {
     }
 }
 
+/// The phone event log. This process is the sequence authority: every event is stored here (so
+/// the services can report `latest_sequence`) and mirrored into the listener's replay log.
+pub struct ForwardingLedger {
+    host: HostContext,
+    inner: InMemoryMobileCommandLedger,
+}
+
+impl ForwardingLedger {
+    fn new(host: &HostContext) -> Self {
+        Self {
+            host: host.clone(),
+            inner: InMemoryMobileCommandLedger::new(MOBILE_EVENT_RETENTION),
+        }
+    }
+}
+
+impl MobileCommandLedger for ForwardingLedger {
+    fn admit(
+        &self,
+        command_id: &str,
+        payload_digest: &str,
+        issued_at: &str,
+    ) -> std::result::Result<(MobileCommandRecord, bool), MobileProtocolError> {
+        self.inner.admit(command_id, payload_digest, issued_at)
+    }
+    fn get(&self, command_id: &str) -> Option<MobileCommandRecord> {
+        self.inner.get(command_id)
+    }
+    fn put(&self, record: MobileCommandRecord) {
+        self.inner.put(record);
+    }
+    fn append_event(&self, event: MobileEventEnvelope) {
+        self.inner.append_event(event.clone());
+        let response = self.host.dispatch_rpc(praxis_contracts::RustRpcRequest {
+            id: "mobile-event".into(),
+            channel: "mobile:appendEvent".into(),
+            args: vec![serde_json::to_value(&event).unwrap_or(Value::Null)],
+        });
+        if !response.ok {
+            super::log_bus::log(&self.host, "[mobile] an event could not reach the listener");
+        }
+    }
+    fn replay(&self, after_sequence: u64, limit: usize) -> Vec<MobileEventEnvelope> {
+        self.inner.replay(after_sequence, limit)
+    }
+    fn latest_sequence(&self) -> u64 {
+        self.inner.latest_sequence()
+    }
+    fn oldest_retained_sequence(&self) -> u64 {
+        self.inner.oldest_retained_sequence()
+    }
+}
+
+/// Where the relay connection stands, as the pairing UI needs it.
+#[derive(Default)]
+struct RelayView {
+    url: Option<String>,
+    route: Option<MobileRelayRoute>,
+}
+
 pub struct MobileHost {
     host: HostContext,
+    ledger: Arc<ForwardingLedger>,
+    publishing: Mutex<()>,
+    relay: Mutex<RelayView>,
+    appearance: Mutex<Option<Value>>,
     registry: Mutex<MobilePairingRegistry>,
     identity: MobileHostIdentity<HostSecrets>,
     listener: Mutex<Option<MobileListener>>,
@@ -154,8 +223,19 @@ fn capabilities(grant: &Value) -> Vec<MobileCapability> {
 impl MobileHost {
     pub fn new(host: &HostContext) -> Arc<Self> {
         let path = host.config().user_data_dir.join("mobile-pairing.json");
+        let appearance =
+            std::fs::read_to_string(host.config().user_data_dir.join("mobile-appearance.json"))
+                .ok()
+                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+                .and_then(|value| {
+                    praxis_mobile::host::appearance::normalize_mobile_appearance(&value)
+                });
         Arc::new(Self {
             host: host.clone(),
+            ledger: Arc::new(ForwardingLedger::new(host)),
+            publishing: Mutex::new(()),
+            relay: Mutex::new(RelayView::default()),
+            appearance: Mutex::new(appearance),
             registry: Mutex::new(MobilePairingRegistry::new(Box::new(
                 JsonFilePairingPersist::new(path),
             ))),
@@ -196,9 +276,107 @@ impl MobileHost {
         self.host_label()
     }
 
-    /// Phone events are not streamed from this build yet, so the log has no sequence to report.
+    /// The highest sequence any phone has been offered.
     pub fn latest_sequence(&self) -> u64 {
-        0
+        self.ledger.latest_sequence()
+    }
+
+    /// Appends to the phone event log. One writer at a time: a sequence is read, then used.
+    pub fn publish<R>(&self, append: impl FnOnce(&dyn MobileCommandLedger, &str) -> R) -> R {
+        let host_id = self.host_id();
+        let _serial = lock(&self.publishing);
+        append(&*self.ledger, &host_id)
+    }
+
+    /// The desktop's current theme as colours; `None` until a window has applied one.
+    pub fn appearance(&self) -> Option<Value> {
+        lock(&self.appearance).clone()
+    }
+
+    /// Accepts a renderer-supplied appearance. A malformed or unchanged one announces nothing.
+    pub fn set_appearance(&self, value: &Value) {
+        let Some(appearance) = praxis_mobile::host::appearance::normalize_mobile_appearance(value)
+        else {
+            return;
+        };
+        {
+            let mut current = lock(&self.appearance);
+            if current.as_ref() == Some(&appearance) {
+                return;
+            }
+            *current = Some(appearance.clone());
+        }
+        self.publish(|ledger, host_id| {
+            praxis_mobile::host::session_projection::append_mobile_appearance_event(
+                ledger,
+                host_id,
+                &appearance,
+            )
+        });
+    }
+
+    // ── the relay ────────────────────────────────────────────────────────
+
+    /// The relay to register with: an environment override, as in the TypeScript host.
+    fn configured_relay_url() -> Option<String> {
+        std::env::var("PRAXIS_MOBILE_RELAY_URL")
+            .ok()
+            .map(|url| url.trim().to_owned())
+            .filter(|url| is_allowed_relay_url(url))
+    }
+
+    /// Only `internet` mode holds a relay connection; any other mode closes it, which makes the
+    /// relay drop every phone it was piping to this desktop.
+    fn apply_relay(&self, mode: MobileAccessMode) -> std::result::Result<(), String> {
+        let url = (mode == MobileAccessMode::Internet)
+            .then(Self::configured_relay_url)
+            .flatten();
+        let Some(url) = url else {
+            *lock(&self.relay) = RelayView::default();
+            self.rpc("mobile:relayStop", Value::Null)?;
+            return Ok(());
+        };
+        let key = block_on(self.identity.static_key())?;
+        let relay = block_on(self.identity.relay_identity());
+        let code = std::env::var("PRAXIS_MOBILE_PAIRING_CODE")
+            .ok()
+            .map(|c| c.trim().to_owned())
+            .filter(|c| !c.is_empty());
+        lock(&self.relay).url = Some(url.clone());
+        let started = self.rpc(
+            "mobile:relayStart",
+            json!({
+                "relayUrl": url,
+                "relaySigningKey": hex(&ed25519_pkcs8_der(&relay.signing_key)),
+                "hostPrivateKey": hex(key.private_key().as_ref()),
+                "pairingCode": code
+            }),
+        );
+        if started.is_err() {
+            *lock(&self.relay) = RelayView::default();
+        }
+        started.map(|_| ())
+    }
+
+    /// The listener reports every relay state change; the registered channel becomes the route
+    /// the invitation carries.
+    pub fn relay_state_changed(&self, state: &Value) {
+        {
+            let mut view = lock(&self.relay);
+            let registered = state["state"] == "registered";
+            view.route = match (&view.url, state["channel"].as_str()) {
+                (Some(url), Some(channel)) if registered => Some(MobileRelayRoute {
+                    url: url.clone(),
+                    channel: channel.to_owned(),
+                }),
+                _ => None,
+            };
+        }
+        self.emit_pairing_changed();
+    }
+
+    fn relay_route(&self) -> Option<MobileRelayRoute> {
+        lock(&self.relay).route.clone()
     }
 
     /// The pairing record behind a device id, the host key's fingerprint and the access mode.
@@ -357,6 +535,9 @@ impl MobileHost {
             self.log(&format!("[mobile] listener change failed: {message}"));
             *lock(&self.bind_error) = Some(message);
         }
+        if let Err(message) = self.apply_relay(MobileAccessMode::parse(&settings.mode)) {
+            self.log(&format!("[mobile] relay setup failed: {message}"));
+        }
         self.refresh_discovery();
         self.emit_pairing_changed();
     }
@@ -457,7 +638,7 @@ impl MobileHost {
             display_name: host_name.clone(),
             public_key_hex: public_key.clone(),
             endpoints: self.endpoints(port),
-            relay: None::<MobileRelayRoute>,
+            relay: self.relay_route(),
         };
         let registry = lock(&self.registry);
         let invitation = registry.active_invitation(&now, &details);
@@ -525,7 +706,7 @@ impl MobileHost {
                 .unwrap_or_default()
                 .to_owned(),
             endpoints: self.endpoints(port),
-            relay: None,
+            relay: self.relay_route(),
         };
         lock(&self.registry).issue_invitation(&host_id, &details, Utc::now());
         self.emit_pairing_changed();
@@ -699,6 +880,11 @@ pub fn register_internal_channels(host: &HostContext, mobile: &Arc<MobileHost>) 
             params["publicKey"].as_str().unwrap_or_default(),
             params["tokenId"].as_str(),
         ))
+    });
+    let m = Arc::clone(mobile);
+    host.register_handler("mobile:internal:relayState", move |_, args| {
+        m.relay_state_changed(args.first().unwrap_or(&Value::Null));
+        Ok(Value::Null)
     });
     // The phone's reads and commands run on the desktop's own session, run, project and schedule channels.
     super::mobile_services::register(host, mobile);

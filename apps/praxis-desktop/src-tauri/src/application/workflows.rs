@@ -8,8 +8,8 @@ use chrono::{SecondsFormat, Utc};
 use praxis_core::git::run_work::repository_root;
 use praxis_host::HostContext;
 use praxis_workflows::gates::{
-    GateBypassInput, approve_stage, bypass_gate, failing_gate_findings, resolve_approval_target,
-    skip_approval as gates_skip_approval,
+    GateBypassInput, approve_stage, bypass_gate, failing_gate_findings, reject_stage,
+    resolve_approval_target, skip_approval as gates_skip_approval,
 };
 use praxis_workflows::run::{
     CreateWorkflowRunInput, DeclaredArtifact, LoopDecisionKind, ReworkOptions, WorkflowRun,
@@ -2314,6 +2314,18 @@ pub fn approve_run(host: &HostContext, args: &[Value]) -> Result<Value> {
                 .unwrap_or_else(|| "Approval was refused.".into()));
         }
         Ok(result.run)
+    })?;
+    step_and_summarize(host, run_id)
+}
+
+/// Rejects the run's open approval gate with an attributed reason (the phone's `runs.reject`).
+/// Not a renderer channel: the desktop UI rejects through its own stage controls.
+pub fn reject_run(host: &HostContext, run_id: &str, actor: &str, reason: &str) -> Result<Value> {
+    require_run(host, run_id)?;
+    let (actor, reason) = (actor.to_string(), reason.to_string());
+    with_run(host, run_id, move |run| {
+        let approval = resolve_approval_target(run, None)?;
+        reject_stage(run, &approval.base.id, &actor, &reason, &now())
     })?;
     step_and_summarize(host, run_id)
 }
