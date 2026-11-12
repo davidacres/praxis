@@ -682,6 +682,125 @@ pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value
     Ok(json!({ "stages": result, "model": model, "provider": provider, "usage": usage }))
 }
 
+/// The agent and skill dependencies of a workflow's agent stages, each `installed`, `available`
+/// (a bundled definition can be installed on selection) or `missing` (`extractWorkflowDependencies`).
+fn extract_dependencies(catalog: &Value, template: &Value) -> Vec<Value> {
+    use praxis_core::agent_runtime::bundled::{bundled_skill, is_bundled_agent};
+    let list = |key: &str| catalog.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
+    let has_runtime_hosts = catalog.get("runtimeHosts").is_some_and(Value::is_array);
+    let hosts = if has_runtime_hosts { list("runtimeHosts") } else { list("agents") };
+    let has_profiles = catalog.get("profiles").is_some_and(Value::is_array);
+    let profiles = list("profiles");
+    let skills = list("skills");
+
+    struct Entry {
+        profile_id: String,
+        host_id: String,
+        provider_id: Option<String>,
+        scope: String,
+        skills: Vec<String>,
+        node_ids: Vec<String>,
+    }
+    let mut entries: Vec<(String, Entry)> = Vec::new();
+    for node in template["nodes"].as_array().into_iter().flatten() {
+        if node["type"] != "agent-task" {
+            continue;
+        }
+        let agent = &node["agent"];
+        let agent_id = agent["agentId"].as_str().unwrap_or("");
+        let profile_id = agent["profileId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id).to_string();
+        let host_id = agent["hostId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id).to_string();
+        let provider = agent["providerId"].as_str().filter(|s| !s.is_empty()).map(str::to_string);
+        let scope = agent["scope"].as_str().unwrap_or("global").to_string();
+        let key = format!("{scope}:{profile_id}:{host_id}:{}", provider.clone().unwrap_or_default());
+        let position = entries.iter().position(|(k, _)| *k == key);
+        let index = position.unwrap_or_else(|| {
+            entries.push((
+                key,
+                Entry { profile_id, host_id, provider_id: provider, scope, skills: Vec::new(), node_ids: Vec::new() },
+            ));
+            entries.len() - 1
+        });
+        let entry = &mut entries[index].1;
+        entry.node_ids.push(node["id"].as_str().unwrap_or("").to_string());
+        for name in agent["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            if !entry.skills.iter().any(|s| s == name) {
+                entry.skills.push(name.to_string());
+            }
+        }
+    }
+
+    let usable = |v: &Value| v["trusted"] == true && v["errors"].as_array().is_none_or(Vec::is_empty);
+    entries
+        .into_iter()
+        .map(|(_, entry)| {
+            let host = hosts.iter().find(|h| h["manifest"]["id"] == entry.host_id.as_str());
+            let host_installed = host.is_some_and(usable);
+            let profile = profiles.iter().find(|p| p["profile"]["id"] == entry.profile_id.as_str());
+            let profile_installed = if has_profiles {
+                profile.is_some_and(|p| p["trusted"] == true && p["error"].as_str().is_none_or(str::is_empty))
+            } else {
+                entry.profile_id == entry.host_id
+            };
+            let missing_skills: Vec<&String> = entry
+                .skills
+                .iter()
+                .filter(|name| !skills.iter().any(|s| s["metadata"]["name"] == name.as_str()))
+                .collect();
+            let bundled_binding = entry.profile_id == entry.host_id && is_bundled_agent(&entry.host_id);
+            let host_available = host_installed || is_bundled_agent(&entry.host_id);
+            let profile_available = profile_installed || bundled_binding;
+            let skills_available = missing_skills.iter().all(|name| bundled_skill(name).is_some());
+            let (status, reason) = if host_installed && profile_installed && missing_skills.is_empty() {
+                ("installed", None)
+            } else if host_available && profile_available && skills_available {
+                let mut missing = Vec::new();
+                if !profile_installed {
+                    missing.push(format!("profile \"{}\"", entry.profile_id));
+                }
+                if !host_installed {
+                    missing.push(format!("runtime host \"{}\"", entry.host_id));
+                }
+                if !missing_skills.is_empty() {
+                    missing.push(format!(
+                        "skills ({})",
+                        missing_skills.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                    ));
+                }
+                ("available", Some(format!("{} available for installation.", missing.join(", "))))
+            } else if !profile_available {
+                ("missing", Some(format!("Agent profile \"{}\" is not installed or available.", entry.profile_id)))
+            } else if !host_available {
+                ("missing", Some(format!("Runtime host \"{}\" is not installed or available.", entry.host_id)))
+            } else {
+                (
+                    "missing",
+                    Some(format!(
+                        "Required skills ({}) are not available.",
+                        missing_skills
+                            .iter()
+                            .filter(|name| bundled_skill(name).is_none())
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                )
+            };
+            let mut dependency = json!({
+                "agentId": entry.host_id, "profileId": entry.profile_id, "hostId": entry.host_id,
+                "scope": entry.scope, "skillNames": entry.skills, "nodeIds": entry.node_ids, "status": status,
+            });
+            if let Some(provider) = entry.provider_id {
+                dependency["providerId"] = json!(provider);
+            }
+            if let Some(reason) = reason {
+                dependency["reason"] = json!(reason);
+            }
+            dependency
+        })
+        .collect()
+}
+
 pub fn template_readiness(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
     let catalog = agent_catalog(host);
@@ -703,18 +822,16 @@ pub fn template_readiness(host: &HostContext, args: &[Value]) -> Result<Value> {
                     );
                 }
             }
-            let installable = template["nodes"].as_array().into_iter().flatten().any(|node| {
-                let agent = node["agent"]["agentId"].as_str().unwrap_or("");
-                praxis_core::agent_runtime::bundled::is_bundled_agent(agent)
-                    || node["agent"]["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str).any(|n| praxis_core::agent_runtime::bundled::bundled_skill(n).is_some())
-            });
+            let dependencies = extract_dependencies(&catalog, template);
+            let all_resolvable = dependencies.iter().all(|d| matches!(d["status"].as_str(), Some("installed" | "available")));
+            let has_available = dependencies.iter().any(|d| d["status"] == "available");
             json!({
                 "templateId": template["id"],
                 "structureOk": structure.valid(),
                 "agentsOk": blocking.is_empty(),
                 "blockingByNode": blocking,
-                "dependencies": [],
-                "autoInstallable": installable && !blocking.is_empty(),
+                "dependencies": dependencies,
+                "autoInstallable": all_resolvable && has_available,
             })
         })
         .collect();
