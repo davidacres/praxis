@@ -81,6 +81,65 @@ async fn freeze_worktree(worktree: &Path, stage_name: &str) -> Option<String> {
     head_of(worktree).await
 }
 
+// ── run files: what a read-only stage is handed inside its worktree ──────
+
+/// Files a stage is handed for the length of its session, inside its worktree.
+const RUN_FILES_DIR: &str = ".praxis-run";
+
+/// Writes a run file and returns its path relative to the worktree.
+fn write_run_file(worktree: &Path, name: &str, text: &str) -> Option<String> {
+    let dir = worktree.join(RUN_FILES_DIR);
+    std::fs::create_dir_all(&dir).ok()?;
+    let safe: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' })
+        .collect();
+    let body = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
+    std::fs::write(dir.join(&safe), body).ok()?;
+    Some(format!("{RUN_FILES_DIR}/{safe}"))
+}
+
+fn remove_run_files(worktree: &Path) {
+    let _ = std::fs::remove_dir_all(worktree.join(RUN_FILES_DIR));
+}
+
+/// The change up to `reference`, from where the run branched (falling back to its parent), so a
+/// review sees the whole change and not only the last commit.
+async fn write_diff_run_file(
+    worktree: &Path,
+    contract_id: &str,
+    reference: &str,
+    base_ref: Option<&str>,
+) -> Option<String> {
+    let mut target = reference.to_string();
+    if target.ends_with(".md") || target.contains('/') || target.contains('\\') {
+        target = head_of(worktree).await?;
+    }
+    let fork_point = match base_ref {
+        Some(base) => git(worktree, &["merge-base", base, &target]).await.ok().filter(|s| !s.is_empty()),
+        None => None,
+    };
+    let base = match fork_point {
+        Some(point) if point != target => point,
+        _ => format!("{target}^"),
+    };
+    let output = Command::new("git")
+        .args(["diff", "--no-color", "--no-ext-diff", "-M", &base, &target])
+        .current_dir(worktree)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let patch = String::from_utf8_lossy(&output.stdout).to_string();
+    if patch.trim().is_empty() {
+        return None;
+    }
+    write_run_file(worktree, &format!("{contract_id}.patch"), &patch)
+}
+
 // ── the stage brief ──────────────────────────────────────────────────────
 
 struct StageInput {
@@ -157,7 +216,7 @@ fn build_task_definition(
     scope.push(format!("Inputs available to you:\n{input_lines}"));
 
     let has = |kind: WorkflowArtifactKind| node.outputs.iter().any(|o| o.kind == kind);
-    let publishes = node.outputs.iter().any(|o| o.publish_to.is_some());
+    let publishes_board = node.outputs.iter().any(|o| o.publish_to.is_some());
     let mut done = vec![format!(
         "Produce every required artifact before finishing:\n{output_lines}"
     )];
@@ -170,6 +229,9 @@ fn build_task_definition(
         .any(|o| o.kind == WorkflowArtifactKind::Plan && o.publish_to.is_none())
     {
         done.push(PLAN_STATUS_INSTRUCTIONS.to_string());
+    }
+    if publishes_board {
+        done.push(PUBLISHABLE_PLAN_INSTRUCTIONS.to_string());
     }
     if has(WorkflowArtifactKind::Diff) {
         done.push(ROLE_RULE_IMPLEMENT.to_string());
@@ -192,7 +254,6 @@ fn build_task_definition(
     } else {
         None
     };
-    let _ = publishes;
     let mut task = json!({
         "goal": goal,
         "scope": scope.join("\n\n"),
@@ -246,14 +307,14 @@ fn stage_name(run: &WorkflowRun, node_id: &str) -> String {
 /// Upstream reports or logs inline, each capped to its head and tail (`formatUpstreamReports/Logs`).
 fn format_upstream(
     heading: &str,
-    items: &[(String, String, String)],
+    items: &[(String, String, String, Option<String>)],
     max_chars: usize,
     fenced: bool,
 ) -> Option<String> {
     let blocks: Vec<String> = items
         .iter()
-        .filter(|(_, _, text)| !text.trim().is_empty())
-        .map(|(contract, stage, text)| {
+        .filter(|(_, _, text, _)| !text.trim().is_empty())
+        .map(|(contract, stage, text, full_path)| {
             let text = text.trim();
             let chars: Vec<char> = text.chars().collect();
             let shown = if chars.len() <= max_chars {
@@ -262,17 +323,24 @@ fn format_upstream(
                 let half = max_chars / 2;
                 let head: String = chars[..half].iter().collect();
                 let tail: String = chars[chars.len() - half..].iter().collect();
+                let read_whole = full_path.as_ref().map_or(String::new(), |path| {
+                    format!(" — read the whole report from `{path}` before relying on any part of it")
+                });
                 format!(
-                    "{}\n\n[… {} characters omitted …]\n\n{}",
+                    "{}\n\n[… {} characters omitted{read_whole} …]\n\n{}",
                     head.trim_end(),
                     chars.len() - max_chars,
                     tail.trim_start()
                 )
             };
+            let full_note = match full_path {
+                Some(path) if chars.len() > max_chars => format!(" (full text: `{path}`)"),
+                _ => String::new(),
+            };
             if fenced {
-                format!("### \"{contract}\" from {stage}\n```text\n{shown}\n```")
+                format!("### \"{contract}\" from {stage}{full_note}\n```text\n{shown}\n```")
             } else {
-                format!("### \"{contract}\" from {stage}\n{shown}")
+                format!("### \"{contract}\" from {stage}{full_note}\n{shown}")
             }
         })
         .collect();
@@ -825,7 +893,14 @@ pub async fn run_agent_stage(
     let dir = host.config().user_data_dir.clone();
     // What earlier stages concluded: a report's text lives on its session, a check's log in the
     // evidence store (outside the worktree an agent's file tools are confined to).
-    let reports: Vec<(String, String, String)> = inputs
+    // A report too long to inline is also written, whole, into the worktree of a stage that can
+    // neither write nor commit, so the file can never end up in a change.
+    let tool_mode_text = serde_json::to_value(node.agent.tool_mode)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_else(|| "full".into());
+    let can_read_run_files = !node.mutates_worktree && tool_mode_text == "read-only";
+    let reports: Vec<(String, String, String, Option<String>)> = inputs
         .iter()
         .filter(|i| i.path.is_none())
         .map(|i| {
@@ -835,7 +910,10 @@ pub async fn run_agent_stage(
                 .flatten()
                 .and_then(|r| r["responseText"].as_str().map(str::to_string))
                 .unwrap_or_default();
-            (i.contract_id.clone(), stage_name(run, &i.node_id), text)
+            let full_path = (can_read_run_files && text.trim().chars().count() > 24_000)
+                .then(|| write_run_file(&worktree, &format!("{}.md", i.contract_id), &text))
+                .flatten();
+            (i.contract_id.clone(), stage_name(run, &i.node_id), text, full_path)
         })
         .collect();
     if let Some(block) = format_upstream(
@@ -846,12 +924,12 @@ pub async fn run_agent_stage(
     ) {
         task["scope"] = json!(format!("{}\n\n{block}", task["scope"].as_str().unwrap_or("")));
     }
-    let logs: Vec<(String, String, String)> = inputs
+    let logs: Vec<(String, String, String, Option<String>)> = inputs
         .iter()
         .filter(|i| i.kind == "log" && i.path.is_some())
         .map(|i| {
             let text = std::fs::read_to_string(i.path.as_deref().unwrap_or("")).unwrap_or_default();
-            (i.contract_id.clone(), stage_name(run, &i.node_id), text)
+            (i.contract_id.clone(), stage_name(run, &i.node_id), text, None)
         })
         .collect();
     if let Some(block) = format_upstream(
@@ -861,6 +939,26 @@ pub async fn run_agent_stage(
         true,
     ) {
         task["scope"] = json!(format!("{}\n\n{block}", task["scope"].as_str().unwrap_or("")));
+    }
+    // A diff input is only a commit ref, and a read-only stage has no diff tool: hand it the
+    // whole change since the run branched as a file for its file tools.
+    if can_read_run_files {
+        for input in inputs.iter().filter(|i| i.kind == "diff" && i.path.is_some()) {
+            let reference = input.path.as_deref().unwrap_or("");
+            let patch = write_diff_run_file(&worktree, &input.contract_id, reference, run.worktree_base_ref.as_deref()).await;
+            let note = match patch {
+                Some(path) => format!(
+                    "The full patch for diff \"{}\" (the change since this run branched, up to {}) is the file {path} in your working directory. Read it with your file tools; there is no diff tool.",
+                    input.contract_id,
+                    reference.chars().take(12).collect::<String>()
+                ),
+                None => format!(
+                    "The patch for diff \"{}\" could not be prepared. Read the changed files directly with your file tools.",
+                    input.contract_id
+                ),
+            };
+            task["scope"] = json!(format!("{}\n\n{note}", task["scope"].as_str().unwrap_or("")));
+        }
     }
 
     let failed_attempts = run
@@ -908,6 +1006,7 @@ pub async fn run_agent_stage(
     let session_id = match launched {
         Ok(id) => id,
         Err(error) => {
+            remove_run_files(&worktree);
             let limit = praxis_ai::providers::provider_limit_error::is_provider_limit_error(&error);
             return Ok(StageOutcome {
                 error: Some(if limit {
@@ -985,6 +1084,7 @@ pub async fn run_agent_stage(
             None => break,
         }
     }
+    remove_run_files(&worktree);
     let snapshot_ref = if node.mutates_worktree
         && !context.cancel.is_cancelled()
         && finished.state == "completed"
@@ -996,7 +1096,233 @@ pub async fn run_agent_stage(
     let mut outcome = outcome_from_session(node, &finished, snapshot_ref.as_deref(), start_ref.as_deref());
     outcome.provider = Some(provider);
     outcome.model = model;
-    Ok(outcome)
+    Ok(publish_plan_outputs(host, node, run, outcome, &finished.response).await)
+}
+
+// ── publishing a plan to the board (workflowPlanPublishing.ts port) ──────────
+
+const PLAN_PRIORITIES: [&str; 4] = ["P0", "P1", "P2", "P3"];
+const PLAN_MAX_ITEMS: usize = 60;
+const PLAN_MAX_TITLE: usize = 120;
+
+const PUBLISHABLE_PLAN_INSTRUCTIONS: &str = "This plan is created on the project board for you. End your response with exactly one fenced block tagged `praxis-plan` containing JSON of this shape (and no other `praxis-plan` block):\n```praxis-plan\n{\n  \"feature\": { \"title\": \"Short plan title\", \"description\": \"Markdown: goal, scope, how the items were prioritised\" },\n  \"items\": [\n    { \"type\": \"Story\" | \"Task\" | \"Bug\", \"priority\": \"P0\" | \"P1\" | \"P2\" | \"P3\", \"severity\": \"Critical\" | \"High\" | \"Medium\" | \"Low\", \"title\": \"Short imperative title\", \"description\": \"Markdown: what to change and where, how to verify it, effort, dependencies\",\n      \"steps\": \"Bug only — markdown steps that show the problem\", \"expected\": \"Bug only — the correct behaviour\", \"actual\": \"Bug only — what happens today\" }\n  ]\n}\n```\nTitles are at most 120 characters and do not repeat the priority. Between 1 and 60 items. Do not create files or tickets yourself.";
+
+fn board_priority(priority: &str) -> &'static str {
+    match priority {
+        "P0" => "Highest",
+        "P1" => "High",
+        "P3" => "Low",
+        _ => "Medium",
+    }
+}
+
+fn plan_text(value: &Value) -> String {
+    value.as_str().map(|s| s.trim().to_string()).unwrap_or_default()
+}
+
+fn clip(value: &str, max: usize) -> String {
+    if value.chars().count() <= max {
+        return value.to_string();
+    }
+    let cut: String = value.chars().take(max - 1).collect();
+    format!("{}…", cut.trim_end())
+}
+
+struct PlanItem {
+    kind: String,
+    title: String,
+    priority: &'static str,
+    description: String,
+    severity: Option<&'static str>,
+    sections: Vec<(&'static str, String)>,
+}
+
+struct PublishablePlan {
+    title: String,
+    description: String,
+    items: Vec<PlanItem>,
+}
+
+/// Reads the last `praxis-plan` block from a stage's response; the message says what is wrong so
+/// a retry can fix it.
+fn parse_publishable_plan(response: &str) -> Result<PublishablePlan, String> {
+    let re = regex::Regex::new(r"```praxis-plan[^\n]*\n([\s\S]*?)```").map_err(|e| e.to_string())?;
+    let Some(block) = re.captures_iter(response).last().map(|c| c[1].to_string()) else {
+        return Err("The stage finished without a `praxis-plan` block, so there was no plan to create on the board.".into());
+    };
+    let raw: Value = serde_json::from_str(&block)
+        .map_err(|e| format!("The `praxis-plan` block is not valid JSON: {e}"))?;
+    let (Some(feature), Some(items)) = (raw["feature"].as_object(), raw["items"].as_array()) else {
+        return Err("The `praxis-plan` block needs a \"feature\" object and an \"items\" array.".into());
+    };
+    let feature_title = plan_text(&feature["title"]);
+    if feature_title.is_empty() {
+        return Err("The plan's \"feature.title\" is empty.".into());
+    }
+    if items.is_empty() {
+        return Err("The plan has no items.".into());
+    }
+    if items.len() > PLAN_MAX_ITEMS {
+        return Err(format!("The plan has {} items; at most {PLAN_MAX_ITEMS} can be created.", items.len()));
+    }
+    let prefix = regex::Regex::new(r"(?i)^\[?P[0-3]\]?[\s:·-]*").map_err(|e| e.to_string())?;
+    let mut parsed = Vec::new();
+    for (index, entry) in items.iter().enumerate() {
+        if !entry.is_object() {
+            return Err(format!("Plan item {} is not an object.", index + 1));
+        }
+        let title = plan_text(&entry["title"]);
+        if title.is_empty() {
+            return Err(format!("Plan item {} has no title.", index + 1));
+        }
+        let priority_text = plan_text(&entry["priority"]).to_uppercase();
+        let priority = PLAN_PRIORITIES.iter().copied().find(|p| *p == priority_text).unwrap_or("P2");
+        let kind_text = plan_text(&entry["type"]).to_lowercase();
+        let kind = ["Story", "Task", "Bug"]
+            .iter()
+            .find(|k| k.to_lowercase() == kind_text)
+            .copied()
+            .unwrap_or("Task");
+        let severity_text = plan_text(&entry["severity"]).to_lowercase();
+        let severity = ["Critical", "High", "Medium", "Low"]
+            .iter()
+            .copied()
+            .find(|s| s.to_lowercase() == severity_text);
+        let mut sections = Vec::new();
+        if kind == "Bug" {
+            for (field, heading) in [
+                ("steps", "Steps to Reproduce"),
+                ("expected", "Expected Behavior"),
+                ("actual", "Actual Behavior"),
+            ] {
+                let value = plan_text(&entry[field]);
+                if !value.is_empty() {
+                    sections.push((heading, value));
+                }
+            }
+        }
+        parsed.push(PlanItem {
+            kind: kind.to_string(),
+            title: clip(&prefix.replace(&title, ""), PLAN_MAX_TITLE),
+            priority,
+            description: plan_text(&entry["description"]),
+            severity,
+            sections,
+        });
+    }
+    Ok(PublishablePlan {
+        title: clip(&feature_title, PLAN_MAX_TITLE),
+        description: plan_text(&feature["description"]),
+        items: parsed,
+    })
+}
+
+async fn rpc(host: &HostContext, channel: &'static str, args: Vec<Value>) -> Result<Value, String> {
+    let h = host.clone();
+    let response = tokio::task::spawn_blocking(move || {
+        h.dispatch_rpc(praxis_contracts::RustRpcRequest { id: "plan-publish".into(), channel: channel.into(), args })
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if response.ok {
+        Ok(response.result.unwrap_or(Value::Null))
+    } else {
+        Err(response.error.map(|e| e.message).unwrap_or_else(|| "The board refused the request.".into()))
+    }
+}
+
+async fn publish_plan_to_board(
+    host: &HostContext,
+    run: &WorkflowRun,
+    response: &str,
+) -> Result<praxis_workflows::types::WorkflowBoardReference, String> {
+    let mut plan = parse_publishable_plan(response)?;
+    plan.items.sort_by_key(|item| PLAN_PRIORITIES.iter().position(|p| *p == item.priority));
+    let connection = format!("project:{}", run.project_id);
+    // The board's own key: a folder board can name a different key from the project's.
+    let projects = rpc(host, "issue:getProjects", vec![json!(connection)]).await.unwrap_or(Value::Null);
+    let project_key = projects
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|p| p["key"].as_str())
+        .map(str::to_string)
+        .ok_or_else(|| "The run's project has no board to create the plan on.".to_string())?;
+    let top = plan.items.first().map_or("P2", |i| i.priority);
+    let feature = rpc(
+        host,
+        "issue:create",
+        vec![
+            json!({
+                "projectKey": project_key, "issueType": "Feature", "summary": plan.title,
+                "description": plan.description, "priority": board_priority(top),
+            }),
+            json!(connection),
+        ],
+    )
+    .await
+    .map_err(|e| format!("Could not create the plan on the board: {e}"))?;
+    let feature_key = feature["key"].as_str().unwrap_or_default().to_string();
+    let mut item_keys = Vec::new();
+    for item in &plan.items {
+        let summary = format!("[{}] {}", item.priority, item.title);
+        let description = format!(
+            "**Priority:** {} · Part of plan {feature_key}: {}\n\n{}",
+            item.priority, plan.title, item.description
+        );
+        let mut input = json!({
+            "projectKey": project_key, "issueType": item.kind, "summary": summary,
+            "description": description.trim(),
+            "parentKey": feature_key, "priority": board_priority(item.priority),
+        });
+        if let Some(severity) = item.severity {
+            input["severity"] = json!(severity);
+        }
+        if !item.sections.is_empty() {
+            input["sections"] = Value::Object(item.sections.iter().map(|(k, v)| ((*k).to_string(), json!(v))).collect());
+        }
+        match rpc(host, "issue:create", vec![input, json!(connection)]).await {
+            Ok(created) => item_keys.push(created["key"].as_str().unwrap_or_default().to_string()),
+            Err(error) => {
+                return Err(format!(
+                    "Plan {feature_key} was created, but only {} of {} items were added before the board refused \"{summary}\": {error}. Finish or delete {feature_key} on the board before retrying, or the retry creates a second plan.",
+                    item_keys.len(),
+                    plan.items.len()
+                ));
+            }
+        }
+    }
+    Ok(praxis_workflows::types::WorkflowBoardReference {
+        key: feature_key,
+        title: feature["summary"].as_str().unwrap_or(&plan.title).to_string(),
+        item_keys,
+    })
+}
+
+/// Creates a stage's `publishTo: 'board'` plan once the stage has succeeded and records the
+/// feature on the artifact. A plan that cannot be read or created fails the stage with the reason.
+async fn publish_plan_outputs(
+    host: &HostContext,
+    node: &WorkflowAgentTaskNode,
+    run: &WorkflowRun,
+    outcome: StageOutcome,
+    response: &str,
+) -> StageOutcome {
+    let contracts: Vec<&str> = node.outputs.iter().filter(|c| c.publish_to.is_some()).map(|c| c.id.as_str()).collect();
+    if !outcome.succeeded || contracts.is_empty() {
+        return outcome;
+    }
+    match publish_plan_to_board(host, run, response).await {
+        Ok(reference) => {
+            let mut outcome = outcome;
+            for artifact in outcome.artifacts.iter_mut().flatten() {
+                if contracts.contains(&artifact.contract_id.as_str()) {
+                    artifact.reference = Some(reference.clone());
+                }
+            }
+            outcome
+        }
+        Err(error) => StageOutcome { provider: outcome.provider, model: outcome.model, ..StageOutcome::failure(error) },
+    }
 }
 
 #[cfg(test)]
