@@ -113,6 +113,10 @@ fn tasks() -> &'static Tasks {
     TASKS.get_or_init(Default::default)
 }
 
+pub(super) fn find_task_public(dir: &Path, key: &str) -> Option<Arc<Task>> {
+    find_task(dir, key)
+}
+
 fn find_task(dir: &Path, key: &str) -> Option<Arc<Task>> {
     tasks().lock().ok()?.get(&(dir.to_path_buf(), key.to_owned())).cloned()
 }

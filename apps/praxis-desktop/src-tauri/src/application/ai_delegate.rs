@@ -230,6 +230,7 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
             mcp_servers.extend(super::builtin_mcp::tracker_server(host, dir, &key, non_empty(&input, "connectionId"), &tool_mode).filter(|_| !issue_key.is_empty()));
         }
         mcp_servers.extend(super::builtin_mcp::coordination_server(dir, &key, working_directory.as_deref(), &tool_mode));
+        mcp_servers.extend(super::browser_mcp::server_for_session(host, dir, &key, &tool_mode));
     }
     mcp_servers.extend(super::user_mcp::acp_servers(host, &tool_mode, &provider));
 
@@ -528,6 +529,7 @@ pub(super) fn continue_with(host: &HostContext, dir: &std::path::Path, args: &[V
         mcp_servers.extend(super::builtin_mcp::tracker_server(host, dir, key, non_empty(&record, "connectionId"), &tool_mode));
     }
     mcp_servers.extend(super::builtin_mcp::coordination_server(dir, key, record["workingDirectory"].as_str(), &tool_mode));
+    mcp_servers.extend(super::browser_mcp::server_for_session(host, dir, key, &tool_mode));
     mcp_servers.extend(super::user_mcp::acp_servers(host, &tool_mode, &provider));
     acp_host::continue_task(host, dir, key, Continue {
         message: text(args, 1)?.to_owned(),
