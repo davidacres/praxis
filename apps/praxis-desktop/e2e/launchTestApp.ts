@@ -398,7 +398,10 @@ export async function launchTestApp(
   const context = await chromium.launchPersistentContext(path.join(userDataDir, 'chromium-profile'), {
     viewport: { width: 1440, height: 900 },
     // The specs were written against a day-first locale ("15 Jan"); Electron took it from the OS.
-    locale: 'en-GB'
+    locale: 'en-GB',
+    // Electron's nativeTheme defaulted to light under the test runner; Chromium otherwise follows the
+    // host OS, which turns every 'system' theme default into dark on a dark-mode machine.
+    colorScheme: 'light'
   });
   await context.addInitScript(tauriShim, { port, token });
   const electronApp = backendHandle(backend, context);

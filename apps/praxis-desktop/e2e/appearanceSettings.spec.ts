@@ -262,7 +262,9 @@ test('creates a custom theme with editable colors and persists it', async () => 
   fs.mkdirSync(artifacts, { recursive: true });
   await editor.screenshot({ path: path.join(artifacts, 'session-chat-background-editor.png') });
   await editor.getByRole('button', { name: 'Save theme' }).click();
-  const custom = await window.evaluate(() => window.praxis.settings.get().then(settings => settings.appearance.customThemes.at(-1)));
+  const savedCustom = () => window.evaluate(() => window.praxis.settings.get().then(settings => settings.appearance.customThemes.at(-1)));
+  await expect.poll(async () => (await savedCustom())?.name).toBe('Ocean Custom');
+  const custom = await savedCustom();
   expect(custom?.name).toBe('Ocean Custom');
   expect(custom?.preview.chatBackground).toBe('#123456');
   expect(custom?.preview.chatBackgroundImage).toBe(imageData);

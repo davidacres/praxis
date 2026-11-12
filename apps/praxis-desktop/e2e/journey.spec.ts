@@ -202,8 +202,10 @@ test('a project created from a folder of existing plans shows them on its board'
   //    restart rather than only existing in memory.
   await window.reload();
   await dismissSplash(window);
-  await openBoard(window, 'Praxis From Folder');
-  await expect(window.getByTestId('issue-card').first()).toBeVisible();
+  // The folder is this repo's own plans tree (a few MB of markdown): reading it takes ~1s idle and
+  // several times that when the machine is busy, so this board gets a load budget of its own.
+  await openBoard(window, 'Praxis From Folder', { loadTimeout: 30000 });
+  await expect(window.getByTestId('issue-card').first()).toBeVisible({ timeout: 15000 });
 });
 
 test('a project created from a folder with no plans stays on app storage', async () => {

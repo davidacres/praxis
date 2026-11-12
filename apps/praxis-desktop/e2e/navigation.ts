@@ -30,12 +30,13 @@ function exactly(text: string): RegExp {
  * Open a board by name (a substring, like the sidebar rows the specs used to
  * click), or the first board the palette lists when no name is given.
  */
-export async function openBoard(page: Page, name?: string | RegExp): Promise<void> {
+export async function openBoard(page: Page, name?: string | RegExp, options: { loadTimeout?: number } = {}): Promise<void> {
   await openPalette(page, typeof name === 'string' ? name : '');
   let rows = paletteRows(page).filter({ has: page.locator('.command-palette-hint', { hasText: exactly('Board') }) });
   if (name) rows = rows.filter({ has: page.locator('.command-palette-label', { hasText: name }) });
   await chooseRow(page, rows.first());
-  await expect(page.getByTestId('board-view')).toBeVisible();
+  // A board over a large plans tree legitimately takes seconds to read; callers that open one say so.
+  await expect(page.getByTestId('board-view')).toBeVisible({ timeout: options.loadTimeout });
 }
 
 /** Open a project's home by its exact name. */

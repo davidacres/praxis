@@ -373,7 +373,7 @@ every test and were only found by opening a capture:
 
 None of those break an assertion. So after any change to layout, the type scale, spacing or
 colour: **run the specs that capture the surface and look at the PNG.** Files under
-`apps/praxis-desktop/main/output/playwright/` come from plain `page.screenshot` — they are
+`apps/praxis-desktop/output/playwright/` come from plain `page.screenshot` — they are
 written for looking at and never fail a test, so they can also go stale; only
 `toHaveScreenshot` files under `*.spec.ts-snapshots/` actually guard anything. Do not read a
 plain screenshot as evidence without re-running the spec that writes it.

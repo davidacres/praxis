@@ -99,13 +99,25 @@ async function launchWithMultiRootFixture(): Promise<void> {
   window = app.window;
 }
 
+/**
+ * Boards load asynchronously and the secondary root is discovered after the primary, so a
+ * one-shot read can see only "E2E Multi". Wait until both roots are listed.
+ */
+async function listedMultiBoards(page: Page): Promise<string[]> {
+  await expect.poll(async () => {
+    const names = await listedBoards(page);
+    return names.includes('E2E Multi') && names.some(name => /^proj-(alpha|beta)$/.test(name));
+  }, { message: 'both plans roots appear as boards' }).toBe(true);
+  return listedBoards(page);
+}
+
 test('a parent folder with two plans roots lists one board per root', async () => {
   await launchWithMultiRootFixture();
 
 
   // The primary root takes the connection's own project name; every other
   // discovered root is named for itself, so the two are distinguishable.
-  const boards = await listedBoards(window);
+  const boards = await listedMultiBoards(window);
   expect(boards.filter(name => name === 'E2E Multi')).toHaveLength(1);
   expect(boards.filter(name => /^proj-(alpha|beta)$/.test(name))).toHaveLength(1);
 });
@@ -117,7 +129,7 @@ test('each board shows only its own root’s issues', async () => {
   // Two roots, two boards. The primary carries the connection's project name;
   // the extra is named for its own folder. Which root is promoted to primary
   // depends on readdir order, so pick whichever extra is present.
-  const boards = await listedBoards(window);
+  const boards = await listedMultiBoards(window);
   expect(boards.filter(name => name === 'E2E Multi')).toHaveLength(1);
   const extraIsBeta = boards.includes('proj-beta');
   const extraBoard = extraIsBeta ? /^proj-beta$/ : /^proj-alpha$/;
@@ -139,6 +151,9 @@ test('each board shows only its own root’s issues', async () => {
   await openBoard(window, /^E2E Multi$/);
   await expandAllIssueStacks(window);
   const primaryCards = window.locator('[data-testid="issue-card"]');
+  // The previous board's two cards stay on screen until the primary board has loaded, so a bare count
+  // of 2 can be satisfied by the wrong board. Wait for the primary root's own task to appear.
+  await expect(primaryCards.filter({ hasText: otherTitle })).toHaveCount(1);
   await expect(primaryCards).toHaveCount(2);
   const primaryTexts = await primaryCards.allInnerTexts();
   expect(primaryTexts.some(text => text.includes(otherTitle))).toBe(true);

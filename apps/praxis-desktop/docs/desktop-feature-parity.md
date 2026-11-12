@@ -2,9 +2,65 @@
 
 Legend: **✓** complete · **?** partial / not finished · **✗** missing
 
-Current state of Praxis desktop (Electron) as of 2026-09-15. Core backends ship
-to all hosts; desktop-specific features are in the renderer (`apps/praxis-desktop/renderer`)
-and Electron integration. Last audited: 2026-09-15.
+Current state of Praxis desktop as of 2026-11-12. The shell is a native **Tauri v2**
+application (`apps/praxis-desktop/src-tauri`) over in-process Rust services; the Electron
+main process is retired. The renderer (`apps/praxis-desktop/renderer`) is unchanged React and
+talks to Rust through the generated `window.praxis` bridge. The "Electron" wording in the
+older rows below describes where a feature originated, not where it runs now.
+
+## Tauri port status (2026-11-12)
+
+All 407 renderer channels and 30 event channels are registered in Rust
+(`tauri-contract-audit.json`: `registeredCount 407`, `missingCount 0`). Registration is not
+proof of parity: the audit still reports `verifiedCount 0`. The evidence that exists is the
+functional Playwright suite, which runs the real renderer in Chromium against
+`praxis-desktop --e2e-server` (see "Verification" below).
+
+**Ported to Rust and exercised by the functional e2e suite:** settings, workspaces/projects/
+connections stores; folder, demo, GitHub, GitLab and Jira backends; boards, issues, board prefs;
+notes, artifacts, activity and log bus; terminal PTYs; git; marketplace (registry, install,
+activation); agent runtime discovery/authoring/import; ACP and API-provider AI sessions, session
+lifecycle (handover, model change, multi-AI, recovery, close guard), usage ledger and dashboard,
+gadgets and interactive ticket review, durable team chat/assistant, delivery, decomposition,
+merge-request and peer-review workflows; workflow validation, orchestrator, worktrees, check
+execution, template/agent recommendation; scheduled runs and request-file import; Task Designer
+state and plan generation; session coordination broker; mobile host transport;
+child webviews with the loopback guard proxy.
+
+**Not ported or not functional on Tauri yet:**
+
+| Area | State |
+|---|---|
+| Auto-update | ✗ `update:*` channels answer `state: unsupported` ("only checked in a packaged build"); FX-BE-034 signing credentials still outstanding |
+| Window vibrancy ("Window blur") | ✗ `window:supportsVibrancy` returns `false` and `setSurfaceVibrancy` is a no-op, so the Settings toggle never shows in the real app |
+| Single-instance lock, deep links (`praxis://`), tray, global shortcuts | ✗ not implemented in the shell |
+| Browser diagnostics for the AI browser | ✗ `browser_diagnostics` reports "not supported by this browser host" |
+| Local-project ticket comments | ? "Comments are not available on local project tickets yet" |
+| Other backend modes | ✗ any mode without a `case` in `application/connections.rs` answers "not available in the Tauri shell yet" |
+| Behavioural parity proof | ? 0 of 407 channels independently verified; the four-stage `test:desktop:tauri` script is headless contract/storage checks, not a webview run |
+| Native-webview e2e | ✗ WKWebView/WebView2 cannot be driven by Playwright, so e2e runs in Chromium; the real native window is checked by hand |
+| Windows/Linux verification | ✗ local builds and e2e are macOS only |
+
+**Known open product issues found while re-baselining e2e (2026-11-12):**
+
+- The Overview page (`OverviewPage`) is unreachable: the title-bar Home button navigates to
+  `feature: 'overview'`, which `App.tsx` routes to the EasyMode canvas first, so the Overview
+  branch below it is dead code. `overview.spec.ts`, `overviewAiUsage.spec.ts` and
+  `overviewProviderBudgets.spec.ts` fail for this reason.
+- Rust's `built_in_look` (`crates/praxis-core/src/config/app_settings.rs`) and core's `builtInLook`
+  give every built-in Look the dark theme while the top-level default theme is light. The renderer
+  used to repaint a fresh profile with the active Look's dark theme; it now applies the top-level
+  appearance fields, which Settings and the Looks already keep in step.
+
+## Verification
+
+- Unit/native: `npm run test:rust`, `npm run test:core`, `npm run test:renderer`.
+- Contract gate: `npm run test:desktop:tauri` (registration audit and headless storage checks).
+- Playwright e2e (`apps/praxis-desktop/playwright.config.ts`, projects `functional`, `smoke`,
+  `themes`, `live-agent`): `npm run test:desktop:e2e` / `:smoke` / `:themes`. Each test starts the
+  `praxis-desktop` binary in `--e2e-server` mode and loads `renderer/dist/tauri.html` in Chromium
+  at 1440x900. Dialogs, window controls and `shell:openExternal` are inert in that mode; specs use
+  `app.overrideChannel` for anything the host cannot answer. Screenshot baselines are 1440x900.
 
 ## Backends & connections
 
@@ -20,7 +76,7 @@ and Electron integration. Last audited: 2026-09-15.
 | GitHub boards | ✓ | REST API client (`GitHubBoardService`); one board per repository, columns synthesized from "status: …" labels already on the repo (FX-BE-035) |
 | Connections manager UI | ✓ | Sidebar + detail pane; add/remove/test connections |
 | Connection health check | ✓ | Test button; reports auth/network status inline |
-| Encrypted secret storage | ✓ | Electron `safeStorage` API; autolock on suspend |
+| Encrypted secret storage | ✓ | OS credential store (keyring) in shipping builds, a 0600 file in e2e; one-time read-only import of Electron `safeStorage` entries on macOS (Windows/Linux import not implemented) |
 | Multi-connection board merge | ✓ | Virtual board fuses multiple connections' issues |
 
 ## Boards
@@ -147,9 +203,9 @@ and Electron integration. Last audited: 2026-09-15.
 | Status/connection indicator | ✓ | `ConnectionStatusDot.tsx` on each non-demo sidebar connection group, fed by `connection.check` |
 | Output / log panel | ✓ | Bottom panel with Output (terminal) tab; Application tab planned |
 | Application logs | ✓ | Output tab tails the shared log bus (`[ai]`, `[jira]`, `[gitlab]`, `[workflow]` tags). Filter box (terms ANDed, case-insensitive, tags searchable), copy, save as a file, clear view. History survives a restart: main appends to `<userData>/logs/application.log` (one JSON string per line, rotated once past 1 MB) and seeds the 500-line ring from it, with a `previous session above` marker (FX-BE-041) |
-| Native window chrome | ✓ | Electron default frame; settings option to hide |
-| Auto-update | ✓ | Signed, notarized builds (FX-BE-034; blocked on credentials) |
-| Installer packaging | ✓ | DMG (Mac), MSI (Windows), AppImage (Linux) |
+| Native window chrome | ✓ | Tauri window; native default menu |
+| Auto-update | ✗ | Not ported: the Tauri host reports `unsupported` (FX-BE-034; blocked on credentials) |
+| Installer packaging | ? | `npm run desktop:dist` builds the Tauri binary without bundling; installers, signing and notarization are not re-established on Tauri |
 
 ## Remaining gaps
 
