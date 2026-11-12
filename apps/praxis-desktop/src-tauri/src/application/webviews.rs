@@ -85,38 +85,24 @@ impl WebviewManager {
             }
             "browser:navigate" => {
                 let url = text(args, 0)?;
-                let allow_private =
-                    std::env::var("PRAXIS_BROWSER_ALLOW_LOOPBACK").as_deref() == Ok("1");
-
-                if let Some(reason) = blocked_browser_url_reason(url, allow_private) {
-                    return Err(failure(reason));
-                }
-
-                let title = format!("Praxis Browser — {url}");
-                *self.browser_url.lock().map_err(failure)? = url.to_string();
-                *self.browser_title.lock().map_err(failure)? = title.clone();
-                host.events().emit(
-                    "browser:didNavigate",
-                    Some(json!({ "url": url, "title": title })),
-                );
-                Ok(json!({
-                    "ok": true,
-                    "url": url,
-                    "title": title
-                }))
+                let page = super::runtime::block_on(super::ai_browser::navigate(host, url)).map_err(failure)?;
+                *self.browser_url.lock().map_err(failure)? = page.url.clone();
+                *self.browser_title.lock().map_err(failure)? = page.title.clone();
+                Ok(json!({ "ok": true, "url": page.url, "title": page.title }))
             }
-            "browser:back" | "browser:forward" | "browser:reload" => Ok(Value::Null),
-            "browser:getState" => {
-                let url = self.browser_url.lock().map_err(failure)?.clone();
-                let title = self.browser_title.lock().map_err(failure)?.clone();
-                Ok(json!({
-                    "url": url,
-                    "canGoBack": false,
-                    "canGoForward": false,
-                    "isLoading": false,
-                    "title": title
-                }))
+            "browser:back" => {
+                super::runtime::block_on(super::ai_browser::go_back(host));
+                Ok(Value::Null)
             }
+            "browser:forward" => {
+                super::runtime::block_on(super::ai_browser::go_forward(host));
+                Ok(Value::Null)
+            }
+            "browser:reload" => {
+                super::runtime::block_on(super::ai_browser::reload(host)).map_err(failure)?;
+                Ok(Value::Null)
+            }
+            "browser:getState" => Ok(super::ai_browser::get_state()),
             "preview:attach" => Ok(Value::Null),
             "preview:setBounds" => {
                 let bounds: RectBounds = args

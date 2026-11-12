@@ -358,6 +358,31 @@ async fn run_mcp_tool(task: &Arc<Task>, tool: &praxis_ai::mcp::tool_bridge::Reso
     ToolOutcome { ok, content, data: None }
 }
 
+/// An in-app browser tool. Navigating to a host that is not on the allow-list asks first; the
+/// approval is remembered in Settings. Loopback and private hosts stay refused (see `ai_browser`).
+async fn run_browser_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
+    if !task.host.settings().read().ai.browser_tools.enabled {
+        return failed("The in-app browser is turned off in Settings.");
+    }
+    if call.name == "browser_navigate" {
+        let url = call.arguments["url"].as_str().unwrap_or_default().to_owned();
+        if let Some(host_name) = super::ai_browser::host_of(&url) {
+            let allowed = task.host.settings().read().ai.browser_tools.allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(&host_name));
+            if !allowed {
+                let request = json!({ "toolCallId": call.id, "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": "browser_navigate", "rawInput": call.arguments });
+                if task.request_permission(request).await == super::acp_host::Decision::Deny {
+                    return failed(format!("Permission denied to open {host_name}."));
+                }
+                let mut hosts = task.host.settings().read().ai.browser_tools.allowed_hosts.clone();
+                hosts.push(host_name);
+                let _ = super::ai_providers::write_settings(&task.host, &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }));
+            }
+        }
+    }
+    let (ok, content) = super::ai_browser::run_tool(&task.host, &call.name, &call.arguments).await;
+    ToolOutcome { ok, content, data: None }
+}
+
 /// A tracker tool against the connection the session is bound to; writes ask first.
 async fn run_tracker_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
     let connection_id = task.store.get(&task.key).ok().flatten().and_then(|r| r["connectionId"].as_str().map(str::to_owned));
@@ -384,6 +409,9 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
     }
     if call.name.starts_with("tracker_") {
         return run_tracker_tool(task, call).await;
+    }
+    if call.name.starts_with("browser_") {
+        return run_browser_tool(task, call).await;
     }
     if task.tool_mode == "read-only" && !matches!(call.name.as_str(), "read_file" | "list_dir" | "read_image") {
         return failed(format!("{} is unavailable in read-only tool mode.", call.name));
@@ -595,6 +623,9 @@ enum Outcome {
 
 async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, system: String, mut history: Vec<WireMessage>, tool_mode: &str, max_steps: u64, reasoning: Option<&str>) -> (Outcome, Vec<WireMessage>) {
     let mut tools = tool_definitions(tool_mode, !task.key.starts_with("SESSION-"));
+    if tool_mode == "full" && task.host.settings().read().ai.browser_tools.enabled {
+        tools.extend(super::ai_browser::tool_definitions().into_iter().map(|(name, description, schema)| GatewayToolDefinition { name: name.into(), description: Some(description.into()), input_schema: Some(schema) }));
+    }
     let (mcp_servers, mcp_tools) = super::user_mcp::api_tools(&task.host, tool_mode, &connection.provider).await;
     tools.extend(mcp_tools.iter().map(|t| GatewayToolDefinition { name: t.namespaced_name.clone(), description: t.description.clone(), input_schema: t.input_schema.clone() }));
     // The gateway's internal model ids carry a `Vercel/` prefix that is not part of the wire id.
