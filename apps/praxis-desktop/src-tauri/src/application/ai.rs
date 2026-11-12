@@ -13,10 +13,6 @@ fn analysis_file(user_data_dir: &Path) -> std::path::PathBuf {
     user_data_dir.join("ai-analysis.json")
 }
 
-fn feedback_file(user_data_dir: &Path) -> std::path::PathBuf {
-    user_data_dir.join("session-feedback.json")
-}
-
 fn read_sessions(user_data_dir: &Path) -> Result<BTreeMap<String, Value>> {
     super::session_store::store(user_data_dir).all()
 }
@@ -99,30 +95,6 @@ fn save_analysis(user_data_dir: &Path, analysis: &BTreeMap<String, Value>) -> Re
         "praxis.issueAnalysis"
     };
     let encoded = super::storage::encoded(&json!({ key: analysis }))?;
-    write_atomic(&path, &encoded, false)
-}
-
-fn read_feedback(user_data_dir: &Path) -> Result<BTreeMap<String, Value>> {
-    let path = feedback_file(user_data_dir);
-    if let Some(content) = read(&path)? {
-        let val = parse(&path, Some(&content))?;
-        if let Some(map_obj) = val
-            .get("praxis.sessionFeedback.v1")
-            .and_then(Value::as_object)
-        {
-            let mut map = BTreeMap::new();
-            for (k, v) in map_obj {
-                map.insert(k.clone(), v.clone());
-            }
-            return Ok(map);
-        }
-    }
-    Ok(BTreeMap::new())
-}
-
-fn save_feedback(user_data_dir: &Path, feedback: &BTreeMap<String, Value>) -> Result<()> {
-    let path = feedback_file(user_data_dir);
-    let encoded = super::storage::encoded(&json!({ "praxis.sessionFeedback.v1": feedback }))?;
     write_atomic(&path, &encoded, false)
 }
 
@@ -469,42 +441,6 @@ pub fn dispatch(
 
         // 7. Delivery, peer review and merge requests live in `ai_workflows`.
 
-        // 8. Feedback & prompt evaluation
-        "ai:evaluatePrompt" => {
-            let input = args.first().cloned().unwrap_or(Value::Null);
-            Ok(super::ai_feedback::empty_report("prompt-readiness", &input, now()))
-        }
-        "ai:getFindingFeedback" => {
-            let digest = text(args, 0)?;
-            let feedbacks = read_feedback(user_data_dir)?;
-            Ok(feedbacks.get(digest).cloned().unwrap_or(Value::Null))
-        }
-        "ai:reviewFinding" => {
-            let input = args.first().cloned().unwrap_or_else(|| json!({}));
-            Ok(json!({ "recorded": true, "finding": input }))
-        }
-        "ai:evaluateSession" => {
-            let input = args.first().cloned().unwrap_or(Value::Null);
-            let input = if input.is_string() { json!({ "issueKey": input }) } else { input };
-            Ok(super::ai_feedback::empty_report("session-execution", &input, now()))
-        }
-        "ai:getSessionFeedback" => {
-            let session_id = text(args, 0)?;
-            let feedbacks = read_feedback(user_data_dir)?;
-            Ok(feedbacks.get(session_id).cloned().unwrap_or(Value::Null))
-        }
-        "ai:submitSessionFeedback" => {
-            let session_id = text(args, 0)?;
-            let feedback = args.get(1).cloned().unwrap_or_else(|| json!({}));
-            let mut feedbacks = read_feedback(user_data_dir)?;
-            feedbacks.insert(session_id.to_string(), feedback.clone());
-            save_feedback(user_data_dir, &feedbacks)?;
-            Ok(feedback)
-        }
-        "ai:rewritePromptFromFeedback" => {
-            let prompt = text(args, 0).unwrap_or("");
-            Ok(json!({ "rewrittenPrompt": prompt }))
-        }
         _ => Err(failure(format!("Unknown AI channel: {channel}"))),
     }
 }
