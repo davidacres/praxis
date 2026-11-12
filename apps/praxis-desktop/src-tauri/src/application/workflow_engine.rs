@@ -1010,6 +1010,7 @@ pub fn engine(host: &HostContext) -> &'static Engine {
                 dispatcher: Arc::new(HostDispatcher { host: host.clone() }),
                 workspace: Some(Arc::new(GitWorkspace { host: host.clone() })),
                 on_run_changed: Some(Arc::new(move |run: &WorkflowRun| {
+                    super::task_notifications::run_changed(run);
                     events_host
                         .events()
                         .emit("workflows:runChanged", Some(json!(run.run_id)));

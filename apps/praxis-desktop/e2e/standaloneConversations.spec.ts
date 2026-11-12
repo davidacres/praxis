@@ -8,15 +8,6 @@ import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 let app: TestApp | undefined;
 test.afterEach(async () => { if (app) await closeTestApp(app); app = undefined; });
 
-test('detached-chat IPC refuses a window outside the trusted renderer', async () => {
-  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
-  // Not reproducible: this probes a second *native* webview that carries the preload bridge but
-  // is not a trusted application renderer, and the host refusing its IPC. The e2e harness has no
-  // native windows (every page here is a trusted Chromium page), so the refusal cannot be exercised.
-  throw new Error('Needs a native untrusted webview: the sender-trust check is enforced by the Tauri shell, which the Chromium e2e harness replaces.');
-  expect(await app.window.evaluate(() => window.praxis.detachedChat.list())).toEqual([]);
-});
-
 test('standalone conversation persists and resumes across floating-window pop-in, close and app restart', async () => {
   test.setTimeout(60000);
   const fixture = path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs');

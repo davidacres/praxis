@@ -13,6 +13,54 @@ use tauri_plugin_opener::OpenerExt;
 
 use state::DesktopState;
 
+/// Raises task notifications with the platform's notification centre.
+///
+/// The desktop notification plugin reports no click on desktop platforms, so a click cannot be
+/// routed back here; `open` is what a click handler calls once one exists, and is exercised
+/// through the e2e server's recording shell.
+struct NativeNoticeShell {
+    app: tauri::AppHandle,
+}
+
+impl application::task_notifications::NoticeShell for NativeNoticeShell {
+    fn focused_windows(&self) -> Vec<String> {
+        self.app
+            .webview_windows()
+            .into_iter()
+            .filter(|(_, window)| {
+                window.is_focused().unwrap_or(false)
+                    && window.is_visible().unwrap_or(false)
+                    && !window.is_minimized().unwrap_or(false)
+            })
+            .map(|(label, _)| label)
+            .collect()
+    }
+
+    fn show(&self, notice: &application::task_notifications::Notice, silent: bool) {
+        use tauri_plugin_notification::NotificationExt;
+        let mut builder = self.app.notification().builder().title(&notice.title).body(&notice.body);
+        if !silent {
+            builder = builder.sound("default");
+        }
+        if let Err(error) = builder.show() {
+            eprintln!("Task notification could not be displayed: {error}");
+        }
+    }
+
+    fn open(&self, notice: &application::task_notifications::Notice, _detached: Option<&str>) {
+        // Chats are not popped out into native windows of their own yet, so the main window opens it.
+        if let Some(window) = self.app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.emit(
+                "praxis:event",
+                json!({"channel": "window:notificationOpen", "payload": notice.target}),
+            );
+            let _ = window.set_focus();
+        }
+    }
+}
+
 fn error(code: &str, message: impl ToString) -> RustRpcError {
     RustRpcError {
         code: code.into(),
@@ -106,7 +154,13 @@ async fn praxis_rpc(
                 .map_err(shell_error)?;
             Ok(json!(factor))
         }
-        "window:setNotificationView" => Ok(Value::Null),
+        "window:setNotificationView" => {
+            application::task_notifications::set_view(
+                window.label(),
+                args.first().unwrap_or(&Value::Null),
+            );
+            Ok(Value::Null)
+        }
         "dialog:pickFolder" => {
             let dialog = window.dialog().file().set_title(
                 args.first()
@@ -293,6 +347,7 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .invoke_handler(tauri::generate_handler![praxis_rpc])
         .setup(|app| {
@@ -302,6 +357,10 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 window.set_zoom(state.host.settings().read().appearance.zoom_factor)?;
             }
+            application::task_notifications::install(
+                &state.host,
+                std::sync::Arc::new(NativeNoticeShell { app: app.handle().clone() }),
+            );
             app.manage(state);
             app.set_menu(tauri::menu::Menu::default(app.handle())?)?;
             if let Ok(dev_url) = std::env::var("PRAXIS_DEV_SERVER_URL")

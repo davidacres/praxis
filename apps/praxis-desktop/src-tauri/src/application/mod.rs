@@ -47,6 +47,7 @@ mod scheduled_runs;
 pub(crate) mod storage;
 mod system;
 mod task_designer;
+pub mod task_notifications;
 mod webviews;
 mod workflow_agent_stage;
 mod workflow_engine;
@@ -448,6 +449,20 @@ fn issue_connection<'a>(channel: &str, args: &'a [Value]) -> Option<&'a str> {
 /// Stops what agents left running and leaves the coordination broker (the app is quitting).
 pub fn dispose() {
     coordination::dispose();
+}
+
+/// Test seam (e2e server only): stores `record` as the session manager would after a state change
+/// and publishes `ai:sessionChanged`, so a spec can walk a session through its states.
+pub fn e2e_apply_session(host: &HostContext, record: Value) -> Result<()> {
+    let key = record["issueKey"].as_str().filter(|k| !k.is_empty()).ok_or_else(|| failure("record needs an issueKey"))?.to_owned();
+    let stored = session_store::store(&host.config().user_data_dir).put(&key, record)?;
+    host.events().emit("ai:sessionChanged", Some(stored));
+    Ok(())
+}
+
+/// Test seam (e2e server only): see `scheduled_runner_host::set_usage_override`.
+pub fn set_provider_usage_override(raw: Option<String>) {
+    scheduled_runner_host::set_usage_override(raw);
 }
 
 pub fn running_session_count(dir: &std::path::Path) -> usize {

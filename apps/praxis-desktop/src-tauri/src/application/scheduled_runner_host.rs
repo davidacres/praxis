@@ -175,9 +175,19 @@ pub fn usable_providers(host: &HostContext) -> Vec<String> {
 
 /// An e2e stand-in for provider quotas: `{"claude-code-cli":0.97}` is the fraction of allowance used.
 pub fn usage_override() -> Option<std::collections::BTreeMap<String, f64>> {
-    std::env::var("PRAXIS_E2E_PROVIDER_USAGE")
-        .ok()
+    let live = E2E_USAGE.lock().ok().and_then(|raw| raw.clone());
+    live.or_else(|| std::env::var("PRAXIS_E2E_PROVIDER_USAGE").ok())
         .and_then(|raw| serde_json::from_str(&raw).ok())
+}
+
+/// Test seam (e2e server only): replaces the usage override while the process runs, since a
+/// separate backend process cannot have its environment changed mid-test.
+static E2E_USAGE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn set_usage_override(raw: Option<String>) {
+    if let Ok(mut live) = E2E_USAGE.lock() {
+        *live = raw;
+    }
 }
 
 /// An entry's agent tasks in run order, with state, attempts and time (`scheduledEntryDetail`).
@@ -649,10 +659,7 @@ impl ScheduledRunnerPorts for HostPorts {
 
     async fn usage(&self) -> Result<ProviderUsageReading, String> {
         let usable = self.usable_providers();
-        let override_usage: Option<std::collections::BTreeMap<String, f64>> =
-            std::env::var("PRAXIS_E2E_PROVIDER_USAGE")
-                .ok()
-                .and_then(|raw| serde_json::from_str(&raw).ok());
+        let override_usage = usage_override();
         let mut used = ProviderUsage::new();
         if let Some(map) = &override_usage {
             for provider in &usable {

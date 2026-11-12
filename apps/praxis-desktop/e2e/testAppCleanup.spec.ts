@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, notReproducible } from './launchTestApp';
+import { closeTestApp, launchTestApp } from './launchTestApp';
 
-test('normal teardown exits Electron and removes its isolated profile', async () => {
+test('normal teardown exits the backend and removes its isolated profile', async () => {
   const app = await launchTestApp();
   const child = app.electronApp.process();
   await closeTestApp(app);
@@ -27,12 +27,12 @@ test('stalled renderer cleanup is bounded and reported after terminating its app
   }
 });
 
-test('vetoed Electron shutdown is bounded and remains a failure', async () => {
+test('vetoed shutdown is bounded and remains a failure', async () => {
   const app = await launchTestApp();
   const child = app.electronApp.process();
   try {
-    await notReproducible('the vetoed shutdown is an Electron before-quit handler preventing exit; the Rust backend exits when its stdin closes and has no veto');
-    await expect(closeTestApp(app, { timeoutMs: 1000 })).rejects.toThrow(/closing Electron/);
+    await app.vetoShutdown();
+    await expect(closeTestApp(app, { timeoutMs: 1000 })).rejects.toThrow(/closing the backend/);
     expect(child.signalCode).toBe('SIGKILL');
     expect(fs.existsSync(app.userDataDir)).toBe(false);
   } finally {
