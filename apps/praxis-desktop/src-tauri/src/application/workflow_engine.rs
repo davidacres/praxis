@@ -22,6 +22,7 @@ use praxis_workflows::types::{WorkflowAgentTaskNode, WorkflowCheckNode, Workflow
 use serde_json::json;
 use tokio::process::Command;
 
+use super::workflow_agent_stage;
 use super::workflows;
 
 /// Metadata Praxis writes into a checkout; it is not product source and never blocks a run.
@@ -536,7 +537,11 @@ impl StageDispatcher for HostDispatcher {
         if workflows::project_folder(&self.host, &run.project_id).is_none() {
             return false;
         }
-        matches!(node, WorkflowNode::Check(_))
+        match node {
+            WorkflowNode::Check(_) => true,
+            WorkflowNode::AgentTask(_) => workflow_agent_stage::can_dispatch(&self.host),
+            _ => false,
+        }
     }
 
     async fn run_check(
@@ -549,10 +554,16 @@ impl StageDispatcher for HostDispatcher {
 
     async fn run_agent_stage(
         &self,
-        _node: &WorkflowAgentTaskNode,
-        _context: &StageDispatchContext,
+        node: &WorkflowAgentTaskNode,
+        context: &StageDispatchContext,
     ) -> Result<StageOutcome, String> {
-        Err("Agent stages are not dispatched by this build.".into())
+        workflow_agent_stage::run_agent_stage(&self.host, node, context).await
+    }
+
+    async fn cancel_stage(&self, node_id: &str, run: &WorkflowRun) -> Result<(), String> {
+        let key = super::workflow_summary::stage_session_key(&run.run_id, node_id);
+        super::acp_host::abort_task(&self.host, &self.host.config().user_data_dir, &key);
+        Ok(())
     }
 }
 

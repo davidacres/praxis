@@ -27,6 +27,7 @@ pub(crate) mod storage;
 mod system;
 mod task_designer;
 mod webviews;
+mod workflow_agent_stage;
 mod workflow_engine;
 mod workflow_summary;
 mod workflows;
