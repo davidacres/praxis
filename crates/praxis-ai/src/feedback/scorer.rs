@@ -794,6 +794,7 @@ pub fn evaluate(input: &EvaluationInput) -> Value {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -180,6 +180,7 @@ pub fn session_summary(report: &Value) -> Value {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

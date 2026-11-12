@@ -517,7 +517,7 @@ impl FolderService {
         &self,
         options: Option<&SyncBoardConfigOptions>,
     ) -> Result<(), String> {
-        let settle = WriteSettle(self);
+        let _settle = WriteSettle(self);
         self.ensure_loaded()?;
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let Some(ref plans_root_str) = guard.plans_root_path else {
@@ -1360,7 +1360,7 @@ impl FolderService {
         if comment_body.is_empty() {
             return Err("Comment cannot be empty.".to_string());
         }
-        let settle = WriteSettle(self);
+        let _settle = WriteSettle(self);
         self.ensure_loaded()?;
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let issue = guard
@@ -1405,7 +1405,7 @@ impl FolderService {
 
     /// Moves `issue_key` along `transition_id` and updates parent feature rollup tables.
     pub fn transition_issue(&self, issue_key: &str, transition_id: &str) -> Result<(), String> {
-        let settle = WriteSettle(self);
+        let _settle = WriteSettle(self);
         self.ensure_loaded()?;
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let issue_idx = guard

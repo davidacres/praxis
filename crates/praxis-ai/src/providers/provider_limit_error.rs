@@ -13,33 +13,6 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The markers a provider uses when it is out of quota.
-const LIMIT_MARKERS: &[&str] = &[
-    "rate limit",
-    "usage limit",
-    "quota exceeded",
-    "exceeded your quota",
-    "exceeded your current quota",
-    "quota",
-    "insufficient_quota",
-    "resource_exhausted",
-    "too many requests",
-];
-
-/// The markers that mean the *model* answered with a complaint, rather than
-/// the provider refusing the request.
-const LIMIT_NOTICE_MARKERS: &[&str] = &[
-    "usage limit reached",
-    "rate limit reached",
-    "quota exceeded",
-    "insufficient_quota",
-    "resource_exhausted",
-    "daily limit",
-    "weekly limit",
-    "monthly limit",
-    "too many requests",
-];
-
 /// The kind of limit a provider hit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -131,6 +104,7 @@ pub fn extract_provider_limit_message(error: &str) -> Option<String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::{extract_provider_limit_message, is_limit_notice_reply, is_provider_limit_error};
 
@@ -167,7 +141,7 @@ mod tests {
         assert!(!is_limit_notice_reply(
             "Here is the answer to your question."
         ));
-        assert!(!is_limit_notice_reply(&format!("rate limit\n```\nx\n```")));
+        assert!(!is_limit_notice_reply("rate limit\n```\nx\n```"));
         assert!(!is_limit_notice_reply(&"rate limit ".repeat(80)));
     }
 

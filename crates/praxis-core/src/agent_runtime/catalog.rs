@@ -272,7 +272,7 @@ pub fn parse_agent_profile(content: &str, fallback_id: &str) -> (Value, Option<S
         std::collections::HashMap<&str, String>,
         String,
         Option<String>,
-    ) = if content.starts_with("---") {
+    ) = if let Some(after_fence) = content.strip_prefix("---") {
         match front_matter_block(content) {
             None => (
                 Default::default(),
@@ -280,9 +280,7 @@ pub fn parse_agent_profile(content: &str, fallback_id: &str) -> (Value, Option<S
                 Some("AGENT.md front matter is not closed.".into()),
             ),
             Some(block) => {
-                let end = content[3..]
-                    .find("\n---")
-                    .map_or(content.len(), |at| at + 3);
+                let end = after_fence.find("\n---").map_or(content.len(), |at| at + 3);
                 let body = content.get(end + 4..).unwrap_or_default().trim().to_owned();
                 (
                     block

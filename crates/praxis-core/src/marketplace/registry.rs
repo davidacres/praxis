@@ -202,6 +202,7 @@ pub fn normalize_packument(name: &str, raw: &Value) -> Result<Packument, String>
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use serde_json::json;
 

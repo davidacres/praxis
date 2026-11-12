@@ -1161,7 +1161,7 @@ impl IssueTrackerService for JiraCloudService {
                 .lock()
                 .await
                 .as_ref()
-                .map_or(true, |c| c.adapter == Adapter::Community);
+                .is_none_or(|c| c.adapter == Adapter::Community);
             if community {
                 let mut issues = self.agile_board_issues(board_id).await?;
                 issues.retain(|issue| {
@@ -1210,7 +1210,6 @@ impl IssueTrackerService for JiraCloudService {
         Ok(FilterMetadata {
             statuses,
             issue_types: types,
-            ..FilterMetadata::default()
         })
     }
 

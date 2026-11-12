@@ -34,18 +34,6 @@ lazy_re!(
     r"(?i)\b(do not edit|don't edit|read[- ]only|without modifying|only analyze|just explain|investigate only)\b"
 );
 lazy_re!(
-    file_anchor,
-    r"(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+|\b[A-Za-z0-9_-]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|css|html|py|go|rs|cs|dart)\b|`[^`]{2,80}`|@[A-Za-z0-9_./-]{3,})"
-);
-lazy_re!(
-    ticket_anchor,
-    r"\b(?:FX-[A-Z]+-\d+|TASK-\d+|[A-Z]{2,10}-\d+|#\d+)\b"
-);
-lazy_re!(
-    verification,
-    r"(?i)\b(test|tests|unit test|e2e|playwright|verify|verification|check-types|typecheck|compile|build|lint|assert|npm run|node --test)\b"
-);
-lazy_re!(
     question_lead,
     r"(?i)^(how|what|why|where|which|who|when|does|is|are|should|(?:can|could) you (?:explain|tell me|describe)|explain|tell me|describe)\b"
 );

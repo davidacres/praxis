@@ -317,6 +317,7 @@ pub fn extract_addon_payload(tarball: &[u8], dest: &Path) -> Result<(), String> 
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use std::io::Write;
 

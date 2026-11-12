@@ -360,14 +360,12 @@ fn validate_nodes<'a>(
             }
             "merge" => validate_merge(node, &at, errors),
             "map" => validate_map(node, &at, errors),
-            "approval" => {
-                if text(node, "prompt").is_none() {
-                    issue(
-                        errors,
-                        format!("{at}.prompt"),
-                        "An approval node needs a prompt.",
-                    );
-                }
+            "approval" if text(node, "prompt").is_none() => {
+                issue(
+                    errors,
+                    format!("{at}.prompt"),
+                    "An approval node needs a prompt.",
+                );
             }
             _ => {}
         }

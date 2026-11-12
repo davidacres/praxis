@@ -1577,6 +1577,7 @@ pub fn parse_and_coerce_blocks(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
