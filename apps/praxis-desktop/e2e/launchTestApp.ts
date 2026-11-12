@@ -234,7 +234,9 @@ function backendHandle(backend: ChildProcess, context: BrowserContext): BackendH
       if (backend.exitCode !== null || backend.signalCode !== null) return;
       const exited = new Promise<void>(resolve => backend.once('exit', () => resolve()));
       backend.stdin?.end();
-      await Promise.race([exited, new Promise<void>(resolve => setTimeout(resolve, 5000))]);
+      // A backend under load (several workers) can take well over 5s to drain; closeTestApp owns the
+      // hard deadline and the kill, so this only needs to not hide a slow-but-clean exit.
+      await Promise.race([exited, new Promise<void>(resolve => setTimeout(resolve, 20000))]);
     }
   };
 }
@@ -376,7 +378,13 @@ export async function launchTestApp(
     `--user-data-dir=${userDataDir}`,
     `--settings-path=${settingsPath}`,
     ...(options?.demoMode === false ? [] : ['--demo'])
-  ], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+  ], {
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    // Its own process group, so a stuck shutdown can take the backend's children (agent processes,
+    // git, shells) down with it instead of leaving them behind.
+    detached: process.platform !== 'win32'
+  });
   let backendStderr = '';
   backend.stderr.on('data', chunk => {
     backendStderr += String(chunk);
@@ -732,6 +740,19 @@ async function withinDeadline<T>(operation: Promise<T>, timeoutMs: number, messa
   }
 }
 
+/** SIGKILLs the backend and, where it leads its own process group, everything it spawned. */
+function killProcessGroup(child: ChildProcess): void {
+  if (process.platform !== 'win32' && child.pid) {
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+      return;
+    } catch {
+      // No such group (already gone, or not a leader): fall through to the single process.
+    }
+  }
+  child.kill('SIGKILL');
+}
+
 const testAppProcesses = new WeakMap<BackendHandle, ChildProcess>();
 
 /** A forced exit cleans up isolation, but still fails verification. */
@@ -755,12 +776,12 @@ export async function closeTestApp(app: TestApp, options: { timeoutMs?: number }
       await app.electronApp.close();
       stage = 'waiting for the backend process to exit';
       await exited;
-    })(), options.timeoutMs ?? 10000, () => `Test app shutdown timed out while ${stage} (pid ${child.pid})`);
+    })(), options.timeoutMs ?? 30000, () => `Test app shutdown timed out while ${stage} (pid ${child.pid})`);
   } catch (error) {
     shutdownError = error;
     if (!hasExited()) {
       // Only this launch's child process; never kill other Praxis instances.
-      child.kill('SIGKILL');
+      killProcessGroup(child);
       await withinDeadline(exited, 5000, () => `Test app process ${child.pid} did not exit after SIGKILL; profile retained at ${app.userDataDir}`);
     }
   } finally {
