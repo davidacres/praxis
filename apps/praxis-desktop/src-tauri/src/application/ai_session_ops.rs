@@ -121,8 +121,12 @@ fn edit_brief(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Value> {
 }
 
 fn handover_session(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Value> {
-    let key = text(args, 0)?;
-    let input = args.get(1).cloned().unwrap_or(Value::Null);
+    handover_to(host, dir, text(args, 0)?, args.get(1).cloned().unwrap_or(Value::Null))
+}
+
+/// Hands a session to another provider: refresh its brief, snapshot what the work stands on, validate the
+/// handover, record the runtime change and continue the session there (`handoverSession`).
+pub(super) fn handover_to(host: &HostContext, dir: &Path, key: &str, input: Value) -> Result<Value> {
     let sessions = store(dir);
     let record = sessions.get(key)?.ok_or_else(|| no_session(key))?;
     if acp_host::has_active_task(dir, key) {
@@ -146,10 +150,28 @@ fn handover_session(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Va
     let refreshed = handover::refreshed_brief(&current);
     sessions.mutate(key, true, |r| r["handoverBrief"] = refreshed)?;
     let current = sessions.get(key)?.ok_or_else(|| no_session(key))?;
-    let text_for_next = handover::envelope_text(&current);
+    // What the work stands on (commit, files, dependencies), taken now and persisted as evidence.
+    let (snapshot, manifest, head) = super::context_snapshot::take_snapshot(&current, &host.config().user_data_dir, &now());
+    let text_for_next = handover::envelope_text(&current, Some(&snapshot));
+    let purpose = if current["purpose"].is_object() { current["purpose"].clone() } else { handover::purpose_from_task(&current["taskDefinition"], key, current["title"].as_str()) };
+    let blocking: Vec<String> = super::context_snapshot::validate_handover(&purpose, &current["handoverBrief"], &text_for_next, Some(&snapshot), key, head.as_deref())
+        .into_iter()
+        .filter_map(|(blocks, message)| blocks.then_some(message))
+        .collect();
+    if !blocking.is_empty() {
+        return Err(failure(format!("Handover blocked: {}", blocking.join(" "))));
+    }
+    let detail = match &manifest {
+        Some(m) => format!(
+            "{text_for_next}\n\nContext snapshot {} ({} files, {} left out) saved to {}",
+            m["fingerprint"].as_str().unwrap_or_default().chars().take(12).collect::<String>(),
+            m["included"], m["excluded"], m["path"].as_str().unwrap_or_default()
+        ),
+        None => text_for_next.clone(),
+    };
     let mut outcome = Ok(());
     let summary = format!("Handed over to {label}{}", model.as_deref().map(|m| format!(" ({m})")).unwrap_or_default());
-    let updated = sessions.mutate(key, true, |r| outcome = handover::transition_runtime(r, Some(&target), model.as_deref(), "provider_handover", true, &summary, Some(&text_for_next)))?;
+    let updated = sessions.mutate(key, true, |r| outcome = handover::transition_runtime(r, Some(&target), model.as_deref(), "provider_handover", true, &summary, Some(&detail)))?;
     outcome?;
     if let Some(updated) = updated {
         host.events().emit("ai:sessionChanged", Some(updated));
@@ -366,7 +388,7 @@ fn conversation_prompt(record: &Value) -> String {
     let mut from_other = record.clone();
     from_other["provider"] = other["provider"].clone();
     from_other["model"] = other["model"].clone();
-    let envelope = handover::envelope_text(&from_other);
+    let envelope = handover::envelope_text(&from_other, None);
     let access = if record["toolMode"] == "full" {
         "You currently hold the only write-capable tool access. Do not act concurrently with the other AI."
     } else {

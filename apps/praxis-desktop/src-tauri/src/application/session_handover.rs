@@ -185,7 +185,7 @@ fn compact_transcript(events: &[Value]) -> String {
 }
 
 /// The text the next AI is given when it takes a session over.
-pub fn envelope_text(record: &Value) -> String {
+pub fn envelope_text(record: &Value, snapshot: Option<&Value>) -> String {
     let purpose = purpose_of_record(record);
     let brief = brief_of(record);
     let events = record["events"].as_array().cloned().unwrap_or_default();
@@ -226,7 +226,7 @@ pub fn envelope_text(record: &Value) -> String {
         optional("Files", files),
         String::new(),
         if workspace.is_empty() { String::new() } else { format!("## Workspace\n{workspace}") },
-        String::new(),
+        snapshot.map(super::context_snapshot::format_snapshot).unwrap_or_default(),
         if transcript.is_empty() { String::new() } else { format!("## Conversation\n{transcript}") },
         String::new(),
         "Continue the work described in Next steps.".to_owned(),
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn envelope_names_the_previous_runtime_and_redacts_secrets() {
-        let text = envelope_text(&record());
+        let text = envelope_text(&record(), None);
         assert!(text.contains("taking over this Praxis session from vercel-gateway (m1)"));
         assert!(text.contains("Goal: Ship it"));
         assert!(text.contains("[redacted]"));
