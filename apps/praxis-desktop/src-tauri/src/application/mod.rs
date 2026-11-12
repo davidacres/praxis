@@ -26,6 +26,7 @@ mod builtin_mcp;
 mod connections;
 mod deployments;
 mod log_bus;
+mod mobile_host;
 mod semantic_model;
 mod task_designer_plan;
 mod task_designer_state;
@@ -442,9 +443,15 @@ pub fn running_session_count(dir: &std::path::Path) -> usize {
 
 /// All desktop metadata mutations, including settings writes sharing the same
 /// JSON file, use one lock. Long-running PTY/AI/workflow commands do not hold it.
+/// A reverse-call client whose frames the mobile host answers in this process.
+pub fn in_process_calls(host: &HostContext) -> praxis_host::HostCallClient {
+    mobile_host::in_process_calls(host)
+}
+
 pub struct Application {
     state: Mutex<ApplicationState>,
     plan_watchers: plan_watch::PlanWatchers,
+    mobile: Arc<mobile_host::MobileHost>,
     webviews: webviews::WebviewManager,
     version: String,
 }
@@ -468,6 +475,7 @@ impl Application {
         let application = Arc::new(Self {
             state: Mutex::new(ApplicationState::default()),
             plan_watchers: plan_watch::PlanWatchers::default(),
+            mobile: mobile_host::MobileHost::new(host),
             webviews: webviews::WebviewManager::new(),
             version: version.into(),
         });
@@ -487,6 +495,8 @@ impl Application {
         std::thread::spawn(move || {
             marketplace::reconcile_installed_on_launch(&reconcile_host, &reconcile_host.config().user_data_dir);
         });
+        mobile_host::register_internal_channels(host, &application.mobile);
+        application.mobile.init();
         for &channel in CHANNELS.iter().chain(std::iter::once(&"settings:set")) {
             let application = Arc::clone(&application);
             host.register_handler(channel, move |host, args| {
@@ -659,6 +669,19 @@ impl Application {
             scheduled_runs::dispatch(host, channel, args)?
         } else if channel.starts_with("workflows:") {
             workflows::dispatch(host, channel, args)?
+        } else if let Some(result) = matches!(
+            channel,
+            "settings:getMobileHostInfo"
+                | "settings:createMobilePairingInvitation"
+                | "settings:confirmMobilePairing"
+                | "settings:denyMobilePairing"
+                | "settings:revokeMobilePairedDevice"
+                | "settings:rotateMobileHostKey"
+        )
+        .then(|| self.mobile.dispatch(channel, args, catalog.list(storage::PROJECTS)))
+        .flatten()
+        {
+            result?
         } else if channel.starts_with("settings:")
             || channel.starts_with("update:")
             || channel.starts_with("coordination:")

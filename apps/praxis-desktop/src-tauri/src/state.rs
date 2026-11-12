@@ -100,13 +100,12 @@ impl DesktopState {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        // The current mobile bridge proxies execution/pairing to Electron. Fail
-        // those reverse calls closed until their Rust application adapter exists.
-        let calls = HostCallClient::new(|_| false);
-        calls.close();
+        // The mobile listener's pairing questions are answered in this process.
+        let calls = crate::application::in_process_calls(&host);
         let services = HostServices::register(&host, runtime.handle(), calls);
-        crate::application::Application::register(&host, env!("CARGO_PKG_VERSION"));
+        // Secrets must be durable before the mobile host mints its identity.
         attach_secret_persistence(&host, std::env::var("PRAXIS_E2E").as_deref() != Ok("1"));
+        crate::application::Application::register(&host, env!("CARGO_PKG_VERSION"));
         let contract: Contract = serde_json::from_str(include_str!("../desktop-contract.json"))?;
         let events = contract.events.clone();
         let event_subscription = host.events().on_event(move |envelope| {

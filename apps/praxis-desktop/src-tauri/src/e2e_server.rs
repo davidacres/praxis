@@ -17,7 +17,7 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 
 use praxis_contracts::RustRpcRequest;
-use praxis_host::{HostCallClient, HostConfig, HostContext, HostServices};
+use praxis_host::{HostConfig, HostContext, HostServices};
 use serde_json::{Value, json};
 
 use crate::state::{contract_audit, contract_channels};
@@ -37,11 +37,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let host = HostContext::new(HostConfig::from_args_and_env(&args, &env)?);
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
-    let calls = HostCallClient::new(|_| false);
-    calls.close();
+    let calls = crate::application::in_process_calls(&host);
     let services = HostServices::register(&host, runtime.handle(), calls);
-    crate::application::Application::register(&host, env!("CARGO_PKG_VERSION"));
     crate::state::attach_secret_persistence(&host, false);
+    crate::application::Application::register(&host, env!("CARGO_PKG_VERSION"));
 
     let (methods, events) = contract_channels()?;
     let subscribers: Subscribers = Arc::new(Mutex::new(Vec::new()));
