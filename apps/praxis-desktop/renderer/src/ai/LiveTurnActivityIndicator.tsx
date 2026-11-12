@@ -72,7 +72,10 @@ export function LiveTurnActivityIndicator({
   const reportedTokens = typeof tokenCount === 'number' && Number.isFinite(tokenCount) && tokenCount >= 0
     ? Math.round(tokenCount).toLocaleString() : undefined;
   const formattedTime = formatElapsedDuration(elapsedMs);
-  const isGeneric = !statusText || statusText === 'Working…' || statusText === 'Thinking…' || statusText === 'Working' || statusText === 'Thinking';
+  const isGeneric = !statusText || statusText === 'Working…' || statusText === 'Thinking…' || statusText === 'Working' || statusText === 'Thinking'
+    // A CLI turn's opening state is 'planning' for as long as the agent has not used a tool, which is
+    // the same "nothing specific to say" as Working; the user's activity words stand in for it.
+    || statusText === 'Planning…' || statusText === 'Planning';
   const word = activityWords?.length ? activityWords[Math.floor(elapsedMs / 8000) % activityWords.length] : undefined;
   const displayText = (!isGeneric || !word) ? statusText : `${word.replace(/(?:…|\.\.\.)$/, '')}…`;
 

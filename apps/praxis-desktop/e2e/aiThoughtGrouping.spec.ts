@@ -247,8 +247,11 @@ test('a gadget in the final reply of a multi-round-trip turn still renders', asy
 
   // It really was a merged turn: one card, with the narration folded away.
   await expect(win.locator('[data-testid="session-chat-assistant"]')).toHaveCount(1);
-  const gadget = win.locator('[data-testid="gadget-artifact"]');
+  // An artifact gadget holding only a picture is promoted to the image gadget (chatGadgets.spec.ts
+  // "an artifact gadget of only images is drawn on the image surface"), so that is where it renders.
+  const gadget = win.locator('[data-testid="gadget-image"]');
   await expect(gadget).toHaveCount(1);
+  await expect(win.locator('[data-testid="gadget-artifact"]')).toHaveCount(0);
   await expect(gadget.locator('img.markdown-image-preview')).toHaveAttribute('src', /^data:image\/png;base64,/);
   fs.rmSync(workDir, { recursive: true, force: true });
 });
