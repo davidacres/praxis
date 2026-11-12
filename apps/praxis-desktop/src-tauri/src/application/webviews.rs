@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use crate::webviews::{
     BrowserDiagnosticsBundleKey, BrowserDiagnosticsRecorder, PreviewAccessRegistry,
-    blocked_browser_url_reason, preview_access_blocked_reason,
+    preview_access_blocked_reason,
 };
 
 use super::{Result, failure, text};

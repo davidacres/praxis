@@ -319,13 +319,13 @@ pub fn entry_detail(host: &HostContext, entry_id: &str, run: &WorkflowRun) -> Va
         {
             stage.insert("loopIteration".into(), json!(iteration));
         }
-        if row["lane"] == "paused" {
-            if let Some(error) = row["lastError"].as_str() {
-                stage.insert(
-                    "activity".into(),
-                    json!({ "text": error, "source": "pause" }),
-                );
-            }
+        if row["lane"] == "paused"
+            && let Some(error) = row["lastError"].as_str()
+        {
+            stage.insert(
+                "activity".into(),
+                json!({ "text": error, "source": "pause" }),
+            );
         }
         stages.push(Value::Object(stage));
     }
@@ -781,15 +781,13 @@ impl ScheduledRunnerPorts for HostPorts {
                 if let (Some(root), Some(existing)) = (
                     praxis_core::git::run_work::repository_root(&folder).await,
                     failed,
-                ) {
-                    if let Some(branch) = praxis_core::git::run_work::find_run_branch(
-                        std::path::Path::new(&root),
-                        &existing.run_id,
-                    )
-                    .await
-                    {
-                        shared = Some(branch);
-                    }
+                ) && let Some(branch) = praxis_core::git::run_work::find_run_branch(
+                    std::path::Path::new(&root),
+                    &existing.run_id,
+                )
+                .await
+                {
+                    shared = Some(branch);
                 }
             }
         }
@@ -1009,9 +1007,9 @@ impl ScheduledRunnerPorts for HostPorts {
                     *slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
                         Some(ScheduledGateDecisionResult { decision: decision.to_string(), reason });
                 };
-                if readiness.can_approve {
-                    if let Ok(result) = approve_stage(&current, &id, ACTOR, &at, policy.as_ref(), None) {
-                        if result.ok {
+                if readiness.can_approve
+                    && let Ok(result) = approve_stage(&current, &id, ACTOR, &at, policy.as_ref(), None)
+                        && result.ok {
                             let reason = if readiness.gates.is_empty() {
                                 "Auto-approved (no required gates).".to_string()
                             } else {
@@ -1023,11 +1021,9 @@ impl ScheduledRunnerPorts for HostPorts {
                             set("approved", reason);
                             return result.run;
                         }
-                    }
-                }
-                if optional {
-                    if let Ok(skipped) = skip_approval(&current, &id, ACTOR, &at) {
-                        if skipped.ok {
+                if optional
+                    && let Ok(skipped) = skip_approval(&current, &id, ACTOR, &at)
+                        && skipped.ok {
                             set(
                                 "skipped",
                                 format!(
@@ -1037,13 +1033,11 @@ impl ScheduledRunnerPorts for HostPorts {
                             );
                             return skipped.run;
                         }
-                    }
-                }
                 let findings = failing_gate_findings(&current, policy.as_ref(), None);
                 let repair = repair_stage_for_findings(&current, &findings);
                 let attempts = current.autonomous_rework_attempts.unwrap_or(0);
-                if let Some(repair_id) = repair {
-                    if !findings.is_empty() && attempts < WORKFLOW_MAX_LOOP_ITERATIONS {
+                if let Some(repair_id) = repair
+                    && !findings.is_empty() && attempts < WORKFLOW_MAX_LOOP_ITERATIONS {
                         let rework = rework_workflow_run(
                             &current,
                             &repair_id,
@@ -1060,7 +1054,6 @@ impl ScheduledRunnerPorts for HostPorts {
                             return next;
                         }
                     }
-                }
                 let reason = format!(
                     "Gates unmet: {}",
                     readiness.blocking.iter().map(|g| format!("{} {} — {}", g.gate.as_str(), g.state.as_str(), g.detail)).collect::<Vec<_>>().join("; ")

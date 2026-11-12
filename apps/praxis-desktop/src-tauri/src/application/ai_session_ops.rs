@@ -37,11 +37,6 @@ fn no_session(key: &str) -> praxis_contracts::RustRpcError {
     failure(format!("No agent session found for {key}."))
 }
 
-fn changed(host: &HostContext, record: &Value) {
-    host.events()
-        .emit("ai:sessionChanged", Some(stamp_reasoning(record.clone())));
-}
-
 /// The label of a provider (built in or a saved custom endpoint), or `None` when it is unknown.
 fn provider_label(host: &HostContext, provider: &str) -> Option<String> {
     built_in_descriptors()
@@ -484,11 +479,10 @@ fn send_message(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Value>
     let gate = format!("{}\u{0}{key}", dir.display());
     if !acp_host::has_active_task(dir, key)
         && !starting().lock().is_ok_and(|set| set.contains(&gate))
+        && let Some((participant, message, images)) = take_pending(host, dir, key)
     {
-        if let Some((participant, message, images)) = take_pending(host, dir, key) {
-            set_speaker(host, dir, key, &participant);
-            run_turn_in_background(host, dir, key, Some((message, images)));
-        }
+        set_speaker(host, dir, key, &participant);
+        run_turn_in_background(host, dir, key, Some((message, images)));
     }
     sessions
         .get(key)?

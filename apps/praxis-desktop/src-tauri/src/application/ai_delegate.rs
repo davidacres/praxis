@@ -875,11 +875,11 @@ fn finish_launch(
         });
     }
     for (field, name) in [("connectionId", "connectionId"), ("projectId", "projectId")] {
-        if let Some(value) = non_empty(&input, field).map(str::to_owned) {
+        if let Some(value) = non_empty(input, field).map(str::to_owned) {
             let _ = sessions.mutate(key, true, |record| record[name] = json!(value));
         }
     }
-    if let Some(parent) = non_empty(&input, "parentSessionKey").map(str::to_owned) {
+    if let Some(parent) = non_empty(input, "parentSessionKey").map(str::to_owned) {
         let _ = sessions.mutate(key, true, |record| {
             record["parentSessionKey"] = json!(parent)
         });
@@ -915,7 +915,7 @@ pub(super) fn sanitize_images(images: &Value) -> Vec<Value> {
             .collect();
         if !["image/png", "image/jpeg", "image/webp", "image/gif"].contains(&mime.as_str())
             || data.is_empty()
-            || data.len() % 4 != 0
+            || !data.len().is_multiple_of(4)
         {
             continue;
         }
@@ -1137,7 +1137,7 @@ fn resume_interrupted(host: &HostContext, dir: &std::path::Path, args: &[Value])
         || acp_host::has_active_task(dir, key)
         || !recovering()
             .lock()
-            .map_or(false, |mut set| set.insert(gate.clone()))
+            .is_ok_and(|mut set| set.insert(gate.clone()))
     {
         return Err(failure(
             "This session is no longer awaiting startup recovery.",
@@ -1196,12 +1196,10 @@ pub fn dispatch(
             if let Some(record) = sessions.get(key)?
                 && !acp_host::has_active_task(dir, key)
                 && !acp_host::is_terminal(record["state"].as_str().unwrap_or_default())
-            {
-                if let Some(updated) =
+                && let Some(updated) =
                     sessions.mutate(key, true, |r| r["state"] = json!("aborted"))?
-                {
-                    host.events().emit("ai:sessionChanged", Some(updated));
-                }
+            {
+                host.events().emit("ai:sessionChanged", Some(updated));
             }
             Ok(Value::Null)
         })(),

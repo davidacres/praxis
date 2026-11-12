@@ -79,7 +79,7 @@ fn interfaces(include_internal: bool) -> Vec<(String, Ipv4Addr)> {
             let Some(address) = entry.address.as_ref().and_then(|a| a.as_sockaddr_in()) else {
                 continue;
             };
-            let ip = Ipv4Addr::from(address.ip());
+            let ip = address.ip();
             if !found.iter().any(|(_, existing)| *existing == ip) {
                 found.push((entry.interface_name.clone(), ip));
             }

@@ -67,7 +67,6 @@ impl Decision {
 }
 
 struct Pending {
-    request: Value,
     reply: oneshot::Sender<Decision>,
 }
 
@@ -844,10 +843,7 @@ impl Task {
         }
         let (reply, answer) = oneshot::channel();
         if let Ok(mut pending) = self.pending.lock() {
-            pending.push_back(Pending {
-                request: request.clone(),
-                reply,
-            });
+            pending.push_back(Pending { reply });
         }
         self.set_state("awaiting_approval", None);
         let action = permission_action(&request);
@@ -1240,22 +1236,6 @@ pub struct StartTask {
     pub mcp_servers: Vec<Value>,
     /// Images sent with the first prompt (a reconstructed team-chat turn starts a fresh session).
     pub images: Vec<Value>,
-}
-
-fn purpose_of(task: &Value, issue_key: &str) -> String {
-    let goal = task["goal"]
-        .as_str()
-        .unwrap_or_default()
-        .lines()
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_owned();
-    if goal.is_empty() {
-        issue_key.to_owned()
-    } else {
-        goal.chars().take(120).collect()
-    }
 }
 
 /// Creates the session record, then runs the agent in the background. Returns the session id.
@@ -2266,6 +2246,7 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
 
 // ── shared with the API-provider host ───────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 /// Builds and registers the shared task state for a turn with no ACP connection.
 pub(super) fn register_api_task(
     host: &HostContext,

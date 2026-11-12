@@ -112,7 +112,7 @@ impl EventStream for HttpSse {
                     }
                     let event = SseEvent {
                         event: self.event.take(),
-                        data: self.data.drain(..).collect::<Vec<_>>().join("\n"),
+                        data: std::mem::take(&mut self.data).join("\n"),
                     };
                     return Some(Ok(event));
                 }
@@ -126,7 +126,7 @@ impl EventStream for HttpSse {
                     if !self.data.is_empty() {
                         self.queue.push_back(SseEvent {
                             event: self.event.take(),
-                            data: self.data.drain(..).collect::<Vec<_>>().join("\n"),
+                            data: std::mem::take(&mut self.data).join("\n"),
                         });
                     }
                     self.event = None;
@@ -786,13 +786,13 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
                         None => None,
                     };
                     let before = std::fs::read_to_string(&full).ok();
-                    let written = (|| {
+                    let written = {
                         if let Some(parent) = full.parent() {
                             let _ = std::fs::create_dir_all(parent);
                         }
                         std::fs::write(&full, &content)
                             .map_err(|error| format!("{}: {error}", full.display()))
-                    })();
+                    };
                     if let Some(grant) = grant {
                         grant.release(None).await;
                     }
@@ -1071,6 +1071,7 @@ enum Outcome {
     StepLimit(String),
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_loop(
     task: &Arc<Task>,
     connection: &ApiConnection,
@@ -1592,6 +1593,7 @@ fn history_from_record(record: &Value) -> Vec<WireMessage> {
     serde_json::from_value(record["conversationHistory"].clone()).unwrap_or_default()
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_session(
     task: Arc<Task>,
     connection: ApiConnection,
@@ -1850,6 +1852,7 @@ pub fn start_api_task(
     Ok(session_id)
 }
 
+#[allow(clippy::too_many_arguments)]
 /// A follow-up turn on an API session, continuing from the saved conversation history.
 pub fn continue_api_task(
     host: &HostContext,

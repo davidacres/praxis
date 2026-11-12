@@ -364,6 +364,8 @@ pub async fn run_affected_tests(
 
     let mut groups: Vec<RunnerGroup> = Vec::new();
     let mut unclaimed: Vec<String> = Vec::new();
+    let src_prefix = Regex::new(r"^src/").expect("static regex");
+    let ts_extension = Regex::new(r"\.tsx?$").expect("static regex");
     for test in &selection.tests {
         let Some((runner, cwd)) = runner_for(worktree, &test.file) else {
             unclaimed.push(test.file.clone());
@@ -375,14 +377,8 @@ pub async fn run_affected_tests(
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .unwrap_or_else(|_| test.file.clone());
         let file = if runner == Runner::NodeTest {
-            let swapped = Regex::new(r"^src/")
-                .expect("static regex")
-                .replace(&relative, "out/")
-                .into_owned();
-            Regex::new(r"\.tsx?$")
-                .expect("static regex")
-                .replace(&swapped, ".js")
-                .into_owned()
+            let swapped = src_prefix.replace(&relative, "out/").into_owned();
+            ts_extension.replace(&swapped, ".js").into_owned()
         } else {
             relative
         };
@@ -510,6 +506,7 @@ pub async fn scheduled_ticket_base(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

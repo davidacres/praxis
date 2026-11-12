@@ -248,6 +248,7 @@ pub async fn start_diagnosis_from_evidence(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use praxis_workflows::types::WorkflowNodeBase;

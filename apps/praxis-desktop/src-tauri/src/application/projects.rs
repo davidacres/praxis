@@ -982,10 +982,7 @@ fn suggested_project_name(folder_path: &str) -> String {
         .next()
         .unwrap_or("")
         .trim();
-    let spaced = name
-        .split(|c: char| c == '-' || c == '_')
-        .collect::<Vec<_>>()
-        .join(" ");
+    let spaced = name.split(['-', '_']).collect::<Vec<_>>().join(" ");
     let collapsed = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
     if collapsed.is_empty() {
         "Imported Project".into()

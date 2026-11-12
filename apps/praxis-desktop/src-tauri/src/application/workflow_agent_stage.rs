@@ -450,12 +450,11 @@ fn parse_review_findings(content: &str) -> Result<CheckFindings, String> {
                 .is_some_and(|v| v.get("findings").is_some_and(Value::is_array))
         });
     let mut text = block.unwrap_or_else(|| content.trim().to_string());
-    if !text.starts_with(['{', '[']) {
-        if let (Some(start), Some(end)) = (content.find('{'), content.rfind('}')) {
-            if end > start {
-                text = content[start..=end].to_string();
-            }
-        }
+    if !text.starts_with(['{', '['])
+        && let (Some(start), Some(end)) = (content.find('{'), content.rfind('}'))
+        && end > start
+    {
+        text = content[start..=end].to_string();
     }
     let parsed: Value = serde_json::from_str(&text).map_err(|e| {
         format!("Reviewer output did not contain a valid structured JSON findings block: {e}")
@@ -621,28 +620,26 @@ fn outcome_from_session(
         .outputs
         .iter()
         .find(|c| c.kind == WorkflowArtifactKind::Diff && c.required)
+        && let (Some(start), Some(snap)) = (start_ref, snapshot_ref)
+        && start == snap
     {
-        if let (Some(start), Some(snap)) = (start_ref, snapshot_ref) {
-            if start == snap {
-                let said = if finished.response.trim().is_empty() {
-                    String::new()
-                } else {
-                    let last = finished
-                        .response
-                        .trim()
-                        .rsplit("\n\n")
-                        .next()
-                        .unwrap_or("")
-                        .to_string();
-                    format!(" It said: {}", first_line(&last))
-                };
-                return StageOutcome::failure(format!(
-                    "{name} made no changes: the branch is still at {}, so there is no \"{}\" to verify.{said}",
-                    &start[..start.len().min(8)],
-                    diff.id
-                ));
-            }
-        }
+        let said = if finished.response.trim().is_empty() {
+            String::new()
+        } else {
+            let last = finished
+                .response
+                .trim()
+                .rsplit("\n\n")
+                .next()
+                .unwrap_or("")
+                .to_string();
+            format!(" It said: {}", first_line(&last))
+        };
+        return StageOutcome::failure(format!(
+            "{name} made no changes: the branch is still at {}, so there is no \"{}\" to verify.{said}",
+            &start[..start.len().min(8)],
+            diff.id
+        ));
     }
 
     if node
@@ -650,10 +647,9 @@ fn outcome_from_session(
         .iter()
         .any(|c| c.kind == WorkflowArtifactKind::Plan && c.required && c.publish_to.is_none())
         && !finished.response.trim().is_empty()
+        && let Err(reason) = plan_status(&finished.response)
     {
-        if let Err(reason) = plan_status(&finished.response) {
-            return StageOutcome::failure(format!("{name} did not produce a plan: {reason}."));
-        }
+        return StageOutcome::failure(format!("{name} did not produce a plan: {reason}."));
     }
 
     let mut artifacts: Vec<DeclaredArtifact> = Vec::new();
@@ -675,13 +671,14 @@ fn outcome_from_session(
         .iter()
         .filter(|c| c.kind == WorkflowArtifactKind::Findings)
         .collect();
-    if !finding_contracts.is_empty() && !finished.response.trim().is_empty() {
-        if let Ok(parsed) = parse_review_findings(&finished.response) {
-            findings = Some(parsed);
-            for contract in finding_contracts {
-                if !artifacts.iter().any(|a| a.contract_id == contract.id) {
-                    artifacts.push(declared(contract, None));
-                }
+    if !finding_contracts.is_empty()
+        && !finished.response.trim().is_empty()
+        && let Ok(parsed) = parse_review_findings(&finished.response)
+    {
+        findings = Some(parsed);
+        for contract in finding_contracts {
+            if !artifacts.iter().any(|a| a.contract_id == contract.id) {
+                artifacts.push(declared(contract, None));
             }
         }
     }
@@ -746,6 +743,7 @@ pub fn can_dispatch(host: &HostContext) -> bool {
     !host.settings().read().ai.active_provider.trim().is_empty()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn launch(
     host: &HostContext,
     key: &str,
@@ -1480,6 +1478,7 @@ async fn publish_plan_outputs(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

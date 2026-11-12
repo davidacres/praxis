@@ -11,7 +11,6 @@ use std::sync::{Mutex, OnceLock};
 
 use praxis_ai::gadgets::contracts::{GadgetActionValue, GadgetEnvelope, GadgetScope};
 use praxis_ai::gadgets::validation::validate_gadget_action_value;
-use praxis_contracts::RustRpcRequest;
 use praxis_host::HostContext;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -58,8 +57,8 @@ fn with_state<T>(dir: &Path, f: impl FnOnce(&mut State) -> T) -> T {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let slot = all.entry(dir.to_path_buf()).or_default();
-    let mut state = slot
-        .lock()
+    let state = slot
+        .get_mut()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if !state.loaded {
         let path = dir.join(FILE);
@@ -86,7 +85,7 @@ fn with_state<T>(dir: &Path, f: impl FnOnce(&mut State) -> T) -> T {
         }
         state.loaded = true;
     }
-    f(&mut state)
+    f(state)
 }
 
 fn persist(dir: &Path, state: &State) {
@@ -612,25 +611,6 @@ pub fn submit(host: &HostContext, dir: &Path, request: &Value) -> Value {
     result_of(&settled, false)
 }
 
-fn host_call(
-    host: &HostContext,
-    channel: &str,
-    args: Vec<Value>,
-) -> std::result::Result<Value, String> {
-    let response = host.dispatch_rpc(RustRpcRequest {
-        id: "gadget".into(),
-        channel: channel.into(),
-        args,
-    });
-    if response.ok {
-        Ok(response.result.unwrap_or(Value::Null))
-    } else {
-        Err(response
-            .error
-            .map_or_else(|| "The host returned no error.".to_owned(), |e| e.message))
-    }
-}
-
 fn execute(
     host: &HostContext,
     dir: &Path,
@@ -647,15 +627,14 @@ fn execute(
     if envelope["kind"] == "form"
         && descriptor["effect"] == "mutating"
         && descriptor["gate"] == TICKET_REVIEW_APPLY_GATE
+        && let GadgetActionValue::Form { fields } = value
     {
-        if let GadgetActionValue::Form { fields } = value {
-            return super::ai_review::apply_ticket_review(
-                host,
-                dir,
-                envelope["scope"]["sessionId"].as_str().unwrap_or_default(),
-                fields,
-            );
-        }
+        return super::ai_review::apply_ticket_review(
+            host,
+            dir,
+            envelope["scope"]["sessionId"].as_str().unwrap_or_default(),
+            fields,
+        );
     }
     Ok(match value {
         GadgetActionValue::Choice { selected } => (
@@ -799,6 +778,7 @@ pub fn clear_session(dir: &Path, session_id: &str) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use praxis_ai::gadgets::block_parser::{ChatBlockParseOptions, parse_chat_blocks};

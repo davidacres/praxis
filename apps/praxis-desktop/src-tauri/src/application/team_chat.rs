@@ -1339,7 +1339,6 @@ impl Coordinator {
                     &attempt,
                     &participant,
                     &prepared.prompt,
-                    &native_prepared.prompt,
                     Arc::clone(&abort),
                 )
                 .await;
@@ -1916,7 +1915,6 @@ impl Coordinator {
         attempt: &Value,
         participant: &Value,
         prepared_prompt: &str,
-        native_prompt: &str,
         abort: Arc<Abort>,
     ) -> Result<Value, ExecError> {
         if abort.aborted() {
@@ -2033,7 +2031,7 @@ impl Coordinator {
                 () = abort.cancelled() => return Err(ExecError::plain("Team chat execution cancelled.")),
                 result = call => result,
             };
-            let (text, usage) = outcome.map_err(|e| ExecError::plain(e))?;
+            let (text, usage) = outcome.map_err(ExecError::plain)?;
             let mut reply = parsed(&text);
             let reported = usage.input_tokens.is_some()
                 || usage.output_tokens.is_some()
@@ -2066,7 +2064,6 @@ impl Coordinator {
             ),
             persona: str_of(participant, "role").to_owned(),
             images,
-            continuation: native_prompt.to_owned(),
             ownership: json!({ "conversationId": conversation["id"], "turnId": turn["id"], "participantId": participant["id"],
                 "attemptId": attempt["id"], "bindingId": attempt["bindingId"], "coordinatorEpoch": attempt["coordinatorEpoch"] }),
         };
@@ -2122,7 +2119,6 @@ pub struct ToolRuntime {
     prefix: String,
     persona: String,
     images: Vec<Value>,
-    continuation: String,
     ownership: Value,
 }
 
@@ -2467,8 +2463,7 @@ pub async fn run_team_review(host: &HostContext, request: &Value) -> Fallible<Va
         let user = [
             context.as_ref().map(serialize_page_context),
             Some(serialize_history(&request["history"])).filter(|h| !h.is_empty()),
-            Some(format!("Team members who already spoke:\n{earlier}"))
-                .filter(|_| !earlier.is_empty()),
+            (!earlier.is_empty()).then(|| format!("Team members who already spoke:\n{earlier}")),
             Some(ask),
         ]
         .into_iter()

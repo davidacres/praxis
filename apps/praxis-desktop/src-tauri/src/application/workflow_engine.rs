@@ -367,10 +367,10 @@ impl WorkflowWorkspaceProvider for GitWorkspace {
                 format!("Base branch {base_branch} was not found locally or on origin.")
             })?,
         };
-        if include_uncommitted {
-            if let Some(snapshot) = snapshot_uncommitted_work(&repo_root, &name).await? {
-                start = snapshot;
-            }
+        if include_uncommitted
+            && let Some(snapshot) = snapshot_uncommitted_work(&repo_root, &name).await?
+        {
+            start = snapshot;
         }
         git(
             &repo_root,
@@ -457,10 +457,10 @@ const OUTPUT_TAIL_LIMIT: usize = 8000;
 /// The last part of a failing log, starting at a recognisable failure marker when there is one.
 fn tail(output: &str) -> String {
     for marker in ["\n  1) ", "\n✖ failing tests:", "\nFAIL ", "\nFAILED "] {
-        if let Some(idx) = output.rfind(marker) {
-            if output.len() - idx <= 12000 {
-                return format!("…{}", &output[idx..]);
-            }
+        if let Some(idx) = output.rfind(marker)
+            && output.len() - idx <= 12000
+        {
+            return format!("…{}", &output[idx..]);
         }
     }
     if output.len() > OUTPUT_TAIL_LIMIT {
@@ -909,10 +909,9 @@ impl HostDispatcher {
         if context.worktree_path.is_some()
             && install_stage_of(&context.run.definition.nodes)
                 .is_none_or(|n| n.base.id != node.base.id)
+            && let Some(error) = self.ensure_run_dependencies(context, &node.base.name).await
         {
-            if let Some(error) = self.ensure_run_dependencies(context, &node.base.name).await {
-                return Ok(StageOutcome::failure(error));
-            }
+            return Ok(StageOutcome::failure(error));
         }
         let success_codes: Vec<i32> = node
             .success_exit_codes
@@ -1120,10 +1119,10 @@ impl StageDispatcher for HostDispatcher {
         node: &WorkflowAgentTaskNode,
         context: &StageDispatchContext,
     ) -> Result<StageOutcome, String> {
-        if context.worktree_path.is_some() {
-            if let Some(error) = self.ensure_run_dependencies(context, &node.base.name).await {
-                return Ok(StageOutcome::failure(error));
-            }
+        if context.worktree_path.is_some()
+            && let Some(error) = self.ensure_run_dependencies(context, &node.base.name).await
+        {
+            return Ok(StageOutcome::failure(error));
         }
         workflow_agent_stage::run_agent_stage(&self.host, node, context).await
     }

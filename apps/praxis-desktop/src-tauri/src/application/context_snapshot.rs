@@ -497,6 +497,7 @@ pub fn take_snapshot(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -1591,16 +1591,16 @@ fn preflight_blockers(catalog: &Value, nodes: &[Value], policy: Option<&Value>) 
                 );
                 continue;
             }
-            if let Some(pinned) = agent_ref["skillFingerprints"][name].as_str() {
-                if skill["fingerprint"].as_str().is_some_and(|f| f != pinned) {
-                    add(
-                        format!("Skill \"{name}\" has changed since this workflow pinned it."),
-                        format!(
-                            "Review {} and re-pin the fingerprint, or restore the previous version.",
-                            skill["instructionsPath"].as_str().unwrap_or("")
-                        ),
-                    );
-                }
+            if let Some(pinned) = agent_ref["skillFingerprints"][name].as_str()
+                && skill["fingerprint"].as_str().is_some_and(|f| f != pinned)
+            {
+                add(
+                    format!("Skill \"{name}\" has changed since this workflow pinned it."),
+                    format!(
+                        "Review {} and re-pin the fingerprint, or restore the previous version.",
+                        skill["instructionsPath"].as_str().unwrap_or("")
+                    ),
+                );
             }
         }
         if node["mutatesWorktree"] != true && agent_ref["toolMode"] == "full" {
@@ -2581,21 +2581,20 @@ pub fn delete_run(host: &HostContext, args: &[Value]) -> Result<Value> {
         )
         .map_err(failure)?;
     }
-    if delete_work {
-        if let Some(folder) = project_folder(host, &run.project_id) {
-            if let Some(root) = runtime::block_on(repository_root(&folder)) {
-                let worktree = stored_run(host, run_id)
-                    .and_then(|r| r.worktree_path)
-                    .or(run.worktree_path.clone())
-                    .map(PathBuf::from);
-                runtime::block_on(praxis_core::git::run_work::delete_run_work(
-                    Path::new(&root),
-                    &run.run_id,
-                    worktree.as_deref(),
-                ))
-                .map_err(failure)?;
-            }
-        }
+    if delete_work
+        && let Some(folder) = project_folder(host, &run.project_id)
+        && let Some(root) = runtime::block_on(repository_root(&folder))
+    {
+        let worktree = stored_run(host, run_id)
+            .and_then(|r| r.worktree_path)
+            .or(run.worktree_path.clone())
+            .map(PathBuf::from);
+        runtime::block_on(praxis_core::git::run_work::delete_run_work(
+            Path::new(&root),
+            &run.run_id,
+            worktree.as_deref(),
+        ))
+        .map_err(failure)?;
     }
     // The run's stage sessions (their transcripts belong to the run) and its link from the
     // controller session that started it go with it.
@@ -2965,6 +2964,7 @@ pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Result<Val
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

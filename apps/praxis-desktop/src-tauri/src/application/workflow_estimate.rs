@@ -67,6 +67,7 @@ fn attempts_of(node: &Value) -> u64 {
     }
 }
 
+#[allow(clippy::type_complexity)]
 /// The worst-case shape of a run of `definition`.
 #[must_use]
 pub fn estimate_workflow_run(
@@ -105,12 +106,12 @@ pub fn estimate_workflow_run(
         .collect();
     let mut recovery: BTreeMap<String, u64> = BTreeMap::new();
     for node in nodes {
-        if s(node, "type") == "check" {
-            if let Some(r) = node.get("failureRecovery").filter(|r| !r.is_null()) {
-                let attempts = r["maxAttempts"].as_u64().unwrap_or(0);
-                recovery.insert(s(r, "repairNodeId").to_string(), attempts);
-                *recovery.entry(s(node, "id").to_string()).or_insert(0) += attempts;
-            }
+        if s(node, "type") == "check"
+            && let Some(r) = node.get("failureRecovery").filter(|r| !r.is_null())
+        {
+            let attempts = r["maxAttempts"].as_u64().unwrap_or(0);
+            recovery.insert(s(r, "repairNodeId").to_string(), attempts);
+            *recovery.entry(s(node, "id").to_string()).or_insert(0) += attempts;
         }
     }
 

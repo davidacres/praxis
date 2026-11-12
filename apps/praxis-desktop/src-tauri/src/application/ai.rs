@@ -3,7 +3,6 @@ use std::path::Path;
 
 use praxis_host::HostContext;
 use serde_json::{Value, json};
-use uuid::Uuid;
 
 use super::storage::{parse, read, write_atomic};
 use super::{Result, failure, now, text};

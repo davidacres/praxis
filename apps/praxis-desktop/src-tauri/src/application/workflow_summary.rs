@@ -181,14 +181,12 @@ pub fn summarize_loops(run: &WorkflowRun) -> Vec<Value> {
                 put(&mut entry, "currentScore", current_score.map(Value::from));
                 row.insert("keepBest".into(), Value::Object(entry));
             }
-            if needs_decision {
-                if let Some(findings) = source.and_then(|s| s.findings.as_ref()) {
-                    let list = serde_json::to_value(&findings.findings).unwrap_or_default();
-                    row.insert(
-                        "openFindings".into(),
-                        json!(top_findings(list.as_array().map_or(&[][..], Vec::as_slice))),
-                    );
-                }
+            if needs_decision && let Some(findings) = source.and_then(|s| s.findings.as_ref()) {
+                let list = serde_json::to_value(&findings.findings).unwrap_or_default();
+                row.insert(
+                    "openFindings".into(),
+                    json!(top_findings(list.as_array().map_or(&[][..], Vec::as_slice))),
+                );
             }
             let settled = source.is_some_and(|s| {
                 matches!(
@@ -823,10 +821,10 @@ fn explain_run(
         }
         let mut ais: Vec<String> = Vec::new();
         for (_, state) in &paused {
-            if let Some(p) = state.attempts.last().and_then(|a| a.provider.clone()) {
-                if !ais.contains(&p) {
-                    ais.push(p);
-                }
+            if let Some(p) = state.attempts.last().and_then(|a| a.provider.clone())
+                && !ais.contains(&p)
+            {
+                ais.push(p);
             }
         }
         let who = if ais.is_empty() {

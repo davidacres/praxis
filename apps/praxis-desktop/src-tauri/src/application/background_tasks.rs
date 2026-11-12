@@ -154,6 +154,7 @@ pub fn read_unobserved_background_launch(update: &Value) -> Option<ProviderBackg
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use serde_json::json;

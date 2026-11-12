@@ -92,6 +92,7 @@ fn read_store(dir: &Path) -> Value {
 
 /// Reports this host evaluated, so a label binds to a real assessment rather than a renderer's claim.
 fn recent_reports() -> &'static Mutex<(HashMap<String, Value>, VecDeque<String>)> {
+    #[allow(clippy::type_complexity)]
     static RECENT: OnceLock<Mutex<(HashMap<String, Value>, VecDeque<String>)>> = OnceLock::new();
     RECENT.get_or_init(Mutex::default)
 }
@@ -234,6 +235,7 @@ fn gather_hints(folder: &str) -> Option<WorkspaceHints> {
 
 /// Raw workspace facts for a folder, cached briefly because the composer asks on every typing pause.
 fn workspace_hints(folder: Option<&str>, _prompt: &str) -> Option<WorkspaceHints> {
+    #[allow(clippy::type_complexity)]
     static CACHE: OnceLock<Mutex<HashMap<String, (Instant, Option<WorkspaceHints>)>>> =
         OnceLock::new();
     let folder = folder.map(str::trim).filter(|f| !f.is_empty())?;
@@ -436,6 +438,7 @@ fn remember_answers(dir: &Path, key: &str, model: &str, answers: &Answers) -> Re
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn log_line(
     host: &HostContext,
     check_id: &str,
@@ -1004,6 +1007,7 @@ pub fn dispatch(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

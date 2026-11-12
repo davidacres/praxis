@@ -375,11 +375,10 @@ fn compose_input(
     if workflow_id.is_none() {
         workflow_id = existing.and_then(|e| e.policy.workflow_id().cloned());
     }
-    if workflow_id.is_none() {
-        if let Some(project_id) = &project_id {
-            workflow_id =
-                default_schedule_workflow(&workflows::workflow_choices_for(host, project_id));
-        }
+    if workflow_id.is_none()
+        && let Some(project_id) = &project_id
+    {
+        workflow_id = default_schedule_workflow(&workflows::workflow_choices_for(host, project_id));
     }
     ComposeScheduledRunInput {
         project_id,
@@ -488,13 +487,13 @@ pub fn preview(host: &HostContext, args: &[Value]) -> Result<Value> {
 
 pub fn remove(host: &HostContext, args: &[Value]) -> Result<Value> {
     let id = text(args, 0)?;
-    if let Some(run) = get_run(host, id) {
-        if matches!(
+    if let Some(run) = get_run(host, id)
+        && matches!(
             run.status,
             ScheduledRunStatus::Running | ScheduledRunStatus::Paused
-        ) {
-            let _ = runtime::block_on(runner(host).cancel(id));
-        }
+        )
+    {
+        let _ = runtime::block_on(runner(host).cancel(id));
     }
     let _guard = store_lock().lock().unwrap_or_else(PoisonError::into_inner);
     store(host).remove(id).map_err(failure)?;

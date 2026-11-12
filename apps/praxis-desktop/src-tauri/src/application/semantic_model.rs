@@ -59,10 +59,11 @@ fn manifest() -> Value {
 }
 
 pub fn model_directory(user_data_dir: &Path) -> PathBuf {
-    if let Ok(bundle) = std::env::var("PRAXIS_MODEL_BUNDLE") {
-        if !bundle.is_empty() && Path::new(&bundle).exists() {
-            return PathBuf::from(bundle);
-        }
+    if let Ok(bundle) = std::env::var("PRAXIS_MODEL_BUNDLE")
+        && !bundle.is_empty()
+        && Path::new(&bundle).exists()
+    {
+        return PathBuf::from(bundle);
     }
     user_data_dir.join("models").join("semantic-search")
 }

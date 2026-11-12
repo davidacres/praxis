@@ -308,7 +308,7 @@ fn active_instance(payload: &Value, now: DateTime<Utc>) -> Option<&Value> {
     Some(best)
 }
 
-fn quota_info<'a>(source: &'a Value) -> Option<&'a Map<String, Value>> {
+fn quota_info(source: &Value) -> Option<&Map<String, Value>> {
     find_first(source, &QUOTA_KEYS, Value::is_object)
         .and_then(Value::as_object)
         .or_else(|| find_object_with_any_key(source, &QUOTA_FIELDS))
@@ -538,7 +538,7 @@ pub fn store_session(host: &HostContext, cookies: &[Value]) {
         host.secrets().delete(SESSION_SECRET);
     } else {
         host.secrets()
-            .set(SESSION_SECRET, &Value::Array(kept).to_string());
+            .set(SESSION_SECRET, Value::Array(kept).to_string());
     }
 }
 
@@ -716,19 +716,6 @@ pub fn endpoint_base_url(host: &HostContext, provider: &str) -> Option<String> {
         .map(|endpoint| endpoint.base_url.clone())
 }
 
-/// Every saved Coding Plan endpoint: the providers whose quota the Overview can read.
-pub fn endpoint_ids(host: &HostContext) -> Vec<String> {
-    host.settings()
-        .read()
-        .ai
-        .custom_providers
-        .iter()
-        .flatten()
-        .filter(|endpoint| endpoint.preset_id.as_deref() == Some("alibaba-coding-plan"))
-        .map(|endpoint| endpoint.id.clone())
-        .collect()
-}
-
 /// The console hosts for a Coding Plan endpoint, as the sign-in window needs them.
 pub fn sign_in_target(host: &HostContext, provider: &str) -> Option<Value> {
     let base_url = endpoint_base_url(host, provider)?;
@@ -740,6 +727,7 @@ pub fn sign_in_target(host: &HostContext, provider: &str) -> Option<Value> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

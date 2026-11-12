@@ -486,6 +486,7 @@ pub fn transition_runtime(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

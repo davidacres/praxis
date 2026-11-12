@@ -87,16 +87,15 @@ fn resolve_issue(
         issue_payload(&issue, key).ok_or_else(|| failure(format!("Unable to resolve {key}.")))?;
     let main_key = main["issueKey"].as_str().unwrap_or("").to_owned();
     let mut related: Vec<(String, &'static str)> = Vec::new();
-    let mut add =
-        |related: &mut Vec<(String, &'static str)>, key: String, relation: &'static str| {
-            if key.is_empty() || key == main_key {
-                return;
-            }
-            match related.iter_mut().find(|(existing, _)| *existing == key) {
-                Some(entry) => entry.1 = relation,
-                None => related.push((key, relation)),
-            }
-        };
+    let add = |related: &mut Vec<(String, &'static str)>, key: String, relation: &'static str| {
+        if key.is_empty() || key == main_key {
+            return;
+        }
+        match related.iter_mut().find(|(existing, _)| *existing == key) {
+            Some(entry) => entry.1 = relation,
+            None => related.push((key, relation)),
+        }
+    };
     for dependency in issue["dependsOn"]
         .as_array()
         .into_iter()
@@ -418,7 +417,7 @@ fn recommend_board_flow(
     }
     let board = args.first().cloned().unwrap_or(Value::Null);
     let name = board["name"].as_str().unwrap_or_default().to_owned();
-    let details = boards::dispatch(host, catalog, "board:get", &[board.clone()])?;
+    let details = boards::dispatch(host, catalog, "board:get", std::slice::from_ref(&board))?;
     let issues = details["issues"].as_array().cloned().unwrap_or_default();
     if issues.is_empty() {
         return Err(failure(format!(

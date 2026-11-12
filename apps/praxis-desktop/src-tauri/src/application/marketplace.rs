@@ -631,11 +631,9 @@ fn sync_kind_into_discovery(user_data_dir: &Path, kind: AddonKind) {
         }
         let target = root.join(&addon.manifest.id);
         let _ = fs::remove_dir_all(&target);
-        if addon.enabled {
-            if copy_tree(&store.addon_dir(kind, &addon.manifest.id), &target).is_ok() {
-                // The install record is bookkeeping, not part of the agent/skill.
-                let _ = fs::remove_file(target.join(INSTALL_RECORD_FILE));
-            }
+        if addon.enabled && copy_tree(&store.addon_dir(kind, &addon.manifest.id), &target).is_ok() {
+            // The install record is bookkeeping, not part of the agent/skill.
+            let _ = fs::remove_file(target.join(INSTALL_RECORD_FILE));
         }
     }
 }

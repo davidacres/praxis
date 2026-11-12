@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use super::*;
 use std::fs;
 use std::path::PathBuf;
@@ -1111,6 +1112,7 @@ fn system_mobile_pairing_and_clear_data() {
     assert_eq!(clear_result, Value::Null);
 }
 
+#[allow(clippy::type_complexity)]
 /// A one-thread HTTP server standing in for GitHub Packages: REST listing, packument, tarball.
 fn mock_registry(addons: Vec<(&'static str, Value, Vec<(&'static str, String)>)>) -> String {
     use base64::Engine as _;

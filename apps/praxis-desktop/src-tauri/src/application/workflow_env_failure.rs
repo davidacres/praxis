@@ -101,17 +101,16 @@ pub fn classify_check_environment_failure(
         });
     }
     let failed = input.exit_code != Some(0);
-    if failed && PACKAGE_MANAGERS.contains(&command.as_str()) {
-        if let Some(script) = missing_script(&command, input.args, input.output) {
-            return Some(CheckEnvironmentFailure {
-                reason: format!(
-                    "This project has no \"{script}\" script, so the stage did not run."
-                ),
-                hint: format!(
-                    "Add a \"{script}\" script to package.json, or change the stage's command to one this project has, then retry."
-                ),
-            });
-        }
+    if failed
+        && PACKAGE_MANAGERS.contains(&command.as_str())
+        && let Some(script) = missing_script(&command, input.args, input.output)
+    {
+        return Some(CheckEnvironmentFailure {
+            reason: format!("This project has no \"{script}\" script, so the stage did not run."),
+            hint: format!(
+                "Add a \"{script}\" script to package.json, or change the stage's command to one this project has, then retry."
+            ),
+        });
     }
     let is_tsc =
         command == "tsc" || (command == "npx" && subcommand(input.args).as_deref() == Some("tsc"));
@@ -188,6 +187,7 @@ pub fn classify_check_environment_failure(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

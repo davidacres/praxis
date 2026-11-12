@@ -260,6 +260,7 @@ pub fn read_view(root: &Path, key: &EvidenceKey, project_id: &str) -> Value {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

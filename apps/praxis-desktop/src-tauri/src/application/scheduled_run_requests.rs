@@ -137,16 +137,16 @@ fn import_one(
         .unwrap_or_default();
     let run_id = scheduled_run_request_run_id(&project_id, &file_name);
     let existing = scheduled_runs::get_run(host, &run_id);
-    if let Some(existing) = &existing {
-        if existing.status != ScheduledRunStatus::Draft {
-            let status = serde_json::to_value(existing.status)
-                .ok()
-                .and_then(|v| v.as_str().map(str::to_string))
-                .unwrap_or_default();
-            return fail(vec![format!(
-                "The schedule this file created is now {status}, so a request can no longer change it. Hold it in Praxis first, or write a request with a new file name."
-            )]);
-        }
+    if let Some(existing) = &existing
+        && existing.status != ScheduledRunStatus::Draft
+    {
+        let status = serde_json::to_value(existing.status)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_default();
+        return fail(vec![format!(
+            "The schedule this file created is now {status}, so a request can no longer change it. Hold it in Praxis first, or write a request with a new file name."
+        )]);
     }
 
     let issues = project_issues(host, &project_id);
@@ -157,21 +157,21 @@ fn import_one(
         };
     let choices = workflows::workflow_choices_for(host, &project_id);
     let mut workflow_id = request.workflow_id.clone();
-    if let Some(wanted) = &workflow_id {
-        if !choices.iter().any(|c| c["workflowId"] == json!(wanted)) {
-            let available: Vec<String> = choices
-                .iter()
-                .filter_map(|c| c["workflowId"].as_str().map(str::to_string))
-                .collect();
-            return fail(vec![format!(
-                "Workflow \"{wanted}\" is not available in this project. Available: {}.",
-                if available.is_empty() {
-                    "none".to_string()
-                } else {
-                    available.join(", ")
-                }
-            )]);
-        }
+    if let Some(wanted) = &workflow_id
+        && !choices.iter().any(|c| c["workflowId"] == json!(wanted))
+    {
+        let available: Vec<String> = choices
+            .iter()
+            .filter_map(|c| c["workflowId"].as_str().map(str::to_string))
+            .collect();
+        return fail(vec![format!(
+            "Workflow \"{wanted}\" is not available in this project. Available: {}.",
+            if available.is_empty() {
+                "none".to_string()
+            } else {
+                available.join(", ")
+            }
+        )]);
     }
     if workflow_id.is_none() {
         workflow_id = choices

@@ -542,10 +542,10 @@ impl Application {
         std::thread::spawn(move || team_chat::recover_on_startup(&recovery_host));
         let activity_root = host.config().user_data_dir.clone();
         host.events().on_event(move |event| {
-            if event.channel == "ai:sessionChanged" {
-                if let Some(session) = &event.payload {
-                    activity::observe_session(&activity_root, session);
-                }
+            if event.channel == "ai:sessionChanged"
+                && let Some(session) = &event.payload
+            {
+                activity::observe_session(&activity_root, session);
             }
         });
         // Retired runtime-pin add-ons are uninstalled before anything reads the agent catalog.

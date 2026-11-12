@@ -276,30 +276,27 @@ async fn call_tool(registration: &Registration, params: &Value) -> Value {
             "The in-app browser is turned off in Settings.".into(),
         );
     }
-    if name == "browser_navigate" {
-        if let Some(host_name) = ai_browser::host_of(arguments["url"].as_str().unwrap_or_default())
-        {
-            if !settings
-                .allowed_hosts
-                .iter()
-                .any(|h| h.eq_ignore_ascii_case(&host_name))
-            {
-                let request = json!({ "toolCallId": format!("browser-{}", uuid::Uuid::new_v4().simple()), "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": "browser_navigate", "rawInput": arguments });
-                let decision = match &task {
-                    Some(task) => task.request_permission(request).await,
-                    None => acp_host::Decision::Deny,
-                };
-                if decision == acp_host::Decision::Deny {
-                    return tool_result(false, format!("Permission denied to open {host_name}."));
-                }
-                let mut hosts = settings.allowed_hosts.clone();
-                hosts.push(host_name);
-                let _ = super::ai_providers::write_settings(
-                    host,
-                    &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }),
-                );
-            }
+    if name == "browser_navigate"
+        && let Some(host_name) = ai_browser::host_of(arguments["url"].as_str().unwrap_or_default())
+        && !settings
+            .allowed_hosts
+            .iter()
+            .any(|h| h.eq_ignore_ascii_case(&host_name))
+    {
+        let request = json!({ "toolCallId": format!("browser-{}", uuid::Uuid::new_v4().simple()), "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": "browser_navigate", "rawInput": arguments });
+        let decision = match &task {
+            Some(task) => task.request_permission(request).await,
+            None => acp_host::Decision::Deny,
+        };
+        if decision == acp_host::Decision::Deny {
+            return tool_result(false, format!("Permission denied to open {host_name}."));
         }
+        let mut hosts = settings.allowed_hosts.clone();
+        hosts.push(host_name);
+        let _ = super::ai_providers::write_settings(
+            host,
+            &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }),
+        );
     }
     // The browser is held for the session's whole sequence of calls; a person using it, or another session, refuses it.
     if let Err(reason) = super::coordination::hold_browser_for_sequence(&registration.key).await {

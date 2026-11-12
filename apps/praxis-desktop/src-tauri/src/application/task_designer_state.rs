@@ -433,6 +433,7 @@ pub fn compare_ids(left: &str, right: &str, order: &HashMap<&str, usize>) -> std
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

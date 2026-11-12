@@ -572,6 +572,7 @@ pub fn dashboard_summary(events: &[Value], reference: DateTime<Utc>) -> Value {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

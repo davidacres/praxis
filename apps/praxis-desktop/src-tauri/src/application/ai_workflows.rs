@@ -255,22 +255,6 @@ fn delivery_result_contract(sub_task: bool) -> String {
     lines.join("\n")
 }
 
-fn analysis_context(analysis: Option<&Value>) -> Option<String> {
-    let analysis = analysis.filter(|a| a.is_object())?;
-    Some(
-        [
-            "Implementation analysis summary:",
-            analysis["summary"].as_str().unwrap_or_default(),
-            "",
-            "Implementation plan from the completed analysis session:",
-            analysis["implementationPlan"]
-                .as_str()
-                .unwrap_or("(not provided)"),
-        ]
-        .join("\n"),
-    )
-}
-
 pub struct DeliveryOptions<'a> {
     pub base_branch: &'a str,
     pub branch_name: &'a str,
@@ -453,6 +437,7 @@ pub struct FeedbackNote {
     pub updated_at: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_merge_request_feedback_task(
     issue: &Value,
     branch_name: &str,
@@ -719,7 +704,7 @@ pub fn resolve_workflow_reference(reference: Option<&str>, workflows: &[Value]) 
     };
     let exact: Vec<&Value> = workflows
         .iter()
-        .filter(|w| candidates(w).iter().any(|c| *c == reference))
+        .filter(|w| candidates(w).contains(&reference))
         .collect();
     if let [only] = exact.as_slice() {
         return Some((*only).clone());

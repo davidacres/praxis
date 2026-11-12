@@ -309,22 +309,6 @@ pub fn mode_instructions(mode: &str) -> &'static str {
     }
 }
 
-/// A sidebar title taken from the first user message (`deriveChatTitle`).
-pub fn derive_chat_title(text: &str) -> String {
-    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if flat.is_empty() {
-        return "New team chat".to_owned();
-    }
-    if flat.chars().count() > 48 {
-        format!(
-            "{}\u{2026}",
-            flat.chars().take(47).collect::<String>().trim_end()
-        )
-    } else {
-        flat
-    }
-}
-
 // ── JSON helpers ─────────────────────────────────────────────────────────
 
 pub fn str_of<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -343,10 +327,6 @@ pub fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
         value[key] = json!([]);
     }
     value[key].as_array_mut().expect("just ensured an array")
-}
-
-pub fn index_of(items: &[Value], id: &str) -> Option<usize> {
-    items.iter().position(|item| item["id"] == id)
 }
 
 fn last_sequence(conversation: &Value) -> i64 {
@@ -682,6 +662,7 @@ const RECOVERABLE_ATTEMPT: [&str; 7] = [
 ];
 const ACTIVE_ATTEMPT: [&str; 3] = ["dispatching", "running", "awaiting_approval"];
 
+#[allow(clippy::too_many_arguments)]
 pub fn complete_attempt(
     current: &mut Value,
     expected: i64,
@@ -965,7 +946,6 @@ pub fn latest_valid_summary(conversation: &Value, eligible_ids: &[&Value]) -> Op
 
 pub struct ContextRequired {
     pub message: String,
-    pub reason: &'static str,
 }
 
 pub struct PreparedContext {
@@ -1049,7 +1029,6 @@ pub fn prepare_context(
     if pinned.iter().any(|id| !all.iter().any(|m| m["id"] == *id)) {
         return Err(ContextRequired {
             message: "Pinned source is missing.".into(),
-            reason: "missing_source",
         });
     }
     let use_summary = summary.as_ref().filter(|_| !native_resume);
@@ -1112,7 +1091,6 @@ pub fn prepare_context(
     if limit <= 0 || reserved < 0 || estimated + reserved > limit {
         return Err(ContextRequired {
             message: "Bounded context requires summarization or a larger model window.".into(),
-            reason: "budget",
         });
     }
     let message_ids: Vec<Value> = selected.iter().map(|m| m["id"].clone()).collect();
@@ -1405,7 +1383,8 @@ pub fn chat_record(conversation: &Value) -> Value {
         json!(conversation["projectId"].as_str().unwrap_or_default()),
     );
     record.insert("title".into(), conversation["title"].clone());
-    for key in ["issueKey"] {
+    {
+        let key = "issueKey";
         if let Some(value) = conversation
             .get(key)
             .filter(|v| v.as_str().is_some_and(|s| !s.is_empty()))
@@ -1423,6 +1402,7 @@ pub fn chat_record(conversation: &Value) -> Value {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
