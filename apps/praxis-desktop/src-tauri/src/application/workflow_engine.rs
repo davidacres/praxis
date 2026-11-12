@@ -52,6 +52,26 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
 
 /// Like [`git`] but leaves the output as git wrote it (porcelain lines start with a space).
 async fn git_raw(cwd: &Path, args: &[&str]) -> Result<String, String> {
+    // A concurrent Git reader (a status poll, another lane) may briefly hold the index; never remove
+    // its lock, wait it out (`withGitIndexLockRetry`).
+    let mut attempt = 0u32;
+    loop {
+        let result = git_once(cwd, args).await;
+        match &result {
+            Err(detail)
+                if attempt < 5
+                    && detail.contains("Unable to create")
+                    && detail.contains("index.lock") =>
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(25 * 2u64.pow(attempt))).await;
+                attempt += 1;
+            }
+            _ => return result,
+        }
+    }
+}
+
+async fn git_once(cwd: &Path, args: &[&str]) -> Result<String, String> {
     let output = Command::new("git")
         .args(args)
         .current_dir(cwd)
