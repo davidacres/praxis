@@ -22,6 +22,7 @@ mod notes;
 mod projects;
 pub(crate) mod runtime;
 mod runs;
+mod scheduled_run_requests;
 mod scheduled_runner_host;
 mod scheduled_runs;
 pub(crate) mod storage;

@@ -313,6 +313,8 @@ fn compose_input(
 
 pub fn list(host: &HostContext) -> Result<Value> {
     scheduled_runner_host::ensure_started(host);
+    // Pick up any request file an agent has just written, so the list is current.
+    super::scheduled_run_requests::check(host);
     let runs = list_runs(host);
     Ok(json!(runs.iter().map(|run| build_view(host, run, &runs)).collect::<Vec<_>>()))
 }

@@ -814,6 +814,16 @@ pub fn ensure_started(host: &HostContext) {
     if STARTED.set(()).is_err() {
         return;
     }
+    // The built-in skills (including the one that explains request files) are installed for every user.
+    super::agent_runtime::refresh(host, &host.config().user_data_dir);
+    let requests_host = host.clone();
+    runtime::runtime().spawn(async move {
+        loop {
+            let host = requests_host.clone();
+            let _ = tokio::task::spawn_blocking(move || super::scheduled_run_requests::check(&host)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    });
     let active = Arc::clone(runner(host));
     let host = host.clone();
     runtime::runtime().spawn(async move {
