@@ -580,7 +580,7 @@ fn load_image_preview(dir: &Path, args: &[Value]) -> Result<Value> {
 }
 
 /// The text of a file-backed artifact inside the session's folder.
-fn read_artifact_text(dir: &Path, args: &[Value]) -> Result<Value> {
+pub(super) fn read_artifact_text(dir: &Path, args: &[Value]) -> Result<Value> {
     let folder = session_folder(dir, text(args, 0)?);
     let input = args.get(1).and_then(Value::as_str).map(str::trim).unwrap_or_default();
     let absolute_input = Path::new(input).is_absolute() || input.split_once(':').is_some_and(|(scheme, _)| scheme.len() > 1 && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c)));

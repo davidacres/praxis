@@ -410,9 +410,27 @@ pub fn dispatch(
         "ai:undoToolFileChange" => Ok(json!({ "undone": true })),
 
         // 4. Artifacts in AI
-        "ai:openHtmlArtifactPreview" | "ai:artifactPageThumbnail" => {
-            Ok(json!({ "url": Value::Null, "dataUrl": Value::Null }))
+        // The shell opens the window (a Tauri webview, or another page under e2e); this validates
+        // the file and hands back the document with the restricted-preview policy applied.
+        "ai:openHtmlArtifactPreview" => {
+            let file = args.get(1).and_then(Value::as_str).unwrap_or_default();
+            if !super::html_preview::is_html_path(file) {
+                return Err(failure("Only HTML artifacts can be previewed."));
+            }
+            let source = super::ai_session_ops::read_artifact_text(user_data_dir, args)?;
+            let title = args
+                .get(2)
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+                .map(str::to_owned)
+                .unwrap_or_else(|| file.rsplit('/').next().unwrap_or(file).to_owned());
+            Ok(json!({
+                "title": super::html_preview::window_title(&title),
+                "html": super::html_preview::apply_policy(source.as_str().unwrap_or_default()),
+            }))
         }
+        // A thumbnail is decoration: null unless the shell has already drawn and cached it.
+        "ai:artifactPageThumbnail" => Ok(Value::Null),
 
         // 5. Workflow packs & ticket review
         "ai:listWorkflowPacks" => Ok(json!(super::workflow_packs::discover(

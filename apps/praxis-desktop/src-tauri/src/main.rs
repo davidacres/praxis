@@ -195,8 +195,41 @@ async fn praxis_rpc(
             };
             invoke_host(state.host.clone(), channel.into(), args).await
         }
+        "ai:openHtmlArtifactPreview" => {
+            // The host validates the file and applies the restricted-preview policy; the shell
+            // shows it in its own window. That window has no label in any capability, so it can
+            // neither call the desktop contract nor reach the app bridge.
+            let prepared = invoke_host(state.host.clone(), channel, args).await?;
+            let title = prepared["title"].as_str().unwrap_or("Preview").to_owned();
+            let html = prepared["html"].as_str().unwrap_or_default();
+            let url = format!("data:text/html;charset=utf-8,{}", percent_encode(html));
+            let url = url.parse().map_err(shell_error)?;
+            let label = format!("html-preview-{}", PREVIEW_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+            tauri::WebviewWindowBuilder::new(window.app_handle(), label, tauri::WebviewUrl::External(url))
+                .title(title)
+                .inner_size(1000.0, 760.0)
+                .min_inner_size(560.0, 360.0)
+                .build()
+                .map_err(shell_error)?;
+            Ok(Value::Null)
+        }
         _ => invoke_host(state.host.clone(), channel, args).await,
     }
+}
+
+static PREVIEW_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
+/// `encodeURIComponent` for a `data:` document: everything but unreserved characters is escaped.
+fn percent_encode(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
 }
 
 async fn invoke_host(
