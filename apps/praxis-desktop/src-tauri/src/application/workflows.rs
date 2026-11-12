@@ -1984,3 +1984,81 @@ pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Result<Val
         _ => Err(failure(format!("Unsupported workflows channel: {channel}"))),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workflow_ids_that_cannot_be_file_names_are_refused() {
+        assert_eq!(workflow_file_name("governed-delivery-p1").unwrap(), "governed-delivery-p1.json");
+        assert!(workflow_file_name("").is_err());
+        assert!(workflow_file_name("..").is_err());
+        assert!(workflow_file_name(".hidden").is_err());
+        assert!(workflow_file_name("a/b").is_err());
+        assert!(workflow_file_name("has space").is_err());
+    }
+
+    #[test]
+    fn run_parameters_default_validate_and_report_every_problem() {
+        let definition = json!({
+            "parameters": [
+                { "id": "goal", "label": "Goal", "kind": "text", "required": true },
+                { "id": "rounds", "label": "Rounds", "kind": "integer", "min": 1, "max": 5, "default": 3 }
+            ]
+        });
+        let ok = resolve_run_parameters(&definition, Some(&json!({ "goal": " faster " }))).unwrap();
+        assert_eq!(ok, json!({ "goal": "faster", "rounds": 3 }));
+        let missing = resolve_run_parameters(&definition, Some(&json!({ "rounds": 9 }))).unwrap_err();
+        assert!(missing.message.contains("Goal is required."));
+        assert!(missing.message.contains("Rounds must be at most 5."));
+    }
+
+    #[test]
+    fn preflight_names_a_missing_agent_with_what_to_do_about_it() {
+        let nodes = vec![json!({
+            "type": "agent-task", "id": "review", "mutatesWorktree": false,
+            "agent": { "agentId": "ghost", "scope": "global", "toolMode": "read-only" }
+        })];
+        let catalog = json!({ "runtimeHosts": [], "profiles": [], "skills": [] });
+        let blockers = preflight_blockers(&catalog, &nodes, None);
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("Agent \"ghost\" is not in the global catalog."));
+        assert!(blockers[0].contains("Install or import an agent with id \"ghost\""));
+    }
+
+    #[test]
+    fn an_untrusted_agent_blocks_a_start_unless_policy_relaxes_it() {
+        let nodes = vec![json!({
+            "type": "agent-task", "id": "review", "mutatesWorktree": false,
+            "agent": { "agentId": "a", "scope": "global", "toolMode": "read-only" }
+        })];
+        let catalog = json!({
+            "runtimeHosts": [{ "manifest": { "id": "a" }, "scope": "global", "trusted": false, "errors": [] }],
+            "profiles": [], "skills": []
+        });
+        assert!(preflight_blockers(&catalog, &nodes, None).iter().any(|b| b.contains("is not trusted")));
+        let relaxed = json!({ "requireTrustedAgents": false });
+        assert!(preflight_blockers(&catalog, &nodes, Some(&relaxed)).is_empty());
+    }
+
+    #[test]
+    fn a_template_copy_is_project_scoped_versioned_and_given_stage_tiers() {
+        let template = json!({
+            "id": "quick", "name": "Quick", "builtIn": true, "version": 7,
+            "nodes": [
+                { "type": "agent-task", "id": "impl", "mutatesWorktree": true },
+                { "type": "agent-task", "id": "rev", "mutatesWorktree": false, "satisfiesGate": "qa" },
+                { "type": "agent-task", "id": "note", "mutatesWorktree": false },
+                { "type": "agent-task", "id": "kept", "modelTier": "fast" },
+            ]
+        });
+        let copy = instantiate_template(&template, "p1", "2026-01-01T00:00:00.000Z", None, None);
+        assert_eq!(copy["id"], "quick-p1");
+        assert_eq!(copy["scope"], "project");
+        assert_eq!(copy["version"], 1);
+        assert!(copy.get("builtIn").is_none());
+        let tiers: Vec<&str> = copy["nodes"].as_array().unwrap().iter().map(|n| n["modelTier"].as_str().unwrap()).collect();
+        assert_eq!(tiers, ["strong", "standard", "fast", "fast"]);
+    }
+}

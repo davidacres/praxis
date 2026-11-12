@@ -129,14 +129,17 @@ pub fn usable_providers(host: &HostContext) -> Vec<String> {
                         && praxis_ai::providers::registry::gateway_key_from_env().is_some())
             }
             praxis_ai::providers::registry::DescriptorKind::CliAgent => {
+                // A CLI agent counts once it has been pointed at (or chosen as the active AI); one that
+                // merely happens to be installed on this machine is not set up for Praxis.
                 config.and_then(|c| c.cli_path.as_deref()).is_some_and(|p| !p.trim().is_empty())
-                    || descriptor.default_command.as_deref().is_some_and(|command| {
-                        praxis_workflows::check_process::is_check_command_available(
-                            command,
-                            std::env::var("PATH").ok().as_deref(),
-                            std::env::var("PATHEXT").ok().as_deref(),
-                        )
-                    })
+                    || (descriptor.id == ai.active_provider
+                        && descriptor.default_command.as_deref().is_some_and(|command| {
+                            praxis_workflows::check_process::is_check_command_available(
+                                command,
+                                std::env::var("PATH").ok().as_deref(),
+                                std::env::var("PATHEXT").ok().as_deref(),
+                            )
+                        }))
             }
         };
         if set_up {
@@ -153,6 +156,12 @@ pub fn usable_providers(host: &HostContext) -> Vec<String> {
         if !needs_key || host.secrets().has(&praxis_ai::providers::registry::secret_key_for_provider(id)) {
             usable.push(id.to_string());
         }
+    }
+    // The active AI is tried first, then the rest in registry order.
+    let active = ai.active_provider.clone();
+    if let Some(index) = usable.iter().position(|id| *id == active) {
+        let preferred = usable.remove(index);
+        usable.insert(0, preferred);
     }
     usable
 }
@@ -633,7 +642,6 @@ impl ScheduledRunnerPorts for HostPorts {
                 }
             }
         }
-        let _ = std::fs::write("/private/tmp/claude-501/-Users-daveacres-dev-tools-praxis/5546166f-24b5-4695-a9bd-f8f60eef75d6/scratchpad/usage-debug.txt", format!("usable={usable:?} override={override_usage:?} thr={:?}", self.threshold()));
         Ok(ProviderUsageReading {
             usable,
             active: Some(self.host.settings().read().ai.active_provider.clone()).filter(|a| !a.is_empty()),
