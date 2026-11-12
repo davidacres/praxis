@@ -103,6 +103,13 @@ fn token_cache() -> &'static Mutex<BTreeMap<String, String>> {
     CACHE.get_or_init(Default::default)
 }
 
+/// MCP session ids by connection, so the short-lived per-call services of one connection share
+/// one server-side session (a stateful server refuses a second `initialize`).
+fn session_cache() -> &'static Mutex<BTreeMap<String, String>> {
+    static CACHE: OnceLock<Mutex<BTreeMap<String, String>>> = OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
 fn b64url(bytes: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
@@ -210,6 +217,27 @@ impl HttpSession {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
+        let key = self.cache_key();
+        let remembered = session_cache().lock().ok().and_then(|c| c.get(&key).cloned());
+        if let Some(remembered) = remembered {
+            self.session_id = Some(remembered);
+            // Prove the remembered session still works; otherwise start a fresh one.
+            if self.request("tools/list", json!({})).await.is_ok() {
+                return Ok(());
+            }
+            self.session_id = None;
+            if let Ok(mut cache) = session_cache().lock() {
+                cache.remove(&key);
+            }
+        }
+        self.initialize_fresh().await?;
+        if let (Some(id), Ok(mut cache)) = (self.session_id.clone(), session_cache().lock()) {
+            cache.insert(key, id);
+        }
+        Ok(())
+    }
+
+    async fn initialize_fresh(&mut self) -> Result<(), String> {
         self.request(
             "initialize",
             json!({ "protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": { "name": "praxis", "version": "0.1.0" } }),
@@ -257,7 +285,10 @@ impl HttpSession {
         // The loopback listener the authorisation server redirects back to.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.map_err(|e| e.to_string())?;
         let redirect_uri = format!("http://127.0.0.1:{}/callback", listener.local_addr().map_err(|e| e.to_string())?.port());
-        let scope = if self.config.oauth_scope.is_empty() { DEFAULT_SCOPE.to_owned() } else { self.config.oauth_scope.clone() };
+        // As the MCP SDK resolves it: the protected resource's advertised scopes win over the
+        // configured ones, which in turn win over the default.
+        let advertised = prm["scopes_supported"].as_array().map(|items| items.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")).filter(|s| !s.is_empty());
+        let scope = advertised.unwrap_or_else(|| if self.config.oauth_scope.is_empty() { DEFAULT_SCOPE.to_owned() } else { self.config.oauth_scope.clone() });
 
         let (client_id, client_secret) = if !self.config.oauth_client_id.is_empty() {
             (self.config.oauth_client_id.clone(), self.config.oauth_client_secret.clone())
@@ -291,6 +322,10 @@ impl HttpSession {
             .append_pair("state", &state)
             .append_pair("scope", &scope)
             .append_pair("resource", self.config.http_url.trim());
+        if !self.config.oauth_client_id.is_empty() {
+            // The Atlassian three-legged authorisation endpoint requires these.
+            authorize_url.query_pairs_mut().append_pair("audience", "api.atlassian.com").append_pair("prompt", "consent");
+        }
 
         let waiting = tokio::spawn(async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
