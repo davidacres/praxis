@@ -175,6 +175,12 @@ pub fn project_folder(host: &HostContext, project_id: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+fn projects_exist(host: &HostContext, project_id: &str) -> bool {
+    storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+        .ok()
+        .is_some_and(|catalog| catalog.require(storage::PROJECTS, project_id).is_ok())
+}
+
 const PROJECT_WORKFLOWS_DIR: &str = ".praxis/workflows";
 
 /// Mirrors core's `workflowFileName`: an id that cannot be a safe file name is refused.
@@ -509,12 +515,171 @@ pub fn recommend_template(_host: &HostContext, _args: &[Value]) -> Result<Value>
     }))
 }
 
-pub fn recommend_model_tiers(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(json!({
-        "tiers": {},
-        "provider": "anthropic",
-        "model": "claude-3-5-sonnet"
-    }))
+const TIER_SYSTEM_PROMPT: &str = "You are helping someone choose how capable a model each stage of a software delivery workflow needs.\nTiers: \"fast\" (cheap and quick: summaries, formatting, simple checks of text), \"standard\" (routine review, test\nauthoring, analysis), \"strong\" (hard reasoning: writing or changing production code, security review, subtle\ncorrectness review). A stage that fails is retried one tier higher automatically, so prefer the cheapest tier that\nwill usually succeed. Respond with exactly one fenced JSON code block and nothing else:\n\n```json\n{ \"stages\": { \"<nodeId, verbatim>\": { \"tier\": \"fast|standard|strong\", \"rationale\": \"<one short sentence>\" } } }\n```";
+
+/// The provider a one-shot recommendation runs on (`resolveRecommendationProvider`): the explicit
+/// Recommendations provider, else the active one when it is a configured API provider, else the
+/// first configured API provider.
+fn recommendation_connection(
+    host: &HostContext,
+) -> Result<(super::api_host::ApiConnection, String)> {
+    use praxis_ai::providers::registry::{DescriptorKind, built_in_descriptors};
+    let (explicit, active, custom): (Option<String>, String, Vec<String>) = {
+        let settings = host.settings().read();
+        (
+            settings.ai.recommendation_provider.clone().filter(|p| !p.is_empty()),
+            settings.ai.active_provider.clone(),
+            settings
+                .ai
+                .custom_providers
+                .iter()
+                .flatten()
+                .filter_map(|c| serde_json::to_value(c).ok()?["id"].as_str().map(str::to_string))
+                .collect(),
+        )
+    };
+    let ready = |provider: &str| {
+        super::ai_providers::api_connection(host, provider)
+            .ok()
+            .filter(|(connection, _)| connection.options.api_key.is_some())
+    };
+    if let Some(provider) = explicit {
+        return ready(&provider).ok_or_else(|| {
+            failure(format!(
+                "{provider} is not configured — add an API key in Settings → AI, or change the Recommendations provider setting."
+            ))
+        });
+    }
+    let mut order = vec![active];
+    order.extend(
+        built_in_descriptors()
+            .into_iter()
+            .filter(|d| d.kind == DescriptorKind::Api)
+            .map(|d| d.id),
+    );
+    order.extend(custom);
+    order
+        .iter()
+        .find_map(|provider| ready(provider))
+        .ok_or_else(|| {
+            failure("No AI provider is configured for recommendations — add an API key in Settings → AI.")
+        })
+}
+
+fn extract_json_block(text: &str) -> String {
+    let fenced = regex::Regex::new(r"(?is)```json\s*(.*?)```")
+        .ok()
+        .and_then(|re| re.captures(text).map(|c| c[1].to_string()))
+        .or_else(|| {
+            regex::Regex::new(r"(?s)```\s*(.*?)```")
+                .ok()
+                .and_then(|re| re.captures(text).map(|c| c[1].to_string()))
+        });
+    fenced.unwrap_or_else(|| text.to_string()).trim().to_string()
+}
+
+pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value> {
+    use praxis_workflows::stage_model::default_tier_for_stage;
+    let project_id = text(args, 0)?;
+    if !projects_exist(host, project_id) {
+        return Err(failure(format!("Project {project_id} was not found.")));
+    }
+    let definition = args.get(1).cloned().unwrap_or(Value::Null);
+    let agents: Vec<&Value> = definition["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|n| n["type"] == "agent-task")
+        .collect();
+    if agents.is_empty() {
+        return Err(failure("This workflow has no agent stages to choose a model for."));
+    }
+    let mut lines = vec![format!("Workflow: {}", definition["name"].as_str().unwrap_or(""))];
+    if let Some(description) = definition["description"].as_str().filter(|d| !d.is_empty()) {
+        lines.push(format!("Description: {description}"));
+    }
+    lines.push(String::new());
+    lines.push("Stages:".into());
+    let stages: Vec<String> = agents
+        .iter()
+        .map(|node| {
+            let mut parts = vec![
+                format!("- id: {}", node["id"].as_str().unwrap_or("")),
+                format!("  name: {}", node["name"].as_str().unwrap_or("")),
+                format!(
+                    "  writes code to the worktree: {}",
+                    if node["mutatesWorktree"] == true { "yes" } else { "no" }
+                ),
+            ];
+            if let Some(gate) = node["satisfiesGate"].as_str() {
+                parts.push(format!("  evidence for the {gate} gate"));
+            }
+            let instructions: String = node["instructions"]
+                .as_str()
+                .unwrap_or("")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(400)
+                .collect();
+            parts.push(format!(
+                "  instructions: {}",
+                if instructions.is_empty() { "(none)" } else { &instructions }
+            ));
+            parts.join("\n")
+        })
+        .collect();
+    lines.push(stages.join("\n"));
+    let prompt = lines.join("\n");
+
+    let (connection, model) = recommendation_connection(host)?;
+    let provider = connection.provider.clone();
+    let (reply, usage) = runtime::block_on(super::api_host::run_provider_prompt(
+        &connection,
+        &model,
+        TIER_SYSTEM_PROMPT,
+        &prompt,
+        None,
+        |_| {},
+    ))
+    .map_err(failure)?;
+    let parsed: Value = serde_json::from_str(&extract_json_block(&reply))
+        .map_err(|_| failure("The AI model-tier response was not valid JSON."))?;
+    let Some(answered) = parsed["stages"].as_object() else {
+        return Err(failure("The AI model-tier response did not include a \"stages\" object."));
+    };
+    let mut result = serde_json::Map::new();
+    for node in agents {
+        let id = node["id"].as_str().unwrap_or("");
+        let entry = answered.get(id);
+        let tier = entry
+            .and_then(|e| e["tier"].as_str())
+            .filter(|t| ["fast", "standard", "strong"].contains(t));
+        result.insert(
+            id.to_string(),
+            match tier {
+                Some(tier) => json!({
+                    "tier": tier,
+                    "rationale": entry
+                        .and_then(|e| e["rationale"].as_str())
+                        .map(str::trim)
+                        .filter(|r| !r.is_empty())
+                        .unwrap_or("No rationale was given."),
+                    "defaulted": false,
+                }),
+                None => json!({
+                    "tier": default_tier_for_stage(
+                        node["mutatesWorktree"] == true,
+                        node["satisfiesGate"].is_string()
+                    ).to_string(),
+                    "rationale": "The model gave no usable answer for this stage, so the default for what it does was used.",
+                    "defaulted": true,
+                }),
+            },
+        );
+    }
+    Ok(json!({ "stages": result, "model": model, "provider": provider, "usage": usage }))
 }
 
 pub fn template_readiness(host: &HostContext, args: &[Value]) -> Result<Value> {
@@ -1916,6 +2081,46 @@ pub fn delete_run(host: &HostContext, args: &[Value]) -> Result<Value> {
                 ))
                 .map_err(failure)?;
             }
+        }
+    }
+    // The run's stage sessions (their transcripts belong to the run) and its link from the
+    // controller session that started it go with it.
+    let sessions = super::session_store::store(&host.config().user_data_dir);
+    for node in &run.definition.nodes {
+        let key = workflow_summary::stage_session_key(run_id, node.id());
+        if sessions.get(&key).ok().flatten().is_some() {
+            let _ = sessions.remove(&key);
+            host.events().emit("ai:sessionDeleted", Some(json!(key)));
+        }
+    }
+    if let Some(controller) = run.controller_session_key.as_deref() {
+        let remaining: Vec<String> = sessions
+            .get(controller)
+            .ok()
+            .flatten()
+            .map(|record| {
+                record["workflowRunIds"]
+                    .as_array()
+                    .map(|ids| ids.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>())
+                    .unwrap_or_else(|| record["workflowRunId"].as_str().filter(|r| !r.is_empty()).map(|r| vec![r.to_string()]).unwrap_or_default())
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|id| id != run_id)
+            .collect();
+        let next = remaining.last().and_then(|id| stored_run(host, id));
+        let updated = sessions.mutate(controller, true, |record| {
+            record["workflowRunId"] = json!(remaining.last().cloned().unwrap_or_default());
+            record["workflowRunIds"] = json!(remaining);
+            record["workflowNodeId"] = json!("");
+            record["workflowId"] = json!(next.as_ref().map(|r| r.workflow_id.clone()).unwrap_or_default());
+            if let Some(next) = &next {
+                record["workflowVersion"] = json!(next.workflow_version);
+                record["workflowRole"] = json!("controller");
+            }
+        });
+        if let Ok(Some(record)) = updated {
+            host.events().emit("ai:sessionChanged", Some(record));
         }
     }
     let _guard = workflow_engine::runs_lock()
