@@ -522,7 +522,7 @@ pub(super) fn continue_with(host: &HostContext, dir: &std::path::Path, args: &[V
         if connection.options.api_key.as_deref().is_none_or(str::is_empty) && !custom_without_auth {
             return Err(failure(format!("No {} API key configured for this session.", connection.label)));
         }
-        super::api_host::continue_api_task(host, dir, key, text(args, 1)?, sanitize_images(args.get(2).unwrap_or(&Value::Null)), connection, internal, conversation_context)?;
+        super::api_host::continue_api_task(host, dir, key, text(args, 1)?, sanitize_images(args.get(2).unwrap_or(&Value::Null)), connection, internal, args.get(3).is_some_and(|o| o["gadgetAnswer"] == true), conversation_context)?;
         let launch = runtime_launch(&prepared);
         let _ = store(dir).mutate(key, true, |stored| stored["runtimeLaunch"] = launch);
         return Ok(Value::Null);

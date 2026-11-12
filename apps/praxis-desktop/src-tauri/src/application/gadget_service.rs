@@ -9,9 +9,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-use praxis_ai::gadgets::block_parser::{ChatBlockParseOptions, parse_chat_blocks};
 use praxis_ai::gadgets::contracts::{GadgetActionValue, GadgetEnvelope, GadgetScope};
-use praxis_ai::gadgets::validation::{validate_gadget_action_value, validate_gadget_envelope};
+use praxis_ai::gadgets::validation::validate_gadget_action_value;
 use praxis_contracts::RustRpcRequest;
 use praxis_host::HostContext;
 use serde_json::{Value, json};
@@ -257,13 +256,7 @@ fn coerce_raw_block(raw: &Value, session_id: &str, index: usize) -> Value {
     if raw["type"] == "markdown" {
         return json!({ "type": "markdown", "blockId": block_id, "markdown": raw["markdown"] });
     }
-    match serde_json::from_value::<GadgetEnvelope>(raw["gadget"].clone()) {
-        Ok(mut envelope) => match validate_gadget_envelope(&mut envelope) {
-            Ok(()) => json!({ "type": "gadget", "blockId": block_id, "gadget": envelope }),
-            Err(reason) => json!({ "type": "fallback", "blockId": block_id, "text": raw["gadget"]["fallbackText"].as_str().unwrap_or_default(), "reason": reason }),
-        },
-        Err(_) => json!({ "type": "fallback", "blockId": block_id, "text": raw["gadget"]["fallbackText"].as_str().unwrap_or_default(), "reason": error("schema-invalid", "This could not be shown as an interactive control.", false) }),
-    }
+    praxis_ai::gadgets::coerce::coerce_gadget_block(&raw["gadget"], &block_id)
 }
 
 /// The scope a session's gadgets are issued and answered against, minted from the live record.
@@ -467,12 +460,11 @@ pub fn dispatch(host: &HostContext, dir: &Path, channel: &str, args: &[Value]) -
             let existing = || with_state(dir, |state| json!(decorate(state, state.blocks.get(session).map_or(&[][..], Vec::as_slice), true)));
             // No live session means no scope to pin a gadget to; keep a stale transcript readable.
             let Some(scope) = session_scope(dir, session) else { return Ok(existing()) };
-            let options = ChatBlockParseOptions { scope, issued_at: now(), id_prefix: text(args, 1).unwrap_or("block").to_owned() };
-            let parsed = parse_chat_blocks(text(args, 2).unwrap_or(""), &options);
+            let parsed = praxis_ai::gadgets::coerce::parse_and_coerce_blocks(text(args, 2).unwrap_or(""), &json!(scope), &now(), text(args, 1).unwrap_or("block"));
             if !parsed.contains_gadget {
                 return Ok(existing());
             }
-            let blocks: Vec<Value> = parsed.blocks.iter().filter_map(|b| serde_json::to_value(b).ok()).collect();
+            let blocks: Vec<Value> = parsed.blocks;
             let published = publish_blocks(dir, session, blocks);
             host.events().emit("gadgets:changed", Some(json!(session)));
             Ok(json!(published))
@@ -514,6 +506,7 @@ pub fn clear_session(dir: &Path, session_id: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use praxis_ai::gadgets::block_parser::{ChatBlockParseOptions, parse_chat_blocks};
 
     fn temp() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("gadgets-{}", Uuid::new_v4()));

@@ -375,7 +375,7 @@ test('artifact gadget renders handover metadata and item category badges', async
   const gadgetBox = await gadget.boundingBox();
   if (gadgetBox) {
     await win.screenshot({
-      path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-handover-gadget.png'),
+      path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-handover-gadget.png'),
       clip: {
         x: Math.max(0, gadgetBox.x - 20),
         y: Math.max(0, gadgetBox.y - 20),
@@ -387,7 +387,7 @@ test('artifact gadget renders handover metadata and item category badges', async
 });
 
 test('HTML artifacts open in an isolated in-app preview', async () => {
-  const html = fs.readFileSync(path.resolve(__dirname, '../../.praxis/visualizations/session-list-card-mockup.html'), 'utf8');
+  const html = fs.readFileSync(path.resolve(__dirname, '../.praxis/visualizations/session-list-card-mockup.html'), 'utf8');
   const artifact = {
     type: 'gadget' as const,
     blockId: 'artifact-html-block',
@@ -419,7 +419,7 @@ test('HTML artifacts open in an isolated in-app preview', async () => {
     hasNodeRequire: 'require' in window
   }))).toEqual({ hasPraxisBridge: false, hasNodeRequire: false });
 
-  await preview.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-list-cards-in-app-preview.png') });
+  await preview.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/session-list-cards-in-app-preview.png') });
   await preview.getByRole('tab', { name: 'Expanded cards' }).click();
   await expect(preview.locator('[data-variant="Expanded cards"]')).toBeVisible();
   await expect(preview.locator('[data-variant="Expanded cards"]')).toContainText('Updated 18 min ago');
@@ -509,7 +509,7 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   await expect(previewIframe.contentFrame().locator('.card')).toHaveText('Metrics');
 
   await win.screenshot({
-    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-workspace-dock.png')
+    path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-workspace-dock.png')
   });
 
   // Switch to Code tab
@@ -538,7 +538,7 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   const dualPane = dock.locator('[data-testid="artifact-prototype-dual-pane"]');
   await expect(dualPane).toBeVisible();
   await win.screenshot({
-    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-dual-pane.png')
+    path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-prototype-dual-pane.png')
   });
 
   // 2. Switch to Multi-Tab Studio
@@ -547,7 +547,7 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   const tabbedStudio = dock.locator('[data-testid="artifact-prototype-tabbed-studio"]');
   await expect(tabbedStudio).toBeVisible();
   await win.screenshot({
-    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-tabbed-studio.png')
+    path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-prototype-tabbed-studio.png')
   });
 
   // 3. Switch to Device Viewport Stage
@@ -556,7 +556,7 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   const deviceStage = dock.locator('[data-testid="artifact-prototype-device-canvas"]');
   await expect(deviceStage).toBeVisible();
   await win.screenshot({
-    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-device-canvas.png')
+    path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-prototype-device-canvas.png')
   });
 
   // 4. Switch to Iterative Companion
@@ -565,7 +565,7 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   const companion = dock.locator('[data-testid="artifact-prototype-iterative-companion"]');
   await expect(companion).toBeVisible();
   await win.screenshot({
-    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-iterative-companion.png')
+    path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-prototype-iterative-companion.png')
   });
 
   // Switch back to Classic Split
@@ -638,7 +638,7 @@ test('artifact workspace dock previews a file-backed text artifact and explains 
   });
   expect(visibleTitleWidth).toBeGreaterThan(60);
   await win.screenshot({
-    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-dock-text-preview.png')
+    path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-dock-text-preview.png')
   });
 
   // A file that no longer exists says so, and where it was looked for,
@@ -650,7 +650,7 @@ test('artifact workspace dock previews a file-backed text artifact and explains 
   await expect(unavailable).toContainText('.praxis/session-artifacts/removed-report.log');
   await expect(dock).not.toContainText('the real file body');
   await win.screenshot({
-    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-dock-missing-file.png')
+    path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-dock-missing-file.png')
   });
 
   // Going back to the existing file recovers.
@@ -1068,7 +1068,7 @@ test('Open in Workspace opens an HTML artifact from the session page too', async
   const cardBox = await card.boundingBox();
   if (cardBox) {
     await win.screenshot({
-      path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-gadget-thumbnail-card.png'),
+      path: path.resolve(__dirname, '../.praxis/session-artifacts/artifact-gadget-thumbnail-card.png'),
       clip: { x: cardBox.x - 16, y: cardBox.y - 16, width: cardBox.width + 32, height: cardBox.height + 32 }
     });
   }

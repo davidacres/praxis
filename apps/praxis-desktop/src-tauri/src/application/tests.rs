@@ -1673,16 +1673,17 @@ fn ai_sessions_and_analysis_lifecycle() {
 
     // 3. Analysis submit, confirm, clear
     let analysis_data = json!({
-        "summary": "High CPU utilization in PTY reader",
-        "suggestedFix": "Batch chunk read buffers"
+        "messages": [{ "role": "assistant", "text": "High CPU utilization in PTY reader", "createdAt": "2026-01-01T00:00:00Z" }],
+        "confirmed": false
     });
     profile.rpc(
         "ai:submitAnalysis",
         vec![json!("TASK-99"), analysis_data.clone()],
     );
     let analysis = profile.rpc("ai:getAnalysis", vec![json!("TASK-99")]);
+    assert_eq!(analysis["messages"][0]["text"], "High CPU utilization in PTY reader");
     assert_eq!(analysis["issueKey"], "TASK-99");
-    assert_eq!(analysis["confirmed"], false);
+    assert_eq!(analysis["busy"], false);
 
     profile.rpc(
         "ai:setAnalysisConfirmed",
@@ -1690,9 +1691,11 @@ fn ai_sessions_and_analysis_lifecycle() {
     );
     let confirmed_analysis = profile.rpc("ai:getAnalysis", vec![json!("TASK-99")]);
     assert_eq!(confirmed_analysis["confirmed"], true);
+    assert!(confirmed_analysis["confirmedAt"].is_string());
 
     profile.rpc("ai:clearAnalysis", vec![json!("TASK-99")]);
     let cleared_analysis = profile.rpc("ai:getAnalysis", vec![json!("TASK-99")]);
+    // A cleared analysis reads as an empty, unconfirmed state rather than as absent.
     assert_eq!(cleared_analysis["confirmed"], false);
     assert_eq!(cleared_analysis["messages"], json!([]));
 

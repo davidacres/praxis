@@ -719,6 +719,8 @@ impl Application {
             assistant::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("agentRuntime:") {
             agent_runtime::dispatch(host, &host.config().user_data_dir, channel, args)?
+        } else if channel == "ai:saveArtifactToWorkspace" {
+            artifacts::save_session_artifact(host, &catalog, &host.config().user_data_dir, args)?
         } else if channel.starts_with("ai:") {
             ai::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if let Some(action) = issue_action(channel) {

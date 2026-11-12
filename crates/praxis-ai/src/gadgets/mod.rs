@@ -1,6 +1,7 @@
 //! Interactive chat gadgets, validation, redaction, and block parsing.
 
 pub mod block_parser;
+pub mod coerce;
 pub mod contracts;
 pub mod fallback;
 pub mod json_repair;

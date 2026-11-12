@@ -13,20 +13,6 @@ fn analysis_file(user_data_dir: &Path) -> std::path::PathBuf {
     user_data_dir.join("ai-analysis.json")
 }
 
-/// The `AiAnalysisState` the renderer reads: always present, `confirmed` false until confirmed.
-fn analysis_state(issue_key: &str, stored: Option<&Value>) -> Value {
-    let stored = stored.cloned().unwrap_or(Value::Null);
-    json!({
-        "issueKey": issue_key,
-        "messages": stored.get("messages").cloned().unwrap_or_else(|| json!([])),
-        "confirmed": stored["confirmed"] == true,
-        "confirmedAt": stored.get("confirmedAt").cloned().filter(|v| !v.is_null()),
-        "busy": false,
-        "provider": stored.get("provider").cloned().filter(|v| !v.is_null()),
-        "model": stored.get("model").cloned().filter(|v| !v.is_null()),
-    })
-}
-
 fn feedback_file(user_data_dir: &Path) -> std::path::PathBuf {
     user_data_dir.join("session-feedback.json")
 }
@@ -37,6 +23,45 @@ fn read_sessions(user_data_dir: &Path) -> Result<BTreeMap<String, Value>> {
 
 fn save_sessions(user_data_dir: &Path, sessions: &BTreeMap<String, Value>) -> Result<()> {
     super::session_store::store(user_data_dir).replace_all(sessions.clone())
+}
+
+/// The renderer-facing analysis state for an issue: stored fields plus the runtime-only `busy` flag.
+fn analysis_state(analyses: &BTreeMap<String, Value>, issue_key: &str) -> Value {
+    let stored = analyses.get(issue_key);
+    let mut state = json!({
+        "issueKey": issue_key,
+        "messages": stored.map_or_else(|| json!([]), |s| if s["messages"].is_array() { s["messages"].clone() } else { json!([]) }),
+        "confirmed": stored.is_some_and(|s| s["confirmed"] == true),
+        "busy": false,
+    });
+    for field in ["confirmedAt", "provider", "model"] {
+        if let Some(value) = stored.map(|s| &s[field]).filter(|v| !v.is_null()) {
+            state[field] = value.clone();
+        }
+    }
+    state
+}
+
+/// Confirming an analysis turns the same session into the implementation run (full tools, new contract).
+fn promote_analysis_session(host: &HostContext, user_data_dir: &Path, issue_key: &str) -> Result<()> {
+    let sessions = super::session_store::store(user_data_dir);
+    let Some(record) = sessions.get(issue_key)? else { return Ok(()) };
+    if record["taskDefinition"]["kind"] != "analysis" {
+        return Ok(());
+    }
+    let updated = sessions.mutate(issue_key, true, |r| {
+        let task = &mut r["taskDefinition"];
+        task["definitionOfDone"] = json!("Implement the confirmed plan, run the relevant tests, and report the completed result.");
+        if let Some(object) = task.as_object_mut() {
+            object.remove("nonGoals");
+        }
+        task["completionContract"] = json!("Continue in this conversation until the confirmed implementation is complete and verified.");
+        r["toolMode"] = json!("full");
+    })?;
+    if let Some(updated) = updated {
+        host.events().emit("ai:sessionChanged", Some(updated));
+    }
+    Ok(())
 }
 
 fn read_analysis(user_data_dir: &Path) -> Result<BTreeMap<String, Value>> {
@@ -381,7 +406,6 @@ pub fn dispatch(
         "ai:openHtmlArtifactPreview" | "ai:artifactPageThumbnail" => {
             Ok(json!({ "url": Value::Null, "dataUrl": Value::Null }))
         }
-        "ai:saveArtifactToWorkspace" => Ok(json!({ "saved": true })),
 
         // 5. Workflow packs & ticket review
         "ai:listWorkflowPacks" => Ok(json!(super::workflow_packs::discover(
@@ -403,59 +427,41 @@ pub fn dispatch(
         })),
 
         // 6. Analysis
-        "ai:getAnalysis" => {
-            let issue_key = text(args, 0)?;
-            let analyses = read_analysis(user_data_dir)?;
-            Ok(analysis_state(issue_key, analyses.get(issue_key)))
-        }
+        "ai:getAnalysis" => Ok(analysis_state(&read_analysis(user_data_dir)?, text(args, 0)?)),
         "ai:submitAnalysis" => {
             let issue_key = text(args, 0)?;
             let analysis = args.get(1).cloned().unwrap_or_else(|| json!({}));
             let mut analyses = read_analysis(user_data_dir)?;
             analyses.insert(issue_key.to_string(), analysis.clone());
             save_analysis(user_data_dir, &analyses)?;
-            host.events()
-                .emit("ai:analysisChanged", Some(json!(issue_key)));
+            host.events().emit("ai:analysisChanged", Some(analysis_state(&analyses, issue_key)));
             Ok(analysis)
         }
-        "ai:cancelAnalysis" | "ai:clearAnalysis" => {
+        "ai:cancelAnalysis" => Ok(Value::Null),
+        "ai:clearAnalysis" => {
             let issue_key = text(args, 0)?;
             let mut analyses = read_analysis(user_data_dir)?;
             analyses.remove(issue_key);
             save_analysis(user_data_dir, &analyses)?;
-            host.events()
-                .emit("ai:analysisChanged", Some(json!(issue_key)));
+            host.events().emit("ai:analysisChanged", Some(analysis_state(&analyses, issue_key)));
             Ok(Value::Null)
         }
         "ai:setAnalysisConfirmed" => {
             let issue_key = text(args, 0)?;
             let confirmed = args.get(1).and_then(Value::as_bool).unwrap_or(true);
             let mut analyses = read_analysis(user_data_dir)?;
-            let entry = analyses
-                .entry(issue_key.to_string())
-                .or_insert_with(|| json!({ "messages": [], "confirmed": false }));
+            let entry = analyses.entry(issue_key.to_owned()).or_insert_with(|| json!({ "messages": [], "confirmed": false }));
             entry["confirmed"] = json!(confirmed);
-            entry["confirmedAt"] = if confirmed { json!(now()) } else { Value::Null };
+            if confirmed {
+                entry["confirmedAt"] = json!(now());
+            } else if let Some(object) = entry.as_object_mut() {
+                object.remove("confirmedAt");
+            }
             save_analysis(user_data_dir, &analyses)?;
             if confirmed {
-                // The analysis session is promoted to implement the confirmed plan with full tools.
-                let store = super::session_store::store(user_data_dir);
-                let promoted = store.mutate(issue_key, true, |record| {
-                    if record["taskDefinition"]["kind"] == "analysis" {
-                        record["taskDefinition"]["definitionOfDone"] = json!("Implement the confirmed plan, run the relevant tests, and report the completed result.");
-                        record["taskDefinition"]["nonGoals"] = Value::Null;
-                        record["taskDefinition"]["completionContract"] = json!("Continue in this conversation until the confirmed implementation is complete and verified.");
-                        record["toolMode"] = json!("full");
-                    }
-                });
-                if let Ok(Some(record)) = promoted {
-                    host.events().emit("ai:sessionChanged", Some(record));
-                }
+                promote_analysis_session(host, user_data_dir, issue_key)?;
             }
-            host.events().emit(
-                "ai:analysisChanged",
-                Some(analysis_state(issue_key, analyses.get(issue_key))),
-            );
+            host.events().emit("ai:analysisChanged", Some(analysis_state(&analyses, issue_key)));
             Ok(Value::Null)
         }
 
