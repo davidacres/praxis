@@ -54,6 +54,45 @@ fn write_workflows_json(host: &HostContext, root: &Value) -> Result<()> {
     storage::write_atomic(&path, &format!("{serialized}\n"), false)
 }
 
+/// Every stored run, for the scheduled-run runner.
+pub fn all_runs(host: &HostContext) -> Vec<WorkflowRun> {
+    get_runs(host)
+}
+
+/// The project's workflow stages (board columns), for moving tickets by category.
+pub fn project_workflow_stages(
+    host: &HostContext,
+    project_id: &str,
+) -> Option<Vec<praxis_contracts::ProjectWorkflowStage>> {
+    let catalog =
+        storage::Catalog::load(&host.config().user_data_dir, &host.config().settings_path).ok()?;
+    let project = catalog.require(storage::PROJECTS, project_id).ok()?;
+    serde_json::from_value(project.get("workflowStages")?.clone()).ok()
+}
+
+/// What a schedule may run on a project: its own workflows, then the templates it could instantiate.
+pub fn workflow_choices_for(host: &HostContext, project_id: &str) -> Vec<Value> {
+    let mut by_id: Vec<(String, Value)> = Vec::new();
+    for definition in project_definition_values(host, project_id)
+        .into_iter()
+        .chain(all_template_values(host, project_id))
+    {
+        let id = definition["id"].as_str().unwrap_or("").to_string();
+        if id.is_empty() || by_id.iter().any(|(existing, _)| *existing == id) {
+            continue;
+        }
+        by_id.push((
+            id.clone(),
+            json!({
+                "workflowId": id,
+                "name": definition["name"],
+                "trigger": definition["trigger"].as_str().unwrap_or("on-demand"),
+            }),
+        ));
+    }
+    by_id.into_iter().map(|(_, v)| v).collect()
+}
+
 fn get_runs(host: &HostContext) -> Vec<WorkflowRun> {
     let root = read_workflows_json(host);
     root.get(WORKFLOW_RUNS_KEY)
@@ -831,7 +870,7 @@ pub fn remove_policy(host: &HostContext, args: &[Value]) -> Result<Value> {
 
 // ── Runs ─────────────────────────────────────────────────────────────────
 
-fn policy_for(host: &HostContext, project_id: &str) -> Option<WorkflowPolicyProfile> {
+pub fn policy_for(host: &HostContext, project_id: &str) -> Option<WorkflowPolicyProfile> {
     policy_value_for(host, project_id).and_then(|v| serde_json::from_value(v).ok())
 }
 
@@ -1350,7 +1389,7 @@ pub fn prepare_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     }))
 }
 
-fn blocking_files(host: &HostContext, project_id: &str) -> Result<Vec<String>> {
+pub fn blocking_files(host: &HostContext, project_id: &str) -> Result<Vec<String>> {
     let Some(folder) = project_folder(host, project_id) else {
         return Ok(Vec::new());
     };

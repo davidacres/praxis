@@ -36,7 +36,9 @@ pub enum GateState {
 }
 
 impl GateState {
-    const fn as_str(self) -> &'static str {
+    /// The state's wire spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Passed => "passed",
             Self::Failed => "failed",

@@ -772,7 +772,14 @@ pub fn engine(host: &HostContext) -> &'static Engine {
                 dispatcher: Arc::new(HostDispatcher { host: host.clone() }),
                 workspace: Some(Arc::new(GitWorkspace { host: host.clone() })),
                 on_run_changed: Some(Arc::new(move |run: &WorkflowRun| {
-                    let _ = (&events_host, is_run_settled(run));
+                    events_host
+                        .events()
+                        .emit("workflows:runChanged", Some(json!(run.run_id)));
+                    // A schedule that launched this run reacts to what it did.
+                    if run.scheduled_launch_token.is_some() {
+                        super::scheduled_runner_host::workflow_changed(&events_host, &run.run_id);
+                    }
+                    let _ = is_run_settled(run);
                 })),
                 choose_fallback_provider: None,
                 now: None,

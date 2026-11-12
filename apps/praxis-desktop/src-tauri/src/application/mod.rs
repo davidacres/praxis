@@ -22,6 +22,7 @@ mod notes;
 mod projects;
 pub(crate) mod runtime;
 mod runs;
+mod scheduled_runner_host;
 mod scheduled_runs;
 pub(crate) mod storage;
 mod system;
@@ -448,6 +449,11 @@ impl Application {
             }
             "assistant:listChats" | "assistant:getChat" | "assistant:getConversation" => {
                 return assistant::dispatch(host, &host.config().user_data_dir, channel, args);
+            }
+            // The runner behind these reads the board and starts workflow runs, which take the profile
+            // lock themselves, so a handler holding it here would wait on its own callers.
+            _ if channel.starts_with("scheduledRuns:") => {
+                return scheduled_runs::dispatch(host, channel, args);
             }
             "marketplace:listActiveAppearance" => {
                 return marketplace::dispatch(host, &host.config().user_data_dir, channel, args);
