@@ -218,6 +218,14 @@ impl Task {
             if let Some(uses) = praxis_ai::session::skill_usage::merge_detected_skill_uses(Some(&record["detectedSkills"]), &signals).filter(|_| !signals.is_empty()) {
                 record["detectedSkills"] = json!(uses);
             }
+            let mut event = event;
+            // In a multi-AI conversation each reply is attributed to the AI that wrote it.
+            if event["type"] == "message" && event["speaker"].is_null() && record["conversation"]["state"] == "running" {
+                let speaker = record["conversation"]["participants"].as_array().and_then(|p| p.iter().find(|x| x["id"] == record["conversation"]["currentSpeakerId"])).cloned();
+                if let Some(speaker) = speaker {
+                    event["speaker"] = json!({ "participantId": speaker["id"], "provider": speaker["provider"], "model": speaker["model"], "displayLabel": speaker["displayLabel"] });
+                }
+            }
             if let Some(events) = record["events"].as_array_mut() {
                 events.push(event);
                 let count = events.len();
@@ -666,9 +674,9 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
     let cost_before = sessions.get(&key)?.and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
     let mut record = json!({
         "issueKey": key, "sessionId": session_id, "provider": request.provider, "toolMode": request.tool_mode,
-        "state": "not_started", "taskDefinition": request.task, "purpose": purpose_of(&request.task, &key),
-        "handoverBrief": { "updatedAt": started_at, "revision": 0 },
-        "runtimeEpochs": [{ "provider": request.provider, "startedAt": started_at }],
+        "state": "not_started", "taskDefinition": request.task, "purpose": super::session_handover::purpose_from_task(&request.task, &key, None),
+        "handoverBrief": super::session_handover::empty_brief(&started_at),
+        "runtimeEpochs": [{ "id": super::session_handover::new_epoch_id(), "provider": request.provider, "startedAt": started_at, "reason": "started" }],
         "mode": mode, "events": [], "eventsLoaded": true, "eventCount": 0, "stepCount": 0, "startedAt": started_at,
         "reasoningEffort": request.reasoning_effort.clone().unwrap_or_else(|| "medium".into())
     });
@@ -1072,6 +1080,9 @@ pub struct Continue {
     pub args: Vec<String>,
     pub mcp_servers: Vec<Value>,
     pub gadget_answer: bool,
+    /// A turn Praxis schedules between the AIs of a multi-AI conversation, not typed by the user.
+    pub internal: bool,
+    pub conversation_context: Option<String>,
 }
 
 /// `Previous conversation:` plus the recent assistant/user text, for a session that cannot be resumed.
@@ -1132,7 +1143,10 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
     if record["permissionMode"] == "autopilot" {
         system.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("AUTOPILOT_SESSION_PROMPT")));
     }
-    let current_turn = format!("User follow-up:\n{follow_up}");
+    if let Some(context) = request.conversation_context.as_deref().filter(|c| !c.is_empty()) {
+        system.push_str(&format!("\n\n{context}"));
+    }
+    let current_turn = format!("{}:\n{follow_up}", if request.internal { "Conversation routing instruction" } else { "User follow-up" });
     let resumed_prompt = [system.clone(), current_turn.clone()].join("\n\n");
     let events = record["events"].as_array().cloned().unwrap_or_default();
     let prompt = [Some(system), conversation_transcript(&events), Some(current_turn)].into_iter().flatten().collect::<Vec<_>>().join("\n\n");
@@ -1155,7 +1169,7 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
     // The previous turn recorded its own reply when it ended; clear the live buffer so the old answer
     // cannot briefly render after the new user message.
     task.mutate(true, |record| record["responseText"] = json!(""));
-    let mut event = evt("user_input_completed", "You", Some(follow_up), None);
+    let mut event = if request.internal { evt("conversation_turn", "Conversation turn started", None, None) } else { evt("user_input_completed", "You", Some(follow_up), None) };
     if !request.images.is_empty() {
         event["attachments"] = json!(request.images);
     }

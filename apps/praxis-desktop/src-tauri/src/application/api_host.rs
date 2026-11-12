@@ -247,18 +247,29 @@ async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl
 
 // ── local tools ──────────────────────────────────────────────────────────
 
-fn tool_definitions(tool_mode: &str) -> Vec<GatewayToolDefinition> {
+fn tool_definitions(tool_mode: &str, tracker: bool) -> Vec<GatewayToolDefinition> {
     let tool = |name: &str, description: &str, schema: Value| GatewayToolDefinition { name: name.into(), description: Some(description.into()), input_schema: Some(schema) };
     let path = json!({ "type": "string", "description": "File path relative to the working directory" });
     let read = vec![
         tool("read_file", "Read a UTF-8 text file relative to the working directory.", json!({ "type": "object", "properties": { "path": path }, "required": ["path"] })),
         tool("list_dir", "List files and directories under a path relative to the working directory.", json!({ "type": "object", "properties": { "path": { "type": "string", "description": "Directory path relative to the working directory (default \".\")" } } })),
     ];
+    // The session's own ticket, through the tracker connection it is bound to.
+    let tracker_tools: Vec<GatewayToolDefinition> = if tracker && tool_mode != "project-only" {
+        praxis_ai::mcp::builtin::list_tracker_tools()
+            .into_iter()
+            .filter(|t| tool_mode != "read-only" || matches!(t.name.as_str(), "tracker_get_ticket" | "tracker_list_transitions"))
+            .map(|t| GatewayToolDefinition { name: t.name, description: t.description, input_schema: t.input_schema })
+            .collect()
+    } else {
+        Vec::new()
+    };
     match tool_mode {
         "project-only" => Vec::new(),
-        "read-only" => read,
+        "read-only" => read.into_iter().chain(tracker_tools).collect(),
         _ => {
             let mut all = read;
+            all.extend(tracker_tools);
             all.push(tool("write_file", "Write a UTF-8 text file relative to the working directory (creates parents).", json!({ "type": "object", "properties": { "path": path, "content": { "type": "string", "description": "Full file contents to write" } }, "required": ["path", "content"] })));
             all.push(tool("run_shell", "Run a shell command in the working directory and return stdout/stderr.", json!({ "type": "object", "properties": { "command": { "type": "string", "description": "Shell command to execute" } }, "required": ["command"] })));
             all
@@ -328,11 +339,32 @@ fn failed(content: impl Into<String>) -> ToolOutcome {
     ToolOutcome { ok: false, content: content.into(), data: None }
 }
 
+/// A tracker tool against the connection the session is bound to; writes ask first.
+async fn run_tracker_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
+    let connection_id = task.store.get(&task.key).ok().flatten().and_then(|r| r["connectionId"].as_str().map(str::to_owned));
+    let provider = super::builtin_mcp::HostTracker::new(task.host.clone(), connection_id);
+    let write = matches!(call.name.as_str(), "tracker_add_comment" | "tracker_update_ticket" | "tracker_transition_ticket");
+    if write && task.tool_mode != "read-only" {
+        let issue = call.arguments["issueKey"].as_str().unwrap_or_default().trim().to_owned();
+        let request = json!({ "toolCallId": call.id, "kind": "tracker-write", "title": format!("Permission requested: {}: The agent wants to use {} on ticket {issue}.", call.name, call.name), "name": call.name });
+        if task.request_permission(request).await == super::acp_host::Decision::Deny {
+            return failed(format!("Permission denied for {}.", call.name));
+        }
+    }
+    match praxis_ai::mcp::builtin::execute_tracker_tool(&call.name, &call.arguments, super::builtin_mcp::parse_tool_mode(&task.tool_mode), &provider).await {
+        Ok(result) => ToolOutcome { ok: result.ok, content: result.content, data: None },
+        Err(message) => failed(message),
+    }
+}
+
 async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
     let args = &call.arguments;
     let text = |key: &str| args[key].as_str().unwrap_or_default().to_owned();
     if task.tool_mode == "project-only" {
         return failed(format!("{} is unavailable without a project workspace folder.", call.name));
+    }
+    if call.name.starts_with("tracker_") {
+        return run_tracker_tool(task, call).await;
     }
     if task.tool_mode == "read-only" && !matches!(call.name.as_str(), "read_file" | "list_dir" | "read_image") {
         return failed(format!("{} is unavailable in read-only tool mode.", call.name));
@@ -506,7 +538,7 @@ enum Outcome {
 }
 
 async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, system: String, mut history: Vec<WireMessage>, tool_mode: &str, max_steps: u64, reasoning: Option<&str>) -> (Outcome, Vec<WireMessage>) {
-    let tools = tool_definitions(tool_mode);
+    let tools = tool_definitions(tool_mode, !task.key.starts_with("SESSION-"));
     // The gateway's internal model ids carry a `Vercel/` prefix that is not part of the wire id.
     let wire_model = model.strip_prefix("Vercel/").unwrap_or(model).to_owned();
     let mut steps = 0u64;
@@ -831,8 +863,8 @@ pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart
     let goal_line = start.task["goal"].as_str().unwrap_or_default().lines().next().unwrap_or_default().trim().chars().take(120).collect::<String>();
     let mut record = json!({
         "issueKey": key, "sessionId": session_id, "provider": start.connection.provider, "model": start.model, "toolMode": start.tool_mode,
-        "state": "not_started", "taskDefinition": start.task, "purpose": if goal_line.is_empty() { key.clone() } else { goal_line },
-        "handoverBrief": { "updatedAt": started_at, "revision": 0 }, "runtimeEpochs": [{ "provider": start.connection.provider, "model": start.model, "startedAt": started_at }],
+        "state": "not_started", "taskDefinition": start.task, "purpose": super::session_handover::purpose_from_task(&start.task, &key, None),
+        "handoverBrief": super::session_handover::empty_brief(&started_at), "runtimeEpochs": [{ "id": super::session_handover::new_epoch_id(), "provider": start.connection.provider, "model": start.model, "startedAt": started_at, "reason": "started" }],
         "mode": mode, "events": [], "eventsLoaded": true, "eventCount": 0, "stepCount": 0, "startedAt": started_at,
         "reasoningEffort": start.reasoning_effort.clone().unwrap_or_else(|| "medium".into())
     });
@@ -869,7 +901,7 @@ pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart
 }
 
 /// A follow-up turn on an API session, continuing from the saved conversation history.
-pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, message: &str, images: Vec<Value>, connection: ApiConnection) -> Result<()> {
+pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, message: &str, images: Vec<Value>, connection: ApiConnection, internal: bool, conversation_context: Option<&str>) -> Result<()> {
     if super::acp_host::has_active_task(dir, key) {
         return Err(failure(format!("The agent is still working on {key}.")));
     }
@@ -883,7 +915,10 @@ pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, m
     let model = record["model"].as_str().unwrap_or_default().to_owned();
     let issue = json!({ "key": key, "summary": record["taskDefinition"]["goal"], "issueType": "Task", "status": "In progress", "description": record["taskDefinition"]["scope"] });
     let start = ApiStart { issue, task: record["taskDefinition"].clone(), model: model.clone(), reasoning_effort: record["reasoningEffort"].as_str().map(str::to_owned), working_directory: record["workingDirectory"].as_str().map(str::to_owned), tool_mode: tool_mode.clone(), permission_mode: record["permissionMode"].as_str().map(str::to_owned), auto_approve: record["autoApprovePermissions"] == true, images: images.clone(), connection: connection.clone() };
-    let system = system_prompt(&start);
+    let mut system = system_prompt(&start);
+    if let Some(context) = conversation_context.filter(|c| !c.is_empty()) {
+        system.push_str(&format!("\n\n{context}"));
+    }
     let mut history = history_from_record(&record);
     let mut turn = WireMessage::text(WireRole::User, follow_up.clone());
     let attachments: Vec<praxis_ai::providers::wire::WireImageAttachment> = images.iter().filter_map(|i| serde_json::from_value(i.clone()).ok()).collect();
@@ -893,12 +928,13 @@ pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, m
     history.push(turn);
     let working_directory = start.working_directory.clone().map(PathBuf::from).or_else(|| std::env::current_dir().ok()).unwrap_or_default();
     let session_id = record["sessionId"].as_str().unwrap_or_default().to_owned();
+    super::log_bus::log(host, &format!("[ApiAgent] Starting follow-up turn provider={} session={key} model={model} at={}", connection.provider, chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
     let task = register_api_task(host, dir, key, &session_id, &tool_mode, working_directory, record["autoApprovePermissions"] == true, record["permissionMode"] == "auto", Some(record["cost"].clone()).filter(|c| !c.is_null()));
     task.mutate(true, |record| {
         record["responseText"] = json!("");
         record["reasoningText"] = json!("");
     });
-    let mut event = evt("user_input_completed", "You", Some(follow_up), None);
+    let mut event = if internal { evt("conversation_turn", "Conversation turn started", None, None) } else { evt("user_input_completed", "You", Some(follow_up), None) };
     if !images.is_empty() {
         event["attachments"] = json!(images);
     }

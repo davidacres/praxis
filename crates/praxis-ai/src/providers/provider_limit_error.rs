@@ -60,64 +60,73 @@ pub struct ProviderLimitNotice {
     pub retry_after_seconds: Option<u32>,
 }
 
-/// Whether a provider error is a quota complaint rather than anything else.
-///
-/// The wording is matched case-insensitively, because providers are not
-/// consistent about it.
+/// Rate, usage, credit and quota limits across providers, exactly as `providerLimitError.ts`
+/// matches them (Claude Code: "You've hit your session limit", Anthropic: "credit balance is too
+/// low", OpenAI: "insufficient_quota", Gemini: "RESOURCE_EXHAUSTED", Codex: "usage limit reached").
+fn limit_regex() -> &'static regex::Regex {
+    static PATTERN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    PATTERN.get_or_init(|| {
+        regex::Regex::new(concat!(
+            r"(?i)(?:weekly|monthly|daily|hourly|session|usage|rate|spending|billing|plan|tier|budget)[_ -]?limit",
+            r"|(?:hit|reached|exceeded) (?:your |its |the )?(?:\w+ )?(?:limit|budget|quota)",
+            r"|quota|insufficient[_ -]?(?:quota|balance|funds|credits?|budget)|out of quota|too many requests|resource[_ -]?exhausted",
+            r"|(?:credits?|budget)[_ -]?(?:exhausted|depleted|empty|expired|zero|insufficient|out|exceeded)",
+            r"|out of (?:credits?|budget)|no (?:credits?|budget) remaining|run out of (?:credits?|budget)|\bover[_ -]?budget\b",
+            r"|credit balance (?:is )?too low|balance (?:is )?too low|no resource package|please recharge|\b1113\b",
+            r"|rate[_ -]?limit|rate[_ -]?limited"
+        ))
+        .expect("static pattern")
+    })
+}
+
+/// True when an error or message indicates a rate, usage, session, credit, quota, or budget limit.
 #[must_use]
 pub fn is_provider_limit_error(error: &str) -> bool {
-    let text = error.trim();
-    if text.is_empty() {
-        return false;
-    }
-    let lower = text.to_lowercase();
-    LIMIT_MARKERS.iter().any(|marker| lower.contains(marker))
+    !error.is_empty() && limit_regex().is_match(error)
 }
 
-/// Whether a model's own reply is a quota complaint.
+/// A reply this long is prose, not a notice.
+const MAX_LIMIT_NOTICE_LENGTH: usize = 500;
+
+/// True when a *successfully completed* turn's reply is itself a limit notice.
 ///
-/// A reply like "usage limit reached for this account" is the model talking,
-/// not a failed request. Treating it as an error would end a session that is
-/// still perfectly alive.
+/// CLI agents report a hit limit as an ordinary assistant message that ends the turn normally.
+/// The limit vocabulary also appears in perfectly good answers, so the text only counts when it is
+/// short and has no structure a notice never has: a gadget fence or more than a few lines.
 #[must_use]
 pub fn is_limit_notice_reply(reply: &str) -> bool {
-    let lower = reply.trim().to_lowercase();
-    LIMIT_NOTICE_MARKERS
-        .iter()
-        .any(|marker| lower.contains(marker))
+    let text = reply.trim();
+    if text.is_empty() || text.chars().count() > MAX_LIMIT_NOTICE_LENGTH {
+        return false;
+    }
+    if text.contains("```") || text.lines().count() > 4 {
+        return false;
+    }
+    is_provider_limit_error(text)
 }
 
-/// The part of a provider error that names the quota complaint.
-///
-/// Starts at the marker rather than at the beginning of the message, so the
-/// provider's own prefix — a request id, a URL, a stack frame — is dropped
-/// and only the human-readable part is shown.
+/// The user-facing message explaining the quota, credit or budget exhaustion. Always a message:
+/// text that names no limit gets the generic explanation, as `extractProviderLimitMessage` does.
 #[must_use]
 pub fn extract_provider_limit_message(error: &str) -> Option<String> {
-    let text = error.trim();
-    if text.is_empty() {
-        return None;
+    // Strip generic transport/RPC wrappers.
+    let wrappers = regex::Regex::new(r"(?is)^(?:The stage session failed:\s*)?(?:RequestError:\s*)?(?:Internal error:\s*)?(?:Provider error:\s*)?(?:Gateway returned \d+:\s*)?").expect("static pattern");
+    let mut cleaned = wrappers.replace(error, "").trim().to_owned();
+    // A notice passes through several layers, each of which extracts again.
+    let repeated = regex::Regex::new(r"(?i)^(?:Provider limit reached:\s*)+").expect("static pattern");
+    cleaned = repeated.replace(&cleaned, "").trim().to_owned();
+    // If it is or contains JSON, use the inner message.
+    if let Some(start) = cleaned.find('{')
+        && cleaned.ends_with('}')
+        && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&cleaned[start..])
+        && let Some(message) = parsed["error"]["message"].as_str()
+    {
+        cleaned = message.to_owned();
     }
-    let lower = text.to_lowercase();
-    // The longest markers come first: "usage limit reached" also contains
-    // "usage limit", and the longer one is the better answer.
-    let marker = [
-        "usage limit reached",
-        "rate limit reached",
-        "exceeded your quota",
-        "rate limit",
-        "usage limit",
-        "quota exceeded",
-        "quota",
-        "insufficient_quota",
-        "resource_exhausted",
-        "too many requests",
-    ]
-    .into_iter()
-    .find(|marker| lower.contains(marker))?;
-    let index = lower.find(marker)?;
-    let message = text[index..].trim();
-    Some(message.strip_suffix('.').unwrap_or(message).to_string())
+    if !cleaned.is_empty() && limit_regex().is_match(&cleaned) {
+        return Some(format!("Provider limit reached: {cleaned}"));
+    }
+    Some("Provider usage limit, budget, or credits exhausted. The session was halted and will not retry automatically.".to_owned())
 }
 
 #[cfg(test)]
@@ -129,13 +138,11 @@ mod tests {
         assert!(is_provider_limit_error("Rate limit exceeded for gpt-4"));
         assert!(is_provider_limit_error("429 Too Many Requests"));
         assert!(is_provider_limit_error("You have exceeded your quota"));
-        assert!(is_provider_limit_error(
-            "insufficient_quota: credits exhausted"
-        ));
+        assert!(is_provider_limit_error("insufficient_quota: credits exhausted"));
         assert!(is_provider_limit_error("RESOURCE_EXHAUSTED: token limit"));
-        assert!(is_provider_limit_error(
-            "Usage limit reached for this account"
-        ));
+        assert!(is_provider_limit_error("Usage limit reached for this account"));
+        assert!(is_provider_limit_error("You've hit your session limit \u{b7} resets 12:50pm"));
+        assert!(is_provider_limit_error("Insufficient balance: credits exhausted"));
     }
 
     #[test]
@@ -143,53 +150,26 @@ mod tests {
         assert!(!is_provider_limit_error("network request failed"));
         assert!(!is_provider_limit_error("invalid api key"));
         assert!(!is_provider_limit_error(""));
-        assert!(!is_provider_limit_error("   "));
     }
 
     #[test]
-    fn a_models_own_complaint_is_a_reply_and_not_a_failed_request() {
-        // The provider is answering normally; the model is just complaining.
-        assert!(is_limit_notice_reply(
-            "I've reached my usage limit reached for this account."
-        ));
-        assert!(is_limit_notice_reply("Your daily limit has been reached."));
-        assert!(is_limit_notice_reply("weekly limit exceeded"));
+    fn only_a_short_unstructured_reply_is_a_notice() {
+        assert!(is_limit_notice_reply("You've hit your session limit"));
+        assert!(!is_limit_notice_reply("Here is the answer to your question."));
+        assert!(!is_limit_notice_reply(&format!("rate limit\n```\nx\n```")));
+        assert!(!is_limit_notice_reply(&"rate limit ".repeat(80)));
     }
 
     #[test]
-    fn an_ordinary_reply_is_not_a_limit_notice() {
-        assert!(!is_limit_notice_reply(
-            "Here is the answer to your question."
-        ));
-        assert!(!is_limit_notice_reply(""));
+    fn the_message_unwraps_json_and_prefixes_once() {
+        let message = extract_provider_limit_message("OpenAI request failed: {\"error\":{\"message\":\"insufficient quota: credits exhausted\"}}").unwrap();
+        assert_eq!(message, "Provider limit reached: insufficient quota: credits exhausted");
+        let again = extract_provider_limit_message(&message).unwrap();
+        assert_eq!(again, message);
     }
 
     #[test]
-    fn the_message_starts_at_the_marker_and_drops_the_providers_prefix() {
-        let message = extract_provider_limit_message(
-            "Error: 429 rate limit exceeded for requests. Please try again later.",
-        );
-        assert_eq!(
-            message,
-            Some("rate limit exceeded for requests. Please try again later".to_string())
-        );
-    }
-
-    #[test]
-    fn the_longest_marker_wins_so_the_message_names_the_real_complaint() {
-        let message = extract_provider_limit_message("Usage limit reached for this account.");
-        assert_eq!(
-            message,
-            Some("Usage limit reached for this account".to_string())
-        );
-    }
-
-    #[test]
-    fn a_message_without_a_marker_extracts_nothing() {
-        assert_eq!(
-            extract_provider_limit_message("network request failed"),
-            None
-        );
-        assert_eq!(extract_provider_limit_message(""), None);
+    fn a_message_without_a_limit_gets_the_generic_explanation() {
+        assert!(extract_provider_limit_message("network request failed").unwrap().starts_with("Provider usage limit"));
     }
 }

@@ -106,7 +106,7 @@ pub(super) fn dispose_session(issue_key: &str) {
     registry.by_session.retain(|(key, _), _| key != issue_key);
 }
 
-fn parse_tool_mode(mode: &str) -> AgentToolMode {
+pub(super) fn parse_tool_mode(mode: &str) -> AgentToolMode {
     match mode {
         "read-only" => AgentToolMode::ReadOnly,
         "project-only" => AgentToolMode::ProjectOnly,
@@ -135,12 +135,16 @@ pub(super) fn coordination_server(dir: &Path, issue_key: &str, working_directory
 
 // ── tracker backend over the host's own `issue:*` channels ───────────────
 
-struct HostTracker {
+pub(super) struct HostTracker {
     host: HostContext,
     connection_id: Option<String>,
 }
 
 impl HostTracker {
+    pub(super) fn new(host: HostContext, connection_id: Option<String>) -> Self {
+        Self { host, connection_id }
+    }
+
     fn call(&self, channel: &str, mut args: Vec<Value>) -> Result<Value, String> {
         args.push(self.connection_id.as_ref().map_or(Value::Null, |id| json!(id)));
         let response = self.host.dispatch_rpc(RustRpcRequest { id: "tracker-mcp".into(), channel: channel.into(), args });

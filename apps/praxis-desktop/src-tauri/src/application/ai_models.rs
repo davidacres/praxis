@@ -244,6 +244,30 @@ fn list_api(host: &HostContext, provider: &str, force_refresh: bool) -> Result<V
     }
 }
 
+/// Rejects a model the provider's current catalog does not list. A catalog that cannot be read is
+/// not a rejection, and a model the user configured as the provider's default always passes.
+pub fn assert_model_available(host: &HostContext, provider: &str, model: &str) -> Result<()> {
+    let settings = host.settings().read();
+    let configured = if provider == "vercel-gateway" { Some(settings.ai.default_model.clone()) } else { settings.ai.providers.get(provider).and_then(|c| c.default_model.clone()) };
+    drop(settings);
+    if configured.as_deref().map(str::trim) == Some(model) {
+        return Ok(());
+    }
+    let descriptor = built_in_descriptors().into_iter().find(|d| d.id == provider);
+    let label = descriptor.as_ref().map_or_else(|| provider.to_owned(), |d| d.label.clone());
+    let options = match &descriptor {
+        Some(d) if d.kind == DescriptorKind::CliAgent => list_cli(host, provider),
+        _ => list_api(host, provider, false),
+    };
+    if let Ok(options) = options
+        && let Some(list) = options["options"].as_array().filter(|list| !list.is_empty())
+        && !list.iter().any(|option| option["value"] == model)
+    {
+        return Err(failure(format!("{model} is not available for {label}.")));
+    }
+    Ok(())
+}
+
 pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
         "ai:listCliModelOptions" => text(args, 0).and_then(|provider| list_cli(host, provider)),

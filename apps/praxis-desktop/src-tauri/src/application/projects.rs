@@ -239,7 +239,9 @@ struct CreateInput {
     folder_name: Option<String>,
     workflow_stages: Vec<ProjectWorkflowStage>,
     starter_tickets: Vec<Starter>,
-    default_ai_tool_mode: String,
+    /// Absent means project-board tools only, as a project created without one always got.
+    #[serde(default)]
+    default_ai_tool_mode: Option<String>,
 }
 
 pub fn list(catalog: &Catalog) -> Result<Vec<Value>> {
@@ -499,7 +501,7 @@ fn create(catalog: &mut Catalog, args: &[Value], version: &str) -> Result<Value>
         default_board_id: format!("{id}-board"),
         linked_boards: Vec::new(),
         default_ai_tool_mode: if folder.is_some() {
-            input.default_ai_tool_mode
+            input.default_ai_tool_mode.unwrap_or_else(|| "project-only".into())
         } else {
             "project-only".into()
         },

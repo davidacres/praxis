@@ -15,6 +15,18 @@ const LOG_FILE_NAME: &str = "application.log";
 const MAX_LOG_BYTES: u64 = 1024 * 1024;
 const DEFAULT_CAPACITY: usize = 500;
 
+/// The bus of a profile, shared by the `log:getRecent` handler and everything that writes to it.
+pub fn shared(root: &Path) -> std::sync::Arc<LogBus> {
+    static BUSES: std::sync::OnceLock<Mutex<std::collections::HashMap<PathBuf, std::sync::Arc<LogBus>>>> = std::sync::OnceLock::new();
+    let mut all = BUSES.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    std::sync::Arc::clone(all.entry(root.to_path_buf()).or_insert_with(|| std::sync::Arc::new(LogBus::new(root))))
+}
+
+/// Appends one line to the profile's application log.
+pub fn log(host: &HostContext, line: &str) {
+    shared(&host.config().user_data_dir).append(host, line);
+}
+
 pub struct LogBus {
     state: Mutex<LogBusState>,
     #[allow(dead_code)]
@@ -44,7 +56,6 @@ impl LogBus {
         state.lines.iter().cloned().collect()
     }
 
-    #[allow(dead_code)]
     pub fn append(&self, host: &HostContext, line: &str) {
         let clean_line = line.strip_suffix('\n').unwrap_or(line).to_string();
         if let Ok(mut state) = self.state.lock() {

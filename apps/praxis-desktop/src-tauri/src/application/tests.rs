@@ -1656,18 +1656,13 @@ fn ai_sessions_and_analysis_lifecycle() {
     let providers = profile.rpc("ai:listProviderStatuses", vec![]);
     assert!(providers.as_array().expect("providers").len() >= 3);
 
-    // 2. Conversation start & message
-    let session = profile.rpc("ai:startConversation", vec![json!("TASK-99")]);
-    assert_eq!(session["issueKey"], "TASK-99");
-
-    let event = profile.rpc(
-        "ai:sendConversationMessage",
-        vec![json!("TASK-99"), json!("Investigate memory leak")],
-    );
-    assert_eq!(event["content"], "Investigate memory leak");
-
-    let retrieved = profile.rpc("ai:getSession", vec![json!("TASK-99")]);
-    assert_eq!(retrieved["events"].as_array().expect("events").len(), 1);
+    // 2. A multi-AI conversation needs a session, a mode and a second AI.
+    let error = profile.try_rpc("ai:startConversation", vec![json!("TASK-99"), json!({})]).expect_err("mode required");
+    assert!(error.message.contains("Choose a conversation mode"));
+    let error = profile.try_rpc("ai:startConversation", vec![json!("TASK-99"), json!({ "mode": "consult", "provider": "openai", "turnCap": 2 })]).expect_err("no session");
+    assert!(error.message.contains("No agent session found for TASK-99"));
+    let error = profile.try_rpc("ai:sendConversationMessage", vec![json!("TASK-99"), json!({ "participantId": "host", "message": "hi" })]).expect_err("no conversation");
+    assert!(error.message.contains("No running multi-AI conversation"));
 
     // 3. Analysis submit, confirm, clear
     let analysis_data = json!({

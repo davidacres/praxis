@@ -107,6 +107,14 @@ fn anthropic_content(message: &WireMessage) -> Value {
             "content": message.content.clone().unwrap_or_default(),
         }]);
     }
+    if let Some(images) = message.images.as_ref().filter(|images| !images.is_empty()) {
+        // Anthropic recommends images precede the text that refers to them.
+        let mut parts: Vec<Value> = images.iter().map(|image| json!({ "type": "image", "source": { "type": "base64", "media_type": image.mime_type, "data": image.data_base64 } })).collect();
+        if let Some(text) = message.content.clone().filter(|text| !text.is_empty()) {
+            parts.push(json!({ "type": "text", "text": text }));
+        }
+        return Value::Array(parts);
+    }
     Value::String(message.content.clone().unwrap_or_default())
 }
 

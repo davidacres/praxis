@@ -142,7 +142,7 @@ pub fn dispatch(
                         record.insert("events".into(), json!([]));
                         record.insert("eventsLoaded".into(), json!(false));
                     }
-                    session
+                    super::session_store::stamp_reasoning(session)
                 })
                 .collect();
             list.sort_by(|a, b| {
@@ -226,6 +226,7 @@ pub fn dispatch(
                     // Provider conversation history is private execution state.
                     record.remove("conversationHistory");
                 }
+                session = super::session_store::stamp_reasoning(session);
             }
             Ok(session)
         }
@@ -233,44 +234,31 @@ pub fn dispatch(
             let sessions = read_sessions(user_data_dir)?;
             let interrupted: Vec<Value> = sessions
                 .values()
-                .filter(|s| s.get("state").and_then(Value::as_str) == Some("interrupted"))
+                .filter(|s| {
+                    s["interruptedByRestart"] == true
+                        && s["archived"] != true
+                        && s["workflowNodeId"].is_null()
+                        && matches!(s["state"].as_str(), Some("aborted" | "paused"))
+                })
                 .cloned()
+                .map(|mut session| {
+                    session.as_object_mut().map(|o| o.remove("conversationHistory"));
+                    session
+                })
                 .collect();
             Ok(json!(interrupted))
         }
-        "ai:resumeInterruptedSession" => {
-            let issue_key = text(args, 0)?;
-            let mut sessions = read_sessions(user_data_dir)?;
-            let updated = if let Some(s) = sessions.get_mut(issue_key) {
-                s["state"] = json!("active");
-                Some(s.clone())
-            } else {
-                None
-            };
-            if let Some(s) = updated {
-                save_sessions(user_data_dir, &sessions)?;
-                host.events().emit("ai:sessionChanged", Some(s.clone()));
-                Ok(s)
-            } else {
-                Err(failure(format!("Session {issue_key} was not found.")))
-            }
-        }
         "ai:dismissInterruptedSessions" => {
-            let keys: Vec<String> = if let Some(arr) = args.first().and_then(Value::as_array) {
-                arr.iter()
-                    .filter_map(Value::as_str)
-                    .map(String::from)
-                    .collect()
-            } else {
-                vec![]
+            let Some(keys) = args.first().and_then(Value::as_array).filter(|k| k.iter().all(Value::is_string)) else {
+                return Err(failure("Invalid session selection."));
             };
-            let mut sessions = read_sessions(user_data_dir)?;
-            for key in &keys {
-                if let Some(s) = sessions.get_mut(key) {
-                    s["state"] = json!("dismissed");
-                }
+            let store = super::session_store::store(user_data_dir);
+            for key in keys.iter().filter_map(Value::as_str) {
+                store.mutate(key, true, |record| {
+                    record.as_object_mut().map(|o| o.remove("interruptedByRestart"));
+                })?;
             }
-            save_sessions(user_data_dir, &sessions)?;
+            store.flush()?;
             Ok(Value::Null)
         }
         "ai:renameSession" => {
@@ -349,55 +337,6 @@ pub fn dispatch(
                 Err(failure(format!("Session {issue_key} was not found.")))
             }
         }
-        "ai:stopConversation" => Ok(Value::Null),
-        "ai:updateSessionModel" => {
-            let issue_key = text(args, 0)?;
-            let model = text(args, 1)?;
-            let mut sessions = read_sessions(user_data_dir)?;
-            let updated = if let Some(s) = sessions.get_mut(issue_key) {
-                s["model"] = json!(model);
-                Some(s.clone())
-            } else {
-                None
-            };
-            if let Some(s) = updated {
-                save_sessions(user_data_dir, &sessions)?;
-                host.events().emit("ai:sessionChanged", Some(s));
-            }
-            Ok(Value::Null)
-        }
-        "ai:updateSessionReasoningEffort" => {
-            let issue_key = text(args, 0)?;
-            let effort = text(args, 1)?;
-            let mut sessions = read_sessions(user_data_dir)?;
-            let updated = if let Some(s) = sessions.get_mut(issue_key) {
-                s["reasoningEffort"] = json!(effort);
-                Some(s.clone())
-            } else {
-                None
-            };
-            if let Some(s) = updated {
-                save_sessions(user_data_dir, &sessions)?;
-                host.events().emit("ai:sessionChanged", Some(s));
-            }
-            Ok(Value::Null)
-        }
-        "ai:updateSessionPermissionMode" => {
-            let issue_key = text(args, 0)?;
-            let mode = text(args, 1)?;
-            let mut sessions = read_sessions(user_data_dir)?;
-            let updated = if let Some(s) = sessions.get_mut(issue_key) {
-                s["permissionMode"] = json!(mode);
-                Some(s.clone())
-            } else {
-                None
-            };
-            if let Some(s) = updated {
-                save_sessions(user_data_dir, &sessions)?;
-                host.events().emit("ai:sessionChanged", Some(s));
-            }
-            Ok(Value::Null)
-        }
         "ai:updateSessionToolAccess" => {
             let issue_key = text(args, 0)?;
             if super::acp_host::is_running(user_data_dir, issue_key) {
@@ -436,65 +375,7 @@ pub fn dispatch(
             host.events().emit("ai:sessionChanged", Some(updated.clone()));
             Ok(updated)
         }
-        "ai:handoverSession" => {
-            let issue_key = text(args, 0)?;
-            Ok(json!({ "handedOver": true, "issueKey": issue_key }))
-        }
-        "ai:startConversation" => {
-            let issue_key = text(args, 0).unwrap_or("default");
-            let mut sessions = read_sessions(user_data_dir)?;
-            let session = sessions.entry(issue_key.to_string()).or_insert_with(|| {
-                json!({
-                    "issueKey": issue_key,
-                    "sessionId": issue_key,
-                    "title": format!("Conversation {issue_key}"),
-                    "state": "active",
-                    "createdAt": now(),
-                    "events": []
-                })
-            });
-            let session_clone = session.clone();
-            save_sessions(user_data_dir, &sessions)?;
-            host.events()
-                .emit("ai:sessionChanged", Some(session_clone.clone()));
-            Ok(session_clone)
-        }
-        "ai:sendConversationMessage" => {
-            let issue_key = text(args, 0)?;
-            let message = text(args, 1)?;
-            let mut sessions = read_sessions(user_data_dir)?;
-            let event = json!({
-                "id": format!("ev-{}", Uuid::new_v4()),
-                "type": "message",
-                "timestamp": now(),
-                "content": message
-            });
-            let updated = if let Some(s) = sessions.get_mut(issue_key) {
-                if let Some(events) = s.get_mut("events").and_then(Value::as_array_mut) {
-                    events.push(event.clone());
-                }
-                Some(s.clone())
-            } else {
-                None
-            };
-            if let Some(s) = updated {
-                save_sessions(user_data_dir, &sessions)?;
-                host.events().emit("ai:sessionChanged", Some(s));
-            }
-            Ok(event)
-        }
-        "ai:setConversationToolOwner" => Ok(Value::Null),
-        "ai:editHandoverBrief" => {
-            let issue_key = text(args, 0)?;
-            let brief = text(args, 1)?;
-            Ok(json!({ "issueKey": issue_key, "brief": brief }))
-        }
         "ai:removeWorktree" | "ai:setWorktree" => Ok(Value::Null),
-        "ai:switchSessionMode" => {
-            let issue_key = text(args, 0)?;
-            let mode = text(args, 1).unwrap_or("interactive");
-            Ok(json!({ "issueKey": issue_key, "mode": mode }))
-        }
         "ai:undoToolFileChange" => Ok(json!({ "undone": true })),
 
         // 4. Artifacts in AI
@@ -592,11 +473,10 @@ pub fn dispatch(
         "ai:checkMergeRequestFeedback" => Ok(json!({ "feedback": [] })),
 
         // 8. Feedback & prompt evaluation
-        "ai:evaluatePrompt" => Ok(json!({
-            "score": 0.95,
-            "clarity": "high",
-            "suggestions": []
-        })),
+        "ai:evaluatePrompt" => {
+            let input = args.first().cloned().unwrap_or(Value::Null);
+            Ok(super::ai_feedback::empty_report("prompt-readiness", &input, now()))
+        }
         "ai:getFindingFeedback" => {
             let digest = text(args, 0)?;
             let feedbacks = read_feedback(user_data_dir)?;
@@ -606,7 +486,11 @@ pub fn dispatch(
             let input = args.first().cloned().unwrap_or_else(|| json!({}));
             Ok(json!({ "recorded": true, "finding": input }))
         }
-        "ai:evaluateSession" => Ok(json!({ "quality": "good", "completion": 1.0 })),
+        "ai:evaluateSession" => {
+            let input = args.first().cloned().unwrap_or(Value::Null);
+            let input = if input.is_string() { json!({ "issueKey": input }) } else { input };
+            Ok(super::ai_feedback::empty_report("session-execution", &input, now()))
+        }
         "ai:getSessionFeedback" => {
             let session_id = text(args, 0)?;
             let feedbacks = read_feedback(user_data_dir)?;

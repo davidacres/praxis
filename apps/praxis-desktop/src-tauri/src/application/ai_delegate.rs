@@ -14,7 +14,7 @@ use super::acp_host::{self, Continue, Decision, StartTask};
 use super::session_store::store;
 use super::{Result, failure, text};
 
-pub const CHANNELS: [&str; 5] = ["ai:delegate", "ai:abort", "ai:respondToPermission", "ai:setAcpMode", "ai:continueSession"];
+pub const CHANNELS: [&str; 6] = ["ai:delegate", "ai:abort", "ai:respondToPermission", "ai:setAcpMode", "ai:continueSession", "ai:resumeInterruptedSession"];
 
 fn default_task(issue: &Value, overrides: &Value) -> Value {
     let summary = issue["summary"].as_str().unwrap_or_default();
@@ -416,7 +416,7 @@ fn finish_launch(dir: &std::path::Path, key: &str, input: &Value, prepared: &Pre
 }
 
 /// Normalises untrusted pasted images: base64 on a known image type, capped in count and size.
-fn sanitize_images(images: &Value) -> Vec<Value> {
+pub(super) fn sanitize_images(images: &Value) -> Vec<Value> {
     const MAX_IMAGES: usize = 4;
     const MAX_BYTES: usize = 12 * 1024 * 1024;
     let mut out = Vec::new();
@@ -441,11 +441,17 @@ fn sanitize_images(images: &Value) -> Vec<Value> {
 
 /// `ai:continueSession(issueKey, message, images?, options?)`.
 fn continue_session(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
-    let key = text(args, 0)?;
-    let record = store(dir).get(key)?.ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
-    if record["conversation"]["state"] == "running" {
+    if store(dir).get(text(args, 0)?)?.is_some_and(|record| record["conversation"]["state"] == "running") {
         return Err(failure("Stop the multi-AI conversation before sending a single-agent follow-up."));
     }
+    continue_with(host, dir, args, false, None)
+}
+
+/// Continues a recorded session. `internal` marks a turn Praxis schedules between the AIs of a
+/// multi-AI conversation; `conversation_context` is the system context that turn adds.
+pub(super) fn continue_with(host: &HostContext, dir: &std::path::Path, args: &[Value], internal: bool, conversation_context: Option<&str>) -> Result<Value> {
+    let key = text(args, 0)?;
+    let record = store(dir).get(key)?.ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
     let provider = record["provider"].as_str().map(str::to_owned).unwrap_or_else(|| host.settings().read().ai.active_provider.clone());
     let cli = built_in_descriptors().into_iter().find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent);
     let kind = if cli.is_some() { DescriptorKind::CliAgent } else { DescriptorKind::Api };
@@ -469,7 +475,11 @@ fn continue_session(host: &HostContext, dir: &std::path::Path, args: &[Value]) -
     }
     if prepared.plan.state == "gateway" {
         let (connection, _) = super::ai_providers::api_connection(host, &provider)?;
-        super::api_host::continue_api_task(host, dir, key, text(args, 1)?, sanitize_images(args.get(2).unwrap_or(&Value::Null)), connection)?;
+        let custom_without_auth = host.settings().read().ai.custom_providers.iter().flatten().any(|c| c.id == provider && serde_json::to_value(c).is_ok_and(|v| v["auth"]["kind"] == "none"));
+        if connection.options.api_key.as_deref().is_none_or(str::is_empty) && !custom_without_auth {
+            return Err(failure(format!("No {} API key configured for this session.", connection.label)));
+        }
+        super::api_host::continue_api_task(host, dir, key, text(args, 1)?, sanitize_images(args.get(2).unwrap_or(&Value::Null)), connection, internal, conversation_context)?;
         let launch = runtime_launch(&prepared);
         let _ = store(dir).mutate(key, true, |stored| stored["runtimeLaunch"] = launch);
         return Ok(Value::Null);
@@ -488,16 +498,52 @@ fn continue_session(host: &HostContext, dir: &std::path::Path, args: &[Value]) -
         images: sanitize_images(args.get(2).unwrap_or(&Value::Null)),
         provider, command, args: prepared.plan.args.clone(), mcp_servers,
         gadget_answer: args.get(3).is_some_and(|o| o["gadgetAnswer"] == true),
+        internal, conversation_context: conversation_context.map(str::to_owned),
     })?;
     let launch = runtime_launch(&prepared);
     let _ = store(dir).mutate(key, true, |stored| stored["runtimeLaunch"] = launch);
     Ok(Value::Null)
 }
 
+fn recovering() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    SET.get_or_init(Default::default)
+}
+
+/// `ai:resumeInterruptedSession(issueKey)`: continues a session the app restart stopped.
+fn resume_interrupted(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
+    let key = text(args, 0)?;
+    let record = store(dir).get(key)?;
+    let awaiting = record.as_ref().is_some_and(|r| r["interruptedByRestart"] == true && r["archived"] != true && r["workflowNodeId"].is_null() && matches!(r["state"].as_str(), Some("aborted" | "paused")));
+    let gate = format!("{}\u{0}{key}", dir.display());
+    if !awaiting || acp_host::has_active_task(dir, key) || !recovering().lock().map_or(false, |mut set| set.insert(gate.clone())) {
+        return Err(failure("This session is no longer awaiting startup recovery."));
+    }
+    let outcome = (|| {
+        let record = record.unwrap_or(Value::Null);
+        let provider = record["provider"].as_str().unwrap_or_default().to_owned();
+        // A restarted conversation recovers as a single-agent turn.
+        if record["conversation"]["state"] == "running" {
+            let _ = store(dir).mutate(key, true, |r| r["conversation"]["state"] = json!("stopped"));
+        }
+        continue_session(host, dir, &[json!(key), json!("Resume the task interrupted by the app restart. Review the existing conversation and current state before continuing.")])?;
+        let _ = store(dir).mutate(key, true, |r| {
+            r.as_object_mut().map(|o| o.remove("interruptedByRestart"));
+        });
+        super::log_bus::log(host, &format!("[ai] Resuming interrupted session provider={provider} session={key} at={}", super::now()));
+        Ok(Value::Null)
+    })();
+    if let Ok(mut set) = recovering().lock() {
+        set.remove(&gate);
+    }
+    outcome
+}
+
 pub fn dispatch(host: &HostContext, dir: &std::path::Path, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
         "ai:delegate" => delegate(host, dir, args),
         "ai:continueSession" => continue_session(host, dir, args),
+        "ai:resumeInterruptedSession" => resume_interrupted(host, dir, args),
         "ai:abort" => (|| {
             let key = text(args, 0)?;
             acp_host::abort_task(host, dir, key);
