@@ -538,6 +538,38 @@ fn main() {
                     std::process::exit(0);
                 });
             }
+            // Debug builds only: run a sandboxed srcdoc iframe with an inline script in the real main window
+            // and report whether it ran (through the page's URL hash), to check the page's effective CSP
+            // without a person at the screen.
+            #[cfg(debug_assertions)]
+            if std::env::var("PRAXIS_SELF_TEST_IFRAME").is_ok() {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+                    let Some(main) = handle.get_webview_window("main") else {
+                        eprintln!("[self-test iframe] no main window");
+                        return;
+                    };
+                    let script = r#"(() => {
+                      const result = { ran: false };
+                      window.addEventListener("message", e => { if (e.data === "RAN") result.ran = true; });
+                      const f = document.createElement("iframe");
+                      f.setAttribute("sandbox", "allow-scripts");
+                      f.srcdoc = "<style>b{color:red}</style><script>parent.postMessage('RAN','*')<\/script>";
+                      document.body.appendChild(f);
+                      const meta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+                      result.csp = meta && meta.content;
+                      result.href = location.href.split('#')[0];
+                      setTimeout(() => { location.hash = encodeURIComponent(JSON.stringify(result)); }, 2500);
+                    })()"#;
+                    let _ = main.eval(script);
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    let url = main.url().map(|u| u.to_string()).unwrap_or_default();
+                    let hash = url.split_once('#').map(|(_, h)| h).unwrap_or("(no result)");
+                    eprintln!("[self-test iframe] url={:.60} result={}", url, hash);
+                    std::process::exit(0);
+                });
+            }
             app.set_menu(tauri::menu::Menu::default(app.handle())?)?;
             if let Ok(dev_url) = std::env::var("PRAXIS_DEV_SERVER_URL")
                 && let Some(main_window) = app.get_webview_window("main")
