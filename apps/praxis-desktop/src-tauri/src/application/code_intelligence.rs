@@ -157,12 +157,21 @@ pub(super) fn service() -> std::result::Result<Runtime, String> {
     let assembly = std::env::var("PRAXIS_CODE_INTELLIGENCE_DLL")
         .ok()
         .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR")).join(
-                "../../../services/code-intelligence/src/Praxis.CodeIntelligence/bin/Debug/net10.0/Praxis.CodeIntelligence.dll",
-            )
-        });
+        .map(PathBuf::from);
+    // The repository's Debug build is a development convenience. A release build must not carry the
+    // build machine's source-tree path, so there it only runs what the user or the package provides.
+    #[cfg(debug_assertions)]
+    let assembly = assembly.or_else(|| {
+        Some(Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../../services/code-intelligence/src/Praxis.CodeIntelligence/bin/Debug/net10.0/Praxis.CodeIntelligence.dll",
+        ))
+    });
+    let Some(assembly) = assembly else {
+        return Err(
+            "The code intelligence service is not installed. Set PRAXIS_CODE_INTELLIGENCE_EXE or reinstall Praxis."
+                .into(),
+        );
+    };
     if !assembly.exists() {
         return Err(
             "Build the code intelligence service with npm run build:code-intelligence.".into(),
