@@ -1,3 +1,4 @@
+import { stripTrailingSlashes, trimRepeatedChar } from '../linearText';
 /**
  * User-added OpenAI-compatible endpoints (FX-BF-044). A built-in provider is
  * code — its own `AiProvider` id and, where the wire protocol differs, its own
@@ -115,14 +116,14 @@ export function isInsecureRemoteUrl(url: string): boolean {
 
 /** Normalizes an API path: `''` stays empty, otherwise one leading slash and no trailing ones. */
 export function normalizeApiPath(path: string): string {
-  const trimmed = path.trim().replace(/\/+$/, '');
+  const trimmed = stripTrailingSlashes(path.trim());
   if (!trimmed) return '';
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
 
 /** A fresh `custom:<slug>` id from a label, unique against `existing`. */
 export function customProviderIdFor(label: string, existing: readonly string[]): CustomProviderId {
-  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'endpoint';
+  const base = trimRepeatedChar(label.toLowerCase().replace(/[^a-z0-9]+/g, '-'), '-').slice(0, 40) || 'endpoint';
   const taken = new Set(existing);
   let slug = base;
   for (let n = 2; taken.has(`${CUSTOM_PROVIDER_PREFIX}${slug}`); n++) slug = `${base}-${n}`;
@@ -170,7 +171,7 @@ export function sanitizeCustomProvider(raw: unknown): CustomProviderConfig | und
     id: raw.id,
     label,
     protocol: 'openai-chat',
-    baseUrl: raw.baseUrl.trim().replace(/\/+$/, ''),
+    baseUrl: stripTrailingSlashes(raw.baseUrl.trim()),
     apiPath: typeof raw.apiPath === 'string' ? normalizeApiPath(raw.apiPath) : '',
     auth
   };

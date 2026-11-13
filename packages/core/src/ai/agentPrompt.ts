@@ -2,6 +2,7 @@ import type { IssueDetails } from '../types';
 import type { AgentTaskDefinition } from './agentTypes';
 import { TICKET_REVIEW_SESSION_PROMPT, reviewedIssueKey } from './ticketReview';
 import { HUMAN_REVIEW_SESSION_PROMPT } from './humanReview';
+import { trimRepeatedChar } from './linearText';
 
 const IMPLEMENTATION_SYSTEM_PROMPT = `You are an autonomous implementation agent operating under strict contracts.
 
@@ -136,12 +137,12 @@ export const AUTOPILOT_SESSION_PROMPT = `## Autopilot
 - Host-enforced tool access remains the boundary: do not claim to have performed an action the host did not allow.`;
 
 function slugifyNamingSegment(value: string): string {
-  return value
+  const slug = value
     .normalize('NFKD')
     .replaceAll(/[^\x00-\x7F]/g, '')
     .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, '-')
-    .replaceAll(/^-+|-+$/g, '');
+    .replaceAll(/[^a-z0-9]+/g, '-');
+  return trimRepeatedChar(slug, '-');
 }
 
 function stripIssueKeyPrefix(value: string, issueKey: string): string {

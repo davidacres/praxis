@@ -15,12 +15,13 @@
  */
 
 import type { ClaimMode, CoordinationResource, CoordinationResourceKind } from './coordinationTypes';
+import { stripTrailingSlashes } from '../linearText';
 
 const WORKTREE_KINDS: ReadonlySet<CoordinationResourceKind> = new Set(['file', 'directory', 'worktree', 'checkout', 'git-index']);
 
 /** A path normalised for comparison: forward slashes, no leading `./`, no trailing slash. */
 export function canonicalPath(value: string, caseInsensitive = false): string {
-  const normal = value.replace(/\\/g, '/').replace(/^\.\/+/, '').replace(/\/+$/, '').replace(/\/{2,}/g, '/');
+  const normal = stripTrailingSlashes(value.replace(/\\/g, '/').replace(/^\.\/+/, '')).replace(/\/{2,}/g, '/');
   return caseInsensitive ? normal.toLowerCase() : normal;
 }
 

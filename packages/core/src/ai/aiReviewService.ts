@@ -7,6 +7,7 @@ import {
   type CheckFindings,
   type CheckFindingSeverity
 } from '../workflows/workflowTypes';
+import { findFencedBody, stripTrailingSlashes } from './linearText';
 
 const REVIEW_SYSTEM_PROMPT = `You are a technical product manager reviewing tickets for completeness and quality.
 Analyze the ticket and provide concise, actionable feedback on:
@@ -414,8 +415,7 @@ function buildWorkflowPromptContext(workflows: AgentWorkflowReference[]): string
 }
 
 function extractJsonCodeBlock(text: string): string | undefined {
-  const match = /```json\s*([\s\S]*?)```/i.exec(text);
-  return match?.[1]?.trim();
+  return findFencedBody(text, /```json/i)?.body.trim();
 }
 
 function normalizeClarificationComment(text: string): string | undefined {
@@ -711,7 +711,7 @@ export async function reviewTicketWithOpenAi(
   const model = options?.model?.trim() || 'gpt-4o-mini';
   const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
   const endpoint = options?.endpointUrl
-    ?? `${(options?.gatewayUrl?.trim() || 'https://api.openai.com').replace(/\/+$/, '')}${(options?.apiPath ?? '/v1').replace(/\/+$/, '')}/chat/completions`;
+    ?? `${stripTrailingSlashes(options?.gatewayUrl?.trim() || 'https://api.openai.com')}${stripTrailingSlashes(options?.apiPath ?? '/v1')}/chat/completions`;
   const authHeaders = options?.requestHeaders ?? { 'Authorization': `Bearer ${apiKey}` };
 
   if (options?.onUpdate) {
@@ -806,7 +806,7 @@ export async function reviewTicketWithClaude(
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
   const model = options?.model?.trim() || 'claude-haiku-4-5-20251001';
   const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
-  const endpoint = `${(options?.gatewayUrl?.trim() || 'https://api.anthropic.com').replace(/\/+$/, '')}/v1/messages`;
+  const endpoint = `${stripTrailingSlashes(options?.gatewayUrl?.trim() || 'https://api.anthropic.com')}/v1/messages`;
 
   if (options?.onUpdate) {
     const response = await fetch(endpoint, {
@@ -904,7 +904,7 @@ export async function reviewTicketWithGemini(
   const rawModel = options?.model?.trim() || 'gemini-2.5-flash';
   const model = rawModel.replace(/^models\//, '');
   const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
-  const baseUrl = (options?.gatewayUrl?.trim() || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
+  const baseUrl = stripTrailingSlashes(options?.gatewayUrl?.trim() || 'https://generativelanguage.googleapis.com');
 
   if (options?.onUpdate) {
     const endpoint = `${baseUrl}/v1beta/models/${model}:streamGenerateContent?alt=sse`;
@@ -1366,8 +1366,8 @@ export function parseReviewFindings(content: string): {
         return false;
       }
     });
-  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  let jsonText = findingsBlock ?? (jsonMatch ? jsonMatch[1].trim() : content.trim());
+  const jsonMatch = findFencedBody(content, /```(?:json)?/i);
+  let jsonText = findingsBlock ?? (jsonMatch ? jsonMatch.body.trim() : content.trim());
 
   if (!jsonText.startsWith('{') && !jsonText.startsWith('[')) {
     const start = content.indexOf('{');

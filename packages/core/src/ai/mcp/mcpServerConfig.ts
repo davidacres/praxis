@@ -1,3 +1,4 @@
+import { trimRepeatedChar } from '../linearText';
 /**
  * MCP servers the user adds for their AI agents (Settings → AI Provider →
  * Tools). Two transports, because both are common: a remote `http` endpoint,
@@ -113,10 +114,7 @@ export function sanitizeMcpServers(value: unknown): McpServerConfig[] {
 
 /** `GitHub Tools` → `github_tools`: the server's part of a tool name. */
 export function mcpServerSlug(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+  const slug = trimRepeatedChar(name.toLowerCase().replace(/[^a-z0-9]+/g, '_'), '_');
   return slug || 'server';
 }
 

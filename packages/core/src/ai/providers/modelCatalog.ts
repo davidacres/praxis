@@ -8,6 +8,7 @@ import { fetchAnthropicModels } from './anthropicClient';
 import { fetchGeminiModels } from './geminiClient';
 import { getKnownContextLength, getModelPricing, type ModelPriceRates } from './modelPricing';
 import { findProviderDescriptor } from './registry';
+import { stripTrailingSlashes } from '../linearText';
 
 /**
  * One selectable model, shared by every "model picker" surface — both
@@ -73,7 +74,7 @@ const cache = new Map<string, CacheEntry>();
 const pending = new Map<string, Promise<ModelChoice[]>>();
 
 function cacheKey(provider: AiProvider, url: string, apiKey: string): string {
-  const normalizedUrl = url.replace(/\/+$/, '').toLowerCase();
+  const normalizedUrl = stripTrailingSlashes(url).toLowerCase();
   const keyHash = createHash('sha256').update(apiKey).digest('hex');
   return `${provider}::${normalizedUrl}::${keyHash}`;
 }

@@ -9,6 +9,7 @@ import type {
   AssistantTurnResult,
   PageAssistantContext
 } from './assistantTypes';
+import { findFencedBody } from '../linearText';
 
 /** One model call: the engine is provider-agnostic, main wires this to the runtime. */
 export type AssistantCompletion = (input: { systemPrompt: string; userPrompt: string; allowMutations: boolean }) => Promise<string>;
@@ -66,11 +67,11 @@ function parseAction(raw: unknown): AssistantProposedAction | undefined {
  * A malformed footer is dropped silently — the prose is still the answer.
  */
 export function parseAssistantReply(raw: string): { text: string; choices?: AssistantChoiceOption[]; proposedAction?: AssistantProposedAction } {
-  const match = /```praxis-assistant\s*([\s\S]*?)```/i.exec(raw);
-  const text = (match ? raw.replace(match[0], '') : raw).trim();
+  const match = findFencedBody(raw, /```praxis-assistant/i);
+  const text = (match ? raw.replace(match.full, '') : raw).trim();
   if (!match) return { text };
   try {
-    const parsed: unknown = JSON.parse(match[1]);
+    const parsed: unknown = JSON.parse(match.body);
     if (!isRecord(parsed)) return { text };
     const choices = Array.isArray(parsed.choices)
       ? parsed.choices

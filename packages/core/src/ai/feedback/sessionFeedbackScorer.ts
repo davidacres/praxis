@@ -18,6 +18,7 @@ import {
   type FeedbackSignal
 } from './feedbackTypes';
 import { analyzePromptSignals } from './promptSignals';
+import { isRegexWhitespace, stripTrailingWhere } from '../linearText';
 
 /** Pre-send score weights (sum 100): the prompt is what the user can still change. */
 export const PRE_SEND_WEIGHTS = {
@@ -85,7 +86,7 @@ export function buildDeterministicSuggestedPrompt(
 
   const pins = inline.filter(item => item.kind === 'pin-file').map(item => item.text);
   const checks = inline.filter(item => item.kind !== 'pin-file').map(item => item.text);
-  let sentence = base.replace(/[.!\s]+$/, '');
+  let sentence = stripTrailingWhere(base, ch => ch === '.' || ch === '!' || isRegexWhitespace(ch));
   if (pins.length > 0) sentence += ` ${pins.join(' and ').replace(/ and in @/g, ' and @')}`;
   if (checks.length > 0) sentence += ` ${checks[0]}`;
   sentence += '.';

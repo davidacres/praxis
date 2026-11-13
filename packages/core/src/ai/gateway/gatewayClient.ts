@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
 import type { ProviderAuth } from '../providers/customProviders';
+import { stripTrailingSlashes } from '../linearText';
 
 /**
  * Minimal HTTP/HTTPS client for the Vercel AI Gateway.
@@ -76,12 +77,12 @@ export function isNonRetryableRateLimit(body: string): boolean {
 }
 
 export function endpoint(opts: GatewayOptions, suffix: string): string {
-  const cleanUrl = opts.url.replace(/\/+$/, '');
+  const cleanUrl = stripTrailingSlashes(opts.url);
   if (opts.exactPath) {
-    const path = (opts.apiPath ?? '').replace(/\/+$/, '');
+    const path = stripTrailingSlashes(opts.apiPath ?? '');
     return `${cleanUrl}${path && !path.startsWith('/') ? `/${path}` : path}${suffix}`;
   }
-  let cleanPath = (opts.apiPath ?? '/v1').replace(/\/+$/, '');
+  let cleanPath = stripTrailingSlashes(opts.apiPath ?? '/v1');
   if (!cleanPath.startsWith('/')) {
     cleanPath = `/${cleanPath}`;
   }
@@ -424,9 +425,10 @@ export function formatGatewayErrorMessage(statusCode: number, body: string): str
     return `Gateway returned HTTP ${statusCode}`;
   }
   try {
-    const jsonMatch = body.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const obj = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+    const firstBrace = body.indexOf('{');
+    const lastBrace = body.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const obj = JSON.parse(body.slice(firstBrace, lastBrace + 1)) as Record<string, unknown>;
       const err = (obj.error && typeof obj.error === 'object') ? (obj.error as Record<string, unknown>) : obj;
       const msg = typeof err.message === 'string' ? err.message : typeof err.msg === 'string' ? err.msg : undefined;
       const code = err.code ?? obj.code;

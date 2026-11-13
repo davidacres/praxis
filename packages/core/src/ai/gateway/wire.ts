@@ -4,6 +4,7 @@
  */
 
 import { anthropicThinkingConfig, detectReasoningFamily, geminiThinkingBudget } from '../providers/reasoningSupport';
+import { stripTaggedBlocks } from '../linearText';
 
 export type WireRole = 'system' | 'user' | 'assistant' | 'tool';
 
@@ -349,12 +350,12 @@ export function compactHistoryForReplay(history: ReadonlyArray<WireMessage>): Wi
     if (message.role === 'tool') continue;
     if (message.role === 'assistant' && message.tool_calls?.length) {
       let text = (message.content ?? '').trim();
-      text = text.replace(/<thought[\s\S]*?<\/thought>/gi, '').replace(/<thinking[\s\S]*?<\/thinking>/gi, '').trim();
+      text = stripTaggedBlocks(stripTaggedBlocks(text, 'thought'), 'thinking').trim();
       if (text) out.push({ role: 'assistant', content: text });
       continue;
     }
     if (message.role === 'assistant' && message.content) {
-      const text = message.content.replace(/<thought[\s\S]*?<\/thought>/gi, '').replace(/<thinking[\s\S]*?<\/thinking>/gi, '').trim();
+      const text = stripTaggedBlocks(stripTaggedBlocks(message.content, 'thought'), 'thinking').trim();
       out.push({ ...message, content: text });
       continue;
     }

@@ -1,4 +1,5 @@
 import type { AiProvider, BuiltInAiProvider } from '../../types';
+import { isRegexWhitespace, stripTrailingWhere } from '../linearText';
 import type { GatewayOptions } from '../gateway/gatewayClient';
 import { isCustomProviderId, type CustomProviderConfig } from './customProviders';
 import { DEFAULT_VERCEL_URL } from '../gateway/modelIds';
@@ -219,7 +220,7 @@ export function gatewayOptionsFor(provider: AiProvider, url: string | undefined,
 /** The name people know an AI by: "Claude Code (local)" → "Claude Code", "Codex CLI (local)" → "Codex". */
 export function providerDisplayName(provider: string): string {
   const descriptor = findProviderDescriptor(provider);
-  return descriptor ? descriptor.label.replace(/\s*\(local\)$/, '').replace(/ CLI$/, '') : provider;
+  return descriptor ? (descriptor.label.endsWith('(local)') ? stripTrailingWhere(descriptor.label.slice(0, -'(local)'.length), isRegexWhitespace) : descriptor.label).replace(/ CLI$/, '') : provider;
 }
 
 /** Only valid for `kind: 'api'` providers — `kind: 'cli-agent'` providers use `AcpAgentHost` instead. */

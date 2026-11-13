@@ -108,9 +108,9 @@ export function extractProviderLimitMessage(errorOrMessage: unknown): string {
 
   // If cleaned is or contains JSON, extract the inner message
   try {
-    const jsonMatch = cleaned.match(/\{.*\}$/s);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as { error?: { message?: string } };
+    const firstBrace = cleaned.indexOf('{');
+    if (cleaned.endsWith('}') && firstBrace !== -1 && firstBrace < cleaned.length - 1) {
+      const parsed = JSON.parse(cleaned.slice(firstBrace)) as { error?: { message?: string } };
       if (parsed?.error?.message && typeof parsed.error.message === 'string') {
         cleaned = parsed.error.message;
       }

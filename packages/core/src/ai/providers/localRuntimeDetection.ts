@@ -1,4 +1,5 @@
 import type { ProviderPreset } from './providerPresets';
+import { stripTrailingSlashes } from '../linearText';
 
 /** A local OpenAI-compatible runtime that answered on this machine. */
 export interface LocalRuntimeDetection {
@@ -29,7 +30,7 @@ export async function detectLocalRuntimes(
 ): Promise<LocalRuntimeDetection[]> {
   const local = presets.filter(preset => preset.group === 'local');
   const found = await Promise.all(local.map(async preset => {
-    const baseUrl = (options.origins?.[preset.id] ?? preset.baseUrl).replace(/\/+$/, '');
+    const baseUrl = stripTrailingSlashes(options.origins?.[preset.id] ?? preset.baseUrl);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? DETECT_TIMEOUT_MS);
     try {
