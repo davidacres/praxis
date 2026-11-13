@@ -159,8 +159,14 @@ mod tests {
         assert!(preview_may_navigate(initial, initial));
         assert!(preview_may_navigate(initial, &format!("{initial}#section")));
         assert!(preview_may_navigate(initial, "about:blank"));
-        assert!(!preview_may_navigate(initial, "https://evil.test/?d=secret"));
-        assert!(!preview_may_navigate(initial, "data:text/html,<script>fetch('x')</script>"));
+        assert!(!preview_may_navigate(
+            initial,
+            "https://evil.test/?d=secret"
+        ));
+        assert!(!preview_may_navigate(
+            initial,
+            "data:text/html,<script>fetch('x')</script>"
+        ));
     }
 
     #[test]

@@ -194,7 +194,8 @@ fn redirect_policy(allow_private: bool) -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(move |attempt| {
         if attempt.previous().len() >= MAX_REDIRECTS {
             attempt.error("too many redirects")
-        } else if let Some(reason) = blocked_browser_url_reason(attempt.url().as_str(), allow_private)
+        } else if let Some(reason) =
+            blocked_browser_url_reason(attempt.url().as_str(), allow_private)
         {
             attempt.error(reason)
         } else {
@@ -714,7 +715,10 @@ mod tests {
         let result = client.get(format!("http://{outer}/")).send().await;
         assert!(result.is_err(), "the redirect was followed");
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(!reached.load(Ordering::SeqCst), "the private host was requested");
+        assert!(
+            !reached.load(Ordering::SeqCst),
+            "the private host was requested"
+        );
     }
 
     #[tokio::test]
