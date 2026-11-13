@@ -62,7 +62,6 @@ notify = { version = "8.0", features = ["macos_fsevent"] }
 portable-pty = "0.9"
 tar = "0.4"
 flate2 = "1.1"
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 sha1 = "0.10"
 aes = "0.8"
