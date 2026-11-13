@@ -58,12 +58,33 @@ export const PUBLISHABLE_PLAN_INSTRUCTIONS = [
 ].join('\n');
 
 /**
+ * The bodies of every ```praxis-plan fenced block, in order. A scan rather than
+ * `/```praxis-plan[^\n]*\n([\s\S]*?)```/g`, which rescanned to the end of the text from every unclosed opener.
+ */
+function praxisPlanBlocks(text: string): string[] {
+  const opener = '```praxis-plan';
+  const bodies: string[] = [];
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf(opener, from);
+    if (open < 0) break;
+    const lineEnd = text.indexOf('\n', open + opener.length);
+    if (lineEnd < 0) break;
+    const close = text.indexOf('```', lineEnd + 1);
+    if (close < 0) break;
+    bodies.push(text.slice(lineEnd + 1, close));
+    from = close + 3;
+  }
+  return bodies;
+}
+
+/**
  * Reads the last `praxis-plan` block from a stage's response. Throws with a message that says what
  * is wrong, because it becomes the stage's failure reason and the next attempt's guidance.
  */
 export function parsePublishablePlan(responseText: string | undefined): PublishablePlan {
-  const blocks = [...(responseText ?? '').matchAll(/```praxis-plan[^\n]*\n([\s\S]*?)```/g)];
-  const block = blocks[blocks.length - 1]?.[1];
+  const blocks = praxisPlanBlocks(responseText ?? '');
+  const block = blocks[blocks.length - 1];
   if (!block) throw new Error('The stage finished without a `praxis-plan` block, so there was no plan to create on the board.');
 
   let raw: unknown;

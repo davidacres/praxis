@@ -20,6 +20,7 @@ import { nodeOutputs, type CheckFindings, type WorkflowAgentTaskNode, type Workf
 import { parseReviewFindings } from '../ai/aiReviewService';
 import { PUBLISHABLE_PLAN_INSTRUCTIONS } from './workflowPlanPublishing';
 import { PLANNED_TESTS_HEADING } from './affectedTests';
+import { trimEdgeChars } from '../text/linearText';
 import type { StageOutcome } from './workflowOrchestrator';
 import type { WorkflowStageContext } from './workflowStageSession';
 
@@ -183,17 +184,57 @@ export const STAGE_STATUS_INSTRUCTIONS = [
 ].join(' ');
 
 // ACP may concatenate a progress message and the final reply without a newline, or wrap in markdown bold/backticks.
-const STAGE_BLOCKED_ENVIRONMENT = /(?:^|[.!?])\s*[*`_]*\s*Stage status:\s*blocked-environment\s*:?\s*([\s\S]*?)\s*[*`_]*$/im;
+const STAGE_STATUS_MARKER = 'stage status:';
+const BLOCKED_ENVIRONMENT_MARKER = 'blocked-environment';
+const BLOCK_DECORATION = '*`_';
+const SENTENCE_END = '.!?';
+const isLineBreak = (char: string): boolean => char === '\n' || char === '\r' || char === '\u2028' || char === '\u2029';
+
+/**
+ * The reason on a `Stage status: blocked-environment: <reason>` line, or undefined when the line is not one.
+ * Written as a scan because the equivalent single regex
+ * (`/(?:^|[.!?])\s*[*`_]*\s*Stage status:\s*blocked-environment\s*:?\s*([\s\S]*?)\s*[*`_]*$/im`)
+ * backtracked quadratically on long runs of whitespace. ACP may concatenate a progress message and the final
+ * reply without a newline, or wrap the line in markdown bold/backticks, so the marker may follow a sentence
+ * end and any amount of decoration.
+ */
+function blockedEnvironmentReason(line: string): string | undefined {
+  const marker = new RegExp(STAGE_STATUS_MARKER, 'gi');
+  for (let found = marker.exec(line); found; found = marker.exec(line)) {
+    const at = found.index;
+    // Before the marker: whitespace, decoration, whitespace, then a sentence end or the start of the line.
+    let before = at;
+    while (before > 0 && /\s/.test(line[before - 1])) before--;
+    while (before > 0 && BLOCK_DECORATION.includes(line[before - 1])) before--;
+    while (before > 0 && /\s/.test(line[before - 1])) before--;
+    // `^` also matches after a carriage return, which `\s` consumed above.
+    const anchored = before === 0 || SENTENCE_END.includes(line[before - 1]) || [...line.slice(before, at)].some(isLineBreak);
+    if (!anchored) continue;
+    // After it: whitespace, the keyword, whitespace, an optional colon, whitespace, then the reason.
+    let after = at + STAGE_STATUS_MARKER.length;
+    while (after < line.length && /\s/.test(line[after])) after++;
+    if (line.slice(after, after + BLOCKED_ENVIRONMENT_MARKER.length).toLowerCase() !== BLOCKED_ENVIRONMENT_MARKER) continue;
+    after += BLOCKED_ENVIRONMENT_MARKER.length;
+    while (after < line.length && /\s/.test(line[after])) after++;
+    if (line[after] === ':') after++;
+    while (after < line.length && /\s/.test(line[after])) after++;
+    let reasonEnd = after;
+    while (reasonEnd < line.length && !isLineBreak(line[reasonEnd])) reasonEnd++;
+    while (reasonEnd > after && BLOCK_DECORATION.includes(line[reasonEnd - 1])) reasonEnd--;
+    while (reasonEnd > after && /\s/.test(line[reasonEnd - 1])) reasonEnd--;
+    return line.slice(after, reasonEnd);
+  }
+  return undefined;
+}
 const PSEUDO_ENVIRONMENT_BLOCKER = /\b(incomplete|in progress|not finished|cannot report a commit ref|can't report a commit ref|have not inspected|in this turn)\b/i;
 const INCOMPLETE_IMPLEMENTATION = /\b(?:i did not (?:complete|implement|finish)|did not complete the plan|no commit ref (?:is available|to report)|there is no commit ref)\b/i;
 
 /** The reason a stage gave for being stopped by its environment, when it gave one. */
 export function readEnvironmentBlock(responseText: string | undefined): string | undefined {
-  const lines = (responseText ?? '').split('\n').filter(line => STAGE_BLOCKED_ENVIRONMENT.test(line));
-  const last = lines[lines.length - 1];
-  if (!last) return undefined;
-  const match = STAGE_BLOCKED_ENVIRONMENT.exec(last);
-  const reason = match?.[1]?.replace(/^[*`_]+|[*`_]+$/g, '').trim();
+  const reasons = (responseText ?? '').split('\n').map(blockedEnvironmentReason).filter((found): found is string => found !== undefined);
+  const last = reasons[reasons.length - 1];
+  if (last === undefined) return undefined;
+  const reason = trimEdgeChars(last, BLOCK_DECORATION).trim();
   if (reason && PSEUDO_ENVIRONMENT_BLOCKER.test(reason)) {
     return undefined;
   }
@@ -221,7 +262,7 @@ export const PLAN_STATUS_INSTRUCTIONS = [
 
 /** The plan's own verdict on itself: its last `Plan status:` line. */
 export function readPlanStatus(responseText: string | undefined): { ready: true } | { ready: false; reason: string } {
-  const lines = (responseText ?? '').split('\n').map(line => line.trim().replace(/^[`*_]+|[`*_]+$/g, ''));
+  const lines = (responseText ?? '').split('\n').map(line => trimEdgeChars(line.trim(), BLOCK_DECORATION));
   const line = [...lines].reverse().find(candidate => /^plan status\s*:/i.test(candidate));
   if (!line) return { ready: false, reason: 'it did not confirm the plan was complete (no "Plan status: ready" line)' };
   const verdict = line.replace(/^plan status\s*:\s*/i, '');
