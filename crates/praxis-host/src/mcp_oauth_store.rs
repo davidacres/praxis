@@ -311,4 +311,11 @@ mod tests {
         assert_eq!(next.refresh_token.as_deref(), Some("r3"));
         assert!(!next.needs_refresh(u64::MAX / 2));
     }
+
+    #[test]
+    fn an_absurd_expires_in_saturates_instead_of_overflowing() {
+        let response = serde_json::json!({"access_token": "a", "expires_in": u64::MAX});
+        let tokens = OAuthTokens::from_response(&response, None, 1_000).unwrap();
+        assert_eq!(tokens.expires_at_ms, Some(u64::MAX));
+    }
 }
