@@ -43,7 +43,9 @@ fn next_notice_id() -> i32 {
 impl application::task_notifications::NoticeShell for NativeNoticeShell {
     fn focused_windows(&self) -> Vec<String> {
         self.app
-            .webview_windows()
+            // Windows, not webview windows: the in-app browser is a child webview of `main`, and
+            // Tauri stops listing a window with children among its webview windows.
+            .windows()
             .into_iter()
             .filter(|(_, window)| {
                 window.is_focused().unwrap_or(false)
@@ -80,7 +82,7 @@ impl application::task_notifications::NoticeShell for NativeNoticeShell {
 
     fn open(&self, notice: &application::task_notifications::Notice, _detached: Option<&str>) {
         // Chats are not popped out into native windows of their own yet, so the main window opens it.
-        if let Some(window) = self.app.get_webview_window("main") {
+        if let Some(window) = self.app.get_window("main") {
             let _ = window.unminimize();
             let _ = window.show();
             let _ = window.emit(
@@ -101,13 +103,19 @@ fn error(code: &str, message: impl ToString) -> RustRpcError {
 
 #[tauri::command]
 async fn praxis_rpc(
-    window: tauri::WebviewWindow,
+    webview: tauri::Webview,
     state: tauri::State<'_, DesktopState>,
     channel: String,
     args: Vec<Value>,
 ) -> Result<Value, RustRpcError> {
     // Capabilities also deny remote origins. Do not grant this to child browsers.
-    DesktopState::check_caller(window.label())?;
+    //
+    // The caller is identified by its *webview* label. The in-app browser is a child webview of
+    // the `main` window, so the window label is `main` for a page loaded there too; checking it
+    // would trust that page. (A `WebviewWindow` argument is no better: once a child webview exists
+    // Tauri refuses to build one for any caller, which turned every call into an error.)
+    DesktopState::check_caller(webview.label())?;
+    let window = webview.window();
     if channel == "desktop:capabilities" {
         return Ok(state.capabilities());
     }
@@ -122,7 +130,7 @@ async fn praxis_rpc(
             window.app_handle().package_info().version.to_string()
         )),
         "window:reload" => {
-            window.reload().map_err(shell_error)?;
+            webview.reload().map_err(shell_error)?;
             Ok(Value::Null)
         }
         "window:minimize" => {
@@ -166,7 +174,7 @@ async fn praxis_rpc(
                     error("INVALID_ARGUMENT", "Zoom factor must be between 0.5 and 3.")
                 })?;
             let factor = (factor * 100.0).round() / 100.0;
-            window.set_zoom(factor).map_err(shell_error)?;
+            webview.set_zoom(factor).map_err(shell_error)?;
             let _ = state
                 .host
                 .settings()
@@ -182,7 +190,7 @@ async fn praxis_rpc(
         }
         "window:setNotificationView" => {
             application::task_notifications::set_view(
-                window.label(),
+                webview.label(),
                 args.first().unwrap_or(&Value::Null),
             );
             Ok(Value::Null)
@@ -304,7 +312,8 @@ async fn praxis_rpc(
             let title = prepared["title"].as_str().unwrap_or("Preview").to_owned();
             let html = prepared["html"].as_str().unwrap_or_default();
             let url = format!("data:text/html;charset=utf-8,{}", percent_encode(html));
-            let url = url.parse().map_err(shell_error)?;
+            let url: tauri::Url = url.parse().map_err(shell_error)?;
+            let may_navigate = application::html_preview::preview_navigation_guard();
             let label = format!(
                 "html-preview-{}",
                 PREVIEW_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -314,6 +323,7 @@ async fn praxis_rpc(
                 label,
                 tauri::WebviewUrl::External(url),
             )
+            .on_navigation(move |target| may_navigate(target.as_str()))
             .title(title)
             .inner_size(1000.0, 760.0)
             .min_inner_size(560.0, 360.0)
@@ -529,4 +539,20 @@ fn main() {
             state.shutdown();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    /// `praxis_rpc` must judge its caller by the webview that sent the call. The in-app browser is
+    /// a child webview of the `main` window, so a check on the window label passes for any page
+    /// loaded there; and a `WebviewWindow` argument fails for every caller once that child exists.
+    #[test]
+    fn the_desktop_contract_checks_the_calling_webview_not_its_window() {
+        let source = include_str!("main.rs");
+        let start = source.find("async fn praxis_rpc(").expect("praxis_rpc");
+        let head = &source[start..start + 900];
+        assert!(head.contains("webview: tauri::Webview,"), "{head}");
+        assert!(head.contains("check_caller(webview.label())"), "{head}");
+        assert!(!head.contains("tauri::WebviewWindow"), "{head}");
+    }
 }
