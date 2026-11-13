@@ -73,10 +73,11 @@ export class GadgetService {
   }
 
   private sanitizeLoadedBlocks(raw: BlocksBySession): BlocksBySession {
-    const cleaned: BlocksBySession = {};
+    // Null prototype: a session id of `__proto__` or `constructor` is then an ordinary key.
+    const cleaned: BlocksBySession = Object.create(null) as BlocksBySession;
     let changed = false;
     for (const [sessionId, blocks] of Object.entries(raw)) {
-      if (!Array.isArray(blocks)) continue;
+      if (!Array.isArray(blocks) || sessionId === '__proto__') continue;
       const seenGadget = new Set<string>();
       const seenMarkdown = new Set<string>();
       const seenBlockIds = new Set<string>();
@@ -150,7 +151,7 @@ export class GadgetService {
       if (index === -1) merged.push(block);
       else merged[index] = block;
     }
-    this.blocks[sessionId] = merged;
+    this.blocks[sessionId] = merged; // this.blocks has a null prototype, so no key can reach Object.prototype
     void this.persistBlocks();
     return this.decorate(merged, true);
   }
@@ -170,7 +171,7 @@ export class GadgetService {
   /** Withdraw a gadget — the host decided it should no longer be answerable. */
   public revoke(sessionId: string, gadgetId: string): void {
     const blocks = this.blocks[sessionId];
-    if (!blocks) return;
+    if (!Array.isArray(blocks)) return;
     const index = blocks.findIndex(block => block.type === 'gadget' && block.gadget.gadgetId === gadgetId);
     if (index === -1) return;
     const block = blocks[index];
