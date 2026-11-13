@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -72,9 +72,12 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 const pending = new Map<string, Promise<ModelChoice[]>>();
 
+// In-memory cache only: key the digest per process so an API key is never hashed bare.
+const CACHE_KEY_SALT = randomBytes(32);
+
 function cacheKey(provider: AiProvider, url: string, apiKey: string): string {
   const normalizedUrl = url.replace(/\/+$/, '').toLowerCase();
-  const keyHash = createHash('sha256').update(apiKey).digest('hex');
+  const keyHash = createHmac('sha256', CACHE_KEY_SALT).update(apiKey).digest('hex');
   return `${provider}::${normalizedUrl}::${keyHash}`;
 }
 

@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -717,7 +718,7 @@ export class WorkflowHost {
         session = await this.options.aiHost.waitForCompletion(session.issueKey || session.sessionId);
       } else {
         session = {
-          sessionId: 'session-' + Math.random().toString(36).slice(2, 8),
+          sessionId: 'session-' + randomBytes(4).toString('hex'),
           issueKey: sessionKey,
           workflowRunId: context.run.runId,
           workflowNodeId: node.id,

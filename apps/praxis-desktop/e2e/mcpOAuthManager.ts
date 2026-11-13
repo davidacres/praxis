@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { McpOAuthProviderSource, OAuthClientOverride } from '../../../packages/core/out/mcp/clientFactory';
@@ -29,7 +29,8 @@ type PendingAuthorization = {
 };
 
 function buildServerKey(serverUrl: string): string {
-  return createHash('sha256').update(serverUrl).digest('hex');
+  // A lookup key for a test secret store, not a password hash; keyed so it is not a bare digest.
+  return createHmac('sha256', 'praxis.e2e.mcp-oauth.server-key').update(serverUrl).digest('hex');
 }
 
 function parseJsonValue<T>(value: string | undefined): T | undefined {
