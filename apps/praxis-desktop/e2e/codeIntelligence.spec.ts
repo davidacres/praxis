@@ -251,6 +251,14 @@ test('overview section provides reset code intelligence to factory defaults', as
   const overlay = win.getByTestId('reset-confirmation-overlay');
   await expect(overlay).toBeVisible();
   await expect(overlay).toContainText('Reset code intelligence to factory defaults?');
+  // The overlay closes at once; the reset then runs in the backend and the window reloads. Mark the
+  // document so the test can wait for that reload, otherwise teardown races the navigation.
+  await win.evaluate(() => { (window as unknown as { __beforeReset?: boolean }).__beforeReset = true; });
   await overlay.getByRole('button', { name: 'Reset code intelligence' }).click();
   await expect(overlay).toHaveCount(0);
+  await expect.poll(
+    () => win.evaluate(() => (window as unknown as { __beforeReset?: boolean }).__beforeReset === undefined).catch(() => false),
+    { message: 'the window reloads once the reset has finished' }
+  ).toBe(true);
+  await expect(win.locator('[data-testid="titlebar-settings"]').first()).toBeVisible();
 });
