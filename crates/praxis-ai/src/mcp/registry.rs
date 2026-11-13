@@ -8,9 +8,8 @@ use praxis_core::config::mcp_servers::McpServerConfig;
 use serde_json::Value;
 
 use super::builtin::{
-    CoordinationHub, TrackerProvider, execute_browser_tool, execute_coordination_tool,
-    execute_read_only_file_tool, execute_tracker_tool, list_browser_tools, list_coordination_tools,
-    list_read_only_file_tools, list_tracker_tools,
+    TrackerProvider, execute_browser_tool, execute_read_only_file_tool, execute_tracker_tool,
+    list_browser_tools, list_read_only_file_tools, list_tracker_tools,
 };
 use super::tool_bridge::{McpClientPool, ResolvedMcpTool, resolve_mcp_tools};
 use super::types::CallToolResult;
@@ -20,7 +19,6 @@ use praxis_workflows::types::AgentToolMode;
 #[derive(Clone)]
 pub struct McpServerRegistry {
     servers: Arc<Mutex<HashMap<String, McpServerConfig>>>,
-    coordination_hub: CoordinationHub,
     tracker_provider: Option<Arc<dyn TrackerProvider>>,
     review_root: Option<std::path::PathBuf>,
 }
@@ -35,7 +33,6 @@ impl McpServerRegistry {
     pub fn new() -> Self {
         Self {
             servers: Arc::new(Mutex::new(HashMap::new())),
-            coordination_hub: CoordinationHub::new(),
             tracker_provider: None,
             review_root: None,
         }
@@ -49,10 +46,6 @@ impl McpServerRegistry {
     pub fn with_review_root(mut self, root: std::path::PathBuf) -> Self {
         self.review_root = Some(root);
         self
-    }
-
-    pub fn coordination_hub(&self) -> &CoordinationHub {
-        &self.coordination_hub
     }
 
     /// Registers a user-configured server.
@@ -123,18 +116,6 @@ impl McpServerRegistry {
             }
         }
 
-        for tool in list_coordination_tools() {
-            all_tools.push(ResolvedMcpTool {
-                namespaced_name: format!("mcp__coordination__{}", tool.name),
-                original_tool_name: tool.name,
-                server_id: "builtin-coordination".to_string(),
-                server_name: "coordination".to_string(),
-                description: tool.description,
-                input_schema: tool.input_schema,
-                require_approval: false,
-            });
-        }
-
         for tool in list_browser_tools() {
             all_tools.push(ResolvedMcpTool {
                 namespaced_name: format!("mcp__browser__{}", tool.name),
@@ -156,7 +137,6 @@ impl McpServerRegistry {
         pool: &McpClientPool,
         tool_name: &str,
         args: &Value,
-        session_id: &str,
         tool_mode: AgentToolMode,
     ) -> Result<CallToolResult, String> {
         // Built-in routing
@@ -172,10 +152,6 @@ impl McpServerRegistry {
                 return execute_tracker_tool(rest, args, tool_mode, tracker.as_ref()).await;
             }
             return Ok(CallToolResult::failure("Tracker server is not configured"));
-        }
-
-        if let Some(rest) = tool_name.strip_prefix("mcp__coordination__") {
-            return execute_coordination_tool(rest, args, session_id, &self.coordination_hub).await;
         }
 
         if let Some(rest) = tool_name.strip_prefix("mcp__browser__") {
