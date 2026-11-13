@@ -502,6 +502,9 @@ export async function launchTestApp(
     beforeNavigate?.(page);
     await page.goto(url ?? window.url());
     await page.waitForLoadState('domcontentloaded');
+    // The webview installs its host bridge asynchronously after the document loads (as
+    // for `reload()` above); a spec that calls `window.praxis` straight away would race it.
+    await page.waitForFunction(() => Boolean((window as { praxis?: unknown }).praxis), undefined, { timeout: 15000 }).catch(() => undefined);
     return page;
   };
   // The native shell opens a real window for a detached chat; here that is another page.
