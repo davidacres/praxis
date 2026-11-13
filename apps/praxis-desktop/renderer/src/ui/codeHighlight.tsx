@@ -13,7 +13,7 @@ import type { ReactNode } from 'react';
  * work," which is what this exists for.
  */
 export function highlightCode(value: string): ReactNode {
-  const pattern = /(\/\/.*$|#.*$|`[^`]*`|'(?:\\.|[^'])*'|"(?:\\.|[^"])*"|\b(?:const|let|var|function|return|if|else|for|while|class|interface|type|export|import|from|async|await|new|true|false|null|undefined|public|private|protected|readonly|extends|implements|using|namespace)\b|\b\d+(?:\.\d+)?\b)/gm;
+  const pattern = /(\/\/.*$|#.*$|`[^`]*`|'(?:[^'\\]|\\.)*\\?'|"(?:[^"\\]|\\.)*\\?"|\b(?:const|let|var|function|return|if|else|for|while|class|interface|type|export|import|from|async|await|new|true|false|null|undefined|public|private|protected|readonly|extends|implements|using|namespace)\b|\b\d+(?:\.\d+)?\b)/gm;
   return value.split(pattern).map((part, index) => {
     if (!part) return null;
     const className = part.startsWith('//') || part.startsWith('#') ? 'comment'

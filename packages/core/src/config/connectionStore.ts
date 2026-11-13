@@ -2,6 +2,7 @@ import type { BackendMode, Connection, TrackedBoard, TrackedBoardRef } from '../
 import { Emitter, type Disposable } from '../host/emitter';
 import type { KeyValueStore } from '../host/stateStore';
 import type { SecretsStore } from '../host/secrets';
+import { trimEdgeChars } from '../text/linearText';
 
 const CONNECTIONS_KEY = 'connections';
 const BOARDS_KEY = 'boards';
@@ -69,12 +70,11 @@ function sanitizeTrackedBoard(raw: unknown): TrackedBoard | undefined {
 }
 
 function slugify(name: string): string {
-  return name
+  const slug = name
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48) || 'connection';
+    .replace(/[^a-z0-9]+/g, '-');
+  return trimEdgeChars(slug, '-').slice(0, 48) || 'connection';
 }
 
 function secretKey(connectionId: string, name: string): string {

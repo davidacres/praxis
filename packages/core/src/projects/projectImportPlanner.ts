@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import { toStoredFolderPath } from '../folder/pathUtils';
+import { trimTrailingChars } from '../text/linearText';
 
 /** A Git repository root discovered under the selected parent folder. */
 export interface DiscoveredRepository {
@@ -52,7 +53,7 @@ function isSameOrInside(parentPath: string, candidatePath: string): boolean {
 }
 
 export function suggestedProjectName(folderPath: string): string {
-  const name = folderPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.trim() ?? '';
+  const name = trimTrailingChars(folderPath, '\\/').split(/[\\/]/).pop()?.trim() ?? '';
   return name.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Imported Project';
 }
 

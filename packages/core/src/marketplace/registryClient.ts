@@ -1,3 +1,4 @@
+import { parseNextLinkEntry, trimTrailingChars } from '../text/linearText';
 /**
  * Talks to a GitHub Packages npm registry to discover and fetch add-ons.
  *
@@ -70,7 +71,7 @@ export interface GitHubPackagesConfig {
 }
 
 function trimSlashes(value: string): string {
-  return value.replace(/\/+$/, '');
+  return trimTrailingChars(value, '/');
 }
 
 /**
@@ -123,8 +124,8 @@ export function encodePackumentPath(packageName: string): string {
 export function parseNextLink(linkHeader: string | null): string | undefined {
   if (!linkHeader) return undefined;
   for (const part of linkHeader.split(',')) {
-    const match = /<([^>]+)>;\s*rel="next"/.exec(part.trim());
-    if (match) return match[1];
+    const match = parseNextLinkEntry(part.trim());
+    if (match) return match;
   }
   return undefined;
 }

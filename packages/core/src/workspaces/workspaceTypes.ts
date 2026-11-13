@@ -1,6 +1,7 @@
 import type { Connection, TrackedBoard } from '../types';
 import { resolvePortableFolderPath, toPortableFolderPath } from './workspacePaths';
 import type { ProjectRecord } from '../projects/projectTypes';
+import { trimEdgeChars } from '../text/linearText';
 
 export const PRAXIS_WORKSPACE_FORMAT = 'praxis-workspace';
 
@@ -42,7 +43,7 @@ export const PRAXIS_WORKSPACE_FILE_SUFFIX = '.workspace.praxis.json';
 
 /** `My Team` → `my-team.workspace.praxis.json` — the default name for a saved workspace file. */
 export function workspaceFileName(name: string): string {
-  const slug = name.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  const slug = trimEdgeChars(name.trim().replace(/[^a-z0-9]+/gi, '-'), '-').toLowerCase();
   return `${slug || 'workspace'}${PRAXIS_WORKSPACE_FILE_SUFFIX}`;
 }
 

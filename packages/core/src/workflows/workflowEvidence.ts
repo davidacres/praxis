@@ -30,6 +30,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { WorkflowIssue } from './workflowValidation';
+import { trimEdgeChars } from '../text/linearText';
 
 export const WORKFLOW_EVIDENCE_SCHEMA_VERSION = 1;
 
@@ -239,7 +240,7 @@ export function truncateUtf8Tail(content: string, maxBytes: number): string {
 }
 
 function evidenceFileName(label: string): string {
-  const safe = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const safe = trimEdgeChars(label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'), '-');
   return `${safe || 'entry'}.txt`;
 }
 

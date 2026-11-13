@@ -88,54 +88,88 @@ export async function readUtf8(filePath: string): Promise<string> {
 }
 
 export function extractMainHeading(content: string): string {
-  const m = content.match(/^#\s+(.+)$/m);
+  const m = content.match(/^#\s+(\S.*)$/m);
   return m?.[1]?.trim() ?? 'Untitled';
 }
 
 export function extractStatusRaw(content: string): string {
   return extractFrontMatterValue(content, 'status')
-    || content.match(/^\*\*Status:\*\*\s*(.+)$/m)?.[1]?.trim()
+    || content.match(/^\*\*Status:\*\*\s*(\S.*)$/m)?.[1]?.trim()
     || '';
 }
 
 export function extractBranchRaw(content: string): string | undefined {
-  const m = content.match(/^\*\*Branch:\*\*\s*(.+)$/m);
+  const m = content.match(/^\*\*Branch:\*\*\s*(\S.*)$/m);
   return m?.[1]?.trim() || undefined;
 }
 
 export function extractPriorityRaw(content: string): string | undefined {
-  const m = content.match(/^\*\*Priority:\*\*\s*(.+)$/m);
+  const m = content.match(/^\*\*Priority:\*\*\s*(\S.*)$/m);
   return m?.[1]?.trim() || undefined;
 }
 
 export function extractSeverityRaw(content: string): string | undefined {
-  const m = content.match(/^\*\*Severity:\*\*\s*(.+)$/m);
+  const m = content.match(/^\*\*Severity:\*\*\s*(\S.*)$/m);
   return m?.[1]?.trim() || undefined;
 }
 
 /** Only the literal `capture` is recognised; anything else reads as no origin. */
 export function extractOriginRaw(content: string): IssueOrigin | undefined {
-  return content.match(/^\*\*Origin:\*\*\s*(.+)$/m)?.[1]?.trim().toLowerCase() === 'capture' ? 'capture' : undefined;
+  return content.match(/^\*\*Origin:\*\*\s*(\S.*)$/m)?.[1]?.trim().toLowerCase() === 'capture' ? 'capture' : undefined;
 }
 
 export function extractReportedByRaw(content: string): string | undefined {
-  const m = content.match(/^\*\*Reported By:\*\*\s*(.+)$/m);
+  const m = content.match(/^\*\*Reported By:\*\*\s*(\S.*)$/m);
   return m?.[1]?.trim() || undefined;
 }
 
 export function extractModelRaw(content: string): string | undefined {
-  const m = content.match(/^\*\*Model:\*\*\s*(.+)$/m);
+  const m = content.match(/^\*\*Model:\*\*\s*(\S.*)$/m);
   return m?.[1]?.trim() || undefined;
 }
 
 export function extractTypeRaw(content: string): string | undefined {
   return extractFrontMatterValue(content, 'type')
-    || content.match(/^\*\*Type:\*\*\s*(.+)$/m)?.[1]?.trim()
+    || content.match(/^\*\*Type:\*\*\s*(\S.*)$/m)?.[1]?.trim()
     || undefined;
 }
 
+const WHITESPACE_CHAR = /\s/;
+
+/** True when a closing `---` at `at` is followed by whitespace that holds a newline, or by the end of the text. */
+function isClosingFenceTail(content: string, at: number): boolean {
+  let end = at + 3;
+  while (end < content.length && WHITESPACE_CHAR.test(content[end])) end++;
+  return end === content.length || content.lastIndexOf('\n', end - 1) >= at + 3;
+}
+
+/**
+ * The text between a leading `---` fence and its closing `---` fence. A scanner rather than
+ * `/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/`, whose overlapping `\s*` / `\n` backtracked
+ * quadratically on a long run of whitespace after the fence.
+ */
 function getFrontmatterBlock(content: string): string | undefined {
-  return /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(content)?.[1];
+  if (!content.startsWith('---')) return undefined;
+  let runEnd = 3;
+  while (runEnd < content.length && WHITESPACE_CHAR.test(content[runEnd])) runEnd++;
+  // The opening fence's whitespace must hold a newline; the block starts after the last one.
+  const lastNl = content.lastIndexOf('\n', runEnd - 1);
+  if (lastNl < 3) return undefined;
+  const groupEnd = (nl: number, start: number): number =>
+    nl - 1 >= start && content[nl - 1] === '\r' ? nl - 1 : nl;
+
+  const start = lastNl + 1;
+  for (let nl = content.indexOf('\n', start); nl >= 0; nl = content.indexOf('\n', nl + 1)) {
+    if (content.startsWith('---', nl + 1) && isClosingFenceTail(content, nl + 1)) {
+      return content.slice(start, groupEnd(nl, start));
+    }
+  }
+  // Blank lines straight before the closing fence: the opening whitespace gives back its last newline.
+  const earlier = content.lastIndexOf('\n', lastNl - 1);
+  if (earlier >= 3 && content.startsWith('---', start) && isClosingFenceTail(content, start)) {
+    return content.slice(earlier + 1, groupEnd(lastNl, earlier + 1));
+  }
+  return undefined;
 }
 
 function extractFrontMatterValue(content: string, key: string): string | undefined {
@@ -158,7 +192,7 @@ function extractFrontMatterDependencyTokens(content: string): string[] {
 }
 
 export function extractComplexityRaw(content: string): string | undefined {
-  const m = content.match(/^\*\*Complexity:\*\*\s*(.+)$/m);
+  const m = content.match(/^\*\*Complexity:\*\*\s*(\S.*)$/m);
   return m?.[1]?.trim() || undefined;
 }
 
@@ -346,7 +380,7 @@ function extractDependenciesSectionBody(content: string): string {
 }
 
 function extractDependsOnLine(content: string): string {
-  const m = content.match(/^\*\*Depends(?:\s+on)?:\*\*\s*(.+)$/im);
+  const m = content.match(/^\*\*Depends(?:\s+on)?:\*\*\s*(\S.*)$/im);
   return m?.[1]?.trim() ?? '';
 }
 
@@ -417,11 +451,11 @@ export function extractPlanningDates(content: string): ParsedPlanningDates {
     }
     return undefined;
   };
-  const created = pick([/^\*\*Created:\*\*\s*(.+)$/im, /^\*\*Start date:\*\*\s*(.+)$/im]);
+  const created = pick([/^\*\*Created:\*\*\s*(\S.*)$/im, /^\*\*Start date:\*\*\s*(\S.*)$/im]);
   const completed = pick([
-    /^\*\*Completed:\*\*\s*(.+)$/im,
-    /^\*\*Finished:\*\*\s*(.+)$/im,
-    /^\*\*Done:\*\*\s*(.+)$/im
+    /^\*\*Completed:\*\*\s*(\S.*)$/im,
+    /^\*\*Finished:\*\*\s*(\S.*)$/im,
+    /^\*\*Done:\*\*\s*(\S.*)$/im
   ]);
   return { created, completed };
 }
@@ -1184,7 +1218,7 @@ function planningNumber(value: string | undefined): number | undefined {
 }
 
 function planningFeatureId(file: MarkdownPlanFile, featureDirectories: Map<string, number>): number | undefined {
-  const explicit = extractFrontMatterValue(file.content, 'feature') || file.content.match(/^\*\*Feature:\*\*\s*(.+)$/im)?.[1];
+  const explicit = extractFrontMatterValue(file.content, 'feature') || file.content.match(/^\*\*Feature:\*\*\s*(\S.*)$/im)?.[1];
   if (explicit) return planningNumber(explicit);
   let directory = path.dirname(file.filePath);
   while (directory.length >= path.dirname(directory).length) {
