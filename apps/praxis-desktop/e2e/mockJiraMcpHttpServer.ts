@@ -505,10 +505,8 @@ export async function startMockJiraMcpHttpServer(
     } catch (error) {
       // Last-ditch error surface — keeps the test output useful when the
       // mock itself blows up rather than the app under test.
-      sendJson(res, 500, {
-        error: 'mock_internal_error',
-        detail: error instanceof Error ? error.message : String(error)
-      });
+      console.error('[mockJiraMcpHttpServer] unhandled error', error);
+      sendJson(res, 500, { error: 'mock_internal_error' });
     }
   });
 

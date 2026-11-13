@@ -101,7 +101,7 @@ test('the Security Review add-on installs and creates a workflow from its templa
   const canvas = page.getByRole('application', { name: 'Workflow canvas' });
   await expect(canvas.getByRole('button', { name: /^Repository inventory \(check\), entry stage/ })).toBeVisible();
   for (const stage of ['Attack surface', 'SAST (Semgrep)', 'Secrets (Gitleaks)', 'Dependency vulnerabilities', 'Security review', 'Create remediation plan?', 'Remediation plan']) {
-    await expect(canvas.getByRole('button', { name: new RegExp(`^${stage.replace(/[()?]/g, '\\$&')} \\(`) })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: new RegExp(`^${stage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(`) })).toBeVisible();
   }
   await page.screenshot({ path: path.resolve(__dirname, '../../../../.praxis/session-artifacts/security-review-workflow.png') });
 });
