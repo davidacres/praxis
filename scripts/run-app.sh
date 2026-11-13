@@ -180,13 +180,23 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   step 'Preparing native macOS app bundle'
   DESKTOP_BIN="$(node "$REPO_ROOT/apps/praxis-desktop/scripts/prepare-macos-dev-bundle.cjs" "$DESKTOP_BIN")"
 
-  # Optional stable signing (see scripts/setup-dev-signing.sh). Keychain "Always Allow"
-  # follows the code-signing identity, and an unsigned rebuild gets a new one every time.
-  # Silently skipped unless the "Praxis Dev" identity exists and PRAXIS_DEV_SIGN != 0.
-  SIGN_IDENTITY="${PRAXIS_DEV_SIGN_IDENTITY:-Praxis Dev}"
+  # Stable signing. Keychain "Always Allow" follows the code-signing identity, and an unsigned rebuild
+  # gets a new one every time, so the keychain asks again after every build. The identity used is
+  # PRAXIS_DEV_SIGN_IDENTITY if set, else a "Praxis Dev" certificate (scripts/setup-dev-signing.sh),
+  # else the first "Apple Development" identity in the keychain. With none of those, or with
+  # PRAXIS_DEV_SIGN=0, the bundle is left unsigned as before.
   SIGN_KEYCHAIN=()
   [[ -n "${PRAXIS_DEV_SIGN_KEYCHAIN:-}" ]] && SIGN_KEYCHAIN=("$PRAXIS_DEV_SIGN_KEYCHAIN")
-  if [[ "${PRAXIS_DEV_SIGN:-1}" != "0" ]] && security find-identity -v -p codesigning ${SIGN_KEYCHAIN[@]:+"${SIGN_KEYCHAIN[@]}"} 2>/dev/null | grep -qF "\"$SIGN_IDENTITY\""; then
+  SIGN_IDENTITIES="$(security find-identity -v -p codesigning ${SIGN_KEYCHAIN[@]:+"${SIGN_KEYCHAIN[@]}"} 2>/dev/null || true)"
+  SIGN_IDENTITY="${PRAXIS_DEV_SIGN_IDENTITY:-}"
+  if [[ -z "$SIGN_IDENTITY" ]]; then
+    if grep -qF '"Praxis Dev"' <<<"$SIGN_IDENTITIES"; then
+      SIGN_IDENTITY="Praxis Dev"
+    else
+      SIGN_IDENTITY="$(sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' <<<"$SIGN_IDENTITIES" | head -n 1)"
+    fi
+  fi
+  if [[ "${PRAXIS_DEV_SIGN:-1}" != "0" && -n "$SIGN_IDENTITY" ]] && grep -qF "\"$SIGN_IDENTITY\"" <<<"$SIGN_IDENTITIES"; then
     APP_BUNDLE="$(cd "$(dirname "$DESKTOP_BIN")/../.." && pwd)"
     BUNDLE_ID="$(node -p "require('$REPO_ROOT/apps/praxis-desktop/src-tauri/tauri.conf.json').identifier")"
     if codesign --force --sign "$SIGN_IDENTITY" ${SIGN_KEYCHAIN[@]:+--keychain "${SIGN_KEYCHAIN[0]}"} --identifier "$BUNDLE_ID" "$APP_BUNDLE" >/dev/null 2>&1; then
