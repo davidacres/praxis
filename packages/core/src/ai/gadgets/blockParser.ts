@@ -32,7 +32,71 @@ export function mayContainGadget(text: string): boolean {
  * which is what keeps a "```" *inside* a JSON string (always mid-line, as the
  * JSON is one line) from ending the block early.
  */
-const FENCE = /```[ \t]*praxis-gadget[ \t]*\r?\n([\s\S]*?)```[ \t]*$/gm;
+const FENCE_OPEN = /```[ \t]*praxis-gadget[ \t]*\r?\n/g;
+const LINE_END = /^[\n\r\u2028\u2029]/;
+
+export interface GadgetFence {
+  /** Index of the opening ```. */
+  index: number;
+  /** Index just past the closing fence (and trailing blanks), before the line break. */
+  end: number;
+  /** Index where the body starts (just after the opening line's newline). */
+  bodyStart: number;
+  body: string;
+}
+
+/**
+ * If a closing fence (``` followed only by blanks to the end of its line) starts
+ * at or after `from`, the index just past it, else -1. Scans once, left to right.
+ */
+function findClosingFence(text: string, from: number): { start: number; end: number } | undefined {
+  for (let i = text.indexOf('```', from); i !== -1; i = text.indexOf('```', i + 1)) {
+    let end = i + 3;
+    while (end < text.length && (text[end] === ' ' || text[end] === '\t')) end += 1;
+    if (end === text.length || LINE_END.test(text[end])) return { start: i, end };
+  }
+  return undefined;
+}
+
+/** Start index of the last closing fence in `text` (any ``` that ends its line), or -1. */
+export function lastClosingFenceIndex(text: string): number {
+  for (let i = text.lastIndexOf('```'); i !== -1; i = i === 0 ? -1 : text.lastIndexOf('```', i - 1)) {
+    let end = i + 3;
+    while (end < text.length && (text[end] === ' ' || text[end] === '\t')) end += 1;
+    if (end === text.length || LINE_END.test(text[end])) return i;
+  }
+  return -1;
+}
+
+/**
+ * Every closed gadget fence, in order — a linear scanner standing in for
+ * `/```[ \t]*praxis-gadget[ \t]*\r?\n([\s\S]*?)```[ \t]*$/gm`, whose lazy body
+ * rescanned the rest of the text from every unclosed opening. Once an opening
+ * has no closing fence after it, no later opening can have one either.
+ */
+export function findGadgetFences(text: string): GadgetFence[] {
+  const fences: GadgetFence[] = [];
+  let pos = 0;
+  for (;;) {
+    FENCE_OPEN.lastIndex = pos;
+    const open = FENCE_OPEN.exec(text);
+    if (!open) break;
+    const bodyStart = open.index + open[0].length;
+    const close = findClosingFence(text, bodyStart);
+    if (!close) break;
+    fences.push({ index: open.index, end: close.end, bodyStart, body: text.slice(bodyStart, close.start) });
+    pos = close.end;
+  }
+  return fences;
+}
+
+/** Index of every opening gadget fence in `text`, in order. */
+export function gadgetFenceOpenings(text: string): Array<{ index: number; bodyStart: number }> {
+  const out: Array<{ index: number; bodyStart: number }> = [];
+  const open = new RegExp(FENCE_OPEN.source, 'g');
+  for (let m = open.exec(text); m !== null; m = open.exec(text)) out.push({ index: m.index, bodyStart: m.index + m[0].length });
+  return out;
+}
 
 export interface ChatBlockParseOptions {
   /** Stamped onto every gadget; never taken from the producer. */
@@ -149,16 +213,15 @@ export function parseChatBlocks(raw: string, options: ChatBlockParseOptions): Pa
   let malformed = 0;
   let mdIndex = 0;
 
-  FENCE.lastIndex = 0;
-  for (let match = FENCE.exec(text); match !== null; match = FENCE.exec(text)) {
+  for (const match of findGadgetFences(text)) {
     pushMarkdown(blocks, text.slice(lastIndex, match.index), `${options.idPrefix}-md-${mdIndex++}`);
-    lastIndex = match.index + match[0].length;
+    lastIndex = match.end;
     found += 1;
 
-    const lenient = parseLenientJson(match[1]);
+    const lenient = parseLenientJson(match.body);
     if (!lenient.ok) {
       malformed += 1;
-      pushMarkdown(blocks, `\`\`\`json\n${match[1].trim()}\n\`\`\``, `${options.idPrefix}-md-${mdIndex++}`);
+      pushMarkdown(blocks, `\`\`\`json\n${match.body.trim()}\n\`\`\``, `${options.idPrefix}-md-${mdIndex++}`);
       continue;
     }
     const parsed = clampChoiceText(lenient.value);

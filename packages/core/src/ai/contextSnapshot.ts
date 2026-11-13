@@ -61,7 +61,30 @@ export interface SnapshotFileFact {
   outside?: boolean;
 }
 
-const SECRET_PATH = /(^|\/)(\.env(\..+)?|\.npmrc|\.netrc|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|[^/]*\.(pem|key|p12|pfx|keystore)|credentials(\.json)?|secrets?\.(json|ya?ml|toml))$/i;
+const SECRET_BASENAME = /^(?:\.npmrc|\.netrc|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|[^/]*\.(?:pem|key|p12|pfx|keystore)|credentials(?:\.json)?|secrets?\.(?:json|ya?ml|toml))$/i;
+const ENV_SEGMENT = /(?:^|\/)\.env/gi;
+const LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
+
+/**
+ * Whether a path names a file that commonly holds secrets. Linear stand-in for a
+ * single `(^|/)(...)$` regex whose `.+` and `[^/]*` branches backtracked
+ * quadratically on long paths. The one branch that may span `/` is `.env.<anything>`
+ * (a directory such as `.env.d/` counts), so it is checked per segment start.
+ */
+export function isSecretPath(filePath: string): boolean {
+  if (SECRET_BASENAME.test(filePath.slice(filePath.lastIndexOf('/') + 1))) return true;
+  let lastBreak = -1;
+  for (let i = filePath.length - 1; i >= 0; i -= 1) {
+    if (LINE_TERMINATOR.test(filePath[i])) { lastBreak = i; break; }
+  }
+  const env = new RegExp(ENV_SEGMENT.source, 'gi');
+  for (let m = env.exec(filePath); m !== null; m = env.exec(filePath)) {
+    const end = m.index + m[0].length;
+    if (end === filePath.length) return true;
+    if (filePath[end] === '.' && end + 1 < filePath.length && lastBreak < end + 1) return true;
+  }
+  return false;
+}
 
 /** Issue keys under a "depends on" / "blocked by" heading or line of a ticket context. */
 export function extractDependencyKeys(ticketContext: string | undefined): string[] {
@@ -100,7 +123,7 @@ export function buildContextSnapshot(input: {
     if (!filePath || seen.has(filePath)) continue;
     seen.add(filePath);
     const exclusion: SnapshotExclusionReason | undefined =
-      SECRET_PATH.test(filePath) ? 'secret'
+      isSecretPath(filePath) ? 'secret'
         : file.outside || filePath.startsWith('../') || filePath.startsWith('/') ? 'outside-workspace'
           : file.bytes === undefined ? 'missing'
             : file.binary ? 'binary'
@@ -192,7 +215,7 @@ export function validateHandover(
     block(`The work has moved since the snapshot (${snapshot.sourceCommit.slice(0, 7)} → ${current.head.slice(0, 7)}); take a new snapshot.`);
   }
   if (!snapshot.sourceCommit) warn('The snapshot has no source commit, so the next AI cannot check what changed since.');
-  const leaked = snapshot.includedFiles.find(file => SECRET_PATH.test(file.path));
+  const leaked = snapshot.includedFiles.find(file => isSecretPath(file.path));
   if (leaked) block(`The snapshot hands over ${leaked.path}, which looks like a secrets file.`);
   return issues;
 }

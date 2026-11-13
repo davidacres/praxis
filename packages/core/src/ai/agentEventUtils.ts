@@ -1,4 +1,5 @@
 import type { AgentEventSummary } from './agentTypes';
+import { stripTrailingSlashes } from './linearText';
 
 /**
  * Whether the file change recorded on the `tool_complete` event timestamped
@@ -55,7 +56,7 @@ export function reportedSessionPaths(
 ): Set<string> {
   const toPosix = (value: string) => value.replace(/\\/g, '/');
   const isAbsolute = (value: string) => value.startsWith('/') || /^[A-Za-z]:\//.test(value);
-  const root = toPosix(repositoryPath).replace(/\/+$/, '');
+  const root = stripTrailingSlashes(toPosix(repositoryPath));
 
   const paths = new Set<string>();
   for (const event of events) {

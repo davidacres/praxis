@@ -8,6 +8,7 @@ import { fetchAnthropicModels } from './anthropicClient';
 import { fetchGeminiModels } from './geminiClient';
 import { getKnownContextLength, getModelPricing, type ModelPriceRates } from './modelPricing';
 import { findProviderDescriptor } from './registry';
+import { stripTrailingSlashes } from '../linearText';
 
 /**
  * One selectable model, shared by every "model picker" surface — both
@@ -76,7 +77,7 @@ const pending = new Map<string, Promise<ModelChoice[]>>();
 const CACHE_KEY_SALT = randomBytes(32);
 
 function cacheKey(provider: AiProvider, url: string, apiKey: string): string {
-  const normalizedUrl = url.replace(/\/+$/, '').toLowerCase();
+  const normalizedUrl = stripTrailingSlashes(url).toLowerCase();
   const keyHash = createHmac('sha256', CACHE_KEY_SALT).update(apiKey).digest('hex');
   return `${provider}::${normalizedUrl}::${keyHash}`;
 }

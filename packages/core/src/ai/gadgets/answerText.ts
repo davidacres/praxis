@@ -5,24 +5,48 @@
  * because it may import only types from core; these must stay in step with them.
  */
 import type { AnyGadgetEnvelope, FormGadgetPayload, GadgetActionValue } from './contracts';
-import { GADGET_FENCE_LANGUAGE } from './blockParser';
+import { findGadgetFences, gadgetFenceOpenings, GADGET_FENCE_LANGUAGE, lastClosingFenceIndex } from './blockParser';
 
-const FENCE = /[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n[\s\S]*?```[ \t]*$/gm;
+/** Walks back over the blanks that precede an index, never past `floor`. */
+function withLeadingBlanks(text: string, index: number, floor: number): number {
+  let start = index;
+  while (start > floor && (text[start - 1] === ' ' || text[start - 1] === '\t')) start -= 1;
+  return start;
+}
+
+/** `text` with every closed gadget fence (and the blanks before it) removed. */
+function removeClosedFences(text: string): string {
+  let out = '';
+  let pos = 0;
+  for (const fence of findGadgetFences(text)) {
+    const start = withLeadingBlanks(text, fence.index, pos);
+    out += text.slice(pos, start);
+    pos = fence.end;
+  }
+  return out + text.slice(pos);
+}
+
 /**
  * An opening fence with no closing ``` anywhere after it — a reply cut short
  * (hit a length limit, the stream was interrupted, anything) mid-gadget.
  * Treated the same as one still being streamed: hidden, rather than left as
  * half-written JSON that would otherwise sit in the transcript forever,
  * because nothing else downstream ever revisits a message once it's final.
+ * Returns its index (with leading blanks), or -1.
  */
-const OPEN_FENCE = /[ \t]*```[ \t]*praxis-gadget[ \t]*\r?\n(?![\s\S]*```[ \t]*$)/m;
+function findOpenFence(text: string): number {
+  const lastClose = lastClosingFenceIndex(text);
+  for (const open of gadgetFenceOpenings(text)) {
+    if (lastClose < open.bodyStart) return withLeadingBlanks(text, open.index, 0);
+  }
+  return -1;
+}
 
 /** A message's text with its gadget fences removed — the gadgets are drawn separately. */
 export function stripGadgetFences(text: string): string {
   if (!text.includes(GADGET_FENCE_LANGUAGE)) return text;
-  FENCE.lastIndex = 0;
-  const closed = text.replace(FENCE, '');
-  const openIndex = closed.search(OPEN_FENCE);
+  const closed = removeClosedFences(text);
+  const openIndex = findOpenFence(closed);
   const withoutOpen = openIndex >= 0 ? closed.slice(0, openIndex) : closed;
   return withoutOpen.replace(/\n{3,}/g, '\n\n').trim();
 }

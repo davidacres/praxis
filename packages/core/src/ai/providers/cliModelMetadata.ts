@@ -11,9 +11,22 @@ export type CliModelMetadata = Pick<ModelChoice, 'contextLength' | 'pricingLabel
 
 const execFileAsync = promisify(execFile);
 
+/** `value.replace(/\s*\([^)]*\)/g, '')`, in one pass: drops each `( ... )` group and the whitespace before it. */
+function removeParenthesised(value: string): string {
+  let out = '';
+  let pos = 0;
+  for (let open = value.indexOf('(', pos); open !== -1; open = value.indexOf('(', pos)) {
+    const close = value.indexOf(')', open + 1);
+    if (close === -1) break;
+    out = (out + value.slice(pos, open)).trimEnd();
+    pos = close + 1;
+  }
+  return out + value.slice(pos);
+}
+
 /** Canonical model family id, excluding CLI reasoning/speed parameters. */
 export function canonicalCliModelId(value: string): string {
-  return value.toLowerCase().split('[')[0].replace(/\s*\([^)]*\)/g, '').trim()
+  return removeParenthesised(value.toLowerCase().split('[')[0]).trim()
     .replace(/\s+/g, '-').replace(/-(?:thinking|extra-high|xhigh|high|medium|low|minimal|none|max|fast)(?=-|$)/g, '')
     .replace(/^(opus|sonnet|haiku|fable)-/, 'claude-$1-')
     .replace(/^(claude-(?:opus|sonnet|haiku|fable)-\d+)-(\d+)(?=-|$)/, '$1.$2')
@@ -90,7 +103,7 @@ export function cursorModelMetadata(result: unknown): Map<string, CliModelMetada
   for (const item of models) {
     const model = item as { name?: string; contextTokenLimit?: number; tooltipData?: { markdownContent?: string }; legacySlugs?: string[]; idAliases?: string[] };
     if (typeof model?.name !== 'string') continue;
-    const match = model.tooltipData?.markdownContent?.match(/([\d,.]+)\s*([km])\s*(?:token\s+)?context\s+window/i);
+    const match = model.tooltipData?.markdownContent?.match(/(?<![\d,.])([\d,.]+)\s*([km])\s*(?:token\s+)?context\s+window/i);
     const size = model.contextTokenLimit ?? (match ? Number(match[1].replace(/,/g, '')) * (match[2].toLowerCase() === 'm' ? 1_000_000 : 1000) : undefined);
     if (!Number.isSafeInteger(size) || size! <= 0) continue;
     for (const id of [model.name, ...(model.legacySlugs ?? []), ...(model.idAliases ?? [])]) {

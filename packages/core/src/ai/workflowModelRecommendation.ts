@@ -16,6 +16,7 @@ import type { TokenUsage } from './gateway';
 import { runProviderPrompt } from './providerPrompt';
 import { defaultTierForStage, isModelTier } from '../workflows/stageModel';
 import { isAgentTaskNode, type WorkflowDefinition, type WorkflowModelTier } from '../workflows/workflowTypes';
+import { findFencedBody } from './linearText';
 
 export interface StageTierSuggestion {
   tier: WorkflowModelTier;
@@ -66,8 +67,8 @@ function buildPrompt(definition: WorkflowDefinition): string {
 }
 
 function extractJsonBlock(text: string): string {
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i) ?? text.match(/```\s*([\s\S]*?)```/);
-  return (fenced ? fenced[1] : text).trim();
+  const fenced = findFencedBody(text, /```json/i) ?? findFencedBody(text, /```/);
+  return (fenced ? fenced.body : text).trim();
 }
 
 /** Exposed for tests: turns the model's text into a complete, valid answer. */

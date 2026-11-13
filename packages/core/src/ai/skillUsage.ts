@@ -32,7 +32,31 @@ export interface SkillUseSignal {
 
 const SKILL_NAME = /^[A-Za-z0-9][\w.:-]{0,127}$/;
 /** `skills/<name>/SKILL.md`, optionally preceded by a path. Globs (`*`) never match a name. */
-const SKILL_FILE = /((?:[^\s'"`<>|;&()]*\/)?skills\/([A-Za-z0-9][\w.-]*)\/SKILL\.md)(?![\w.])/gi;
+const SKILL_FILE_CORE = /skills\/([A-Za-z0-9][\w.-]*)\/SKILL\.md(?![\w.])/gi;
+const PATH_PREFIX_CHAR = /[^\s'"`<>|;&()]/;
+
+/**
+ * Every `[path/]skills/<name>/SKILL.md` in `text`. Linear stand-in for
+ * `/((?:[^\s'"`<>|;&()]*\/)?skills\/(name)\/SKILL\.md)(?![\w.])/gi`, whose
+ * optional prefix rescanned each long non-space run from every start. The
+ * prefix, when the character before `skills/` is a `/`, is the whole run of
+ * path characters ending there.
+ */
+export function findSkillFiles(text: string): Array<{ filePath: string; skillId: string }> {
+  const found: Array<{ filePath: string; skillId: string }> = [];
+  const core = new RegExp(SKILL_FILE_CORE.source, 'gi');
+  let floor = 0;
+  for (let m = core.exec(text); m !== null; m = core.exec(text)) {
+    let start = m.index;
+    if (start > floor && text[start - 1] === '/') {
+      while (start > floor && PATH_PREFIX_CHAR.test(text[start - 1])) start -= 1;
+    }
+    const end = m.index + m[0].length;
+    found.push({ filePath: text.slice(start, end), skillId: m[1] });
+    floor = end;
+  }
+  return found;
+}
 const WRITE_TOOL = /\b(write|edit|create|apply_patch|patch|str_replace|multiedit|editing files)\b/i;
 
 function skillToolName(toolName: string | undefined, args: Record<string, unknown> | undefined): string | undefined {
@@ -69,8 +93,7 @@ export function detectSkillUses(events: readonly AgentEventSummary[]): SkillUseS
       .filter((part): part is string => typeof part === 'string')
       .join('\n');
     const seen = new Set<string>();
-    for (const match of text.matchAll(SKILL_FILE)) {
-      const [, filePath, skillId] = match;
+    for (const { filePath, skillId } of findSkillFiles(text)) {
       if (seen.has(skillId) || redirectsInto(text, filePath)) continue;
       seen.add(skillId);
       signals.push({ skillId, via: 'skill-file', at, path: filePath });

@@ -8,6 +8,7 @@ import {
   type GatewayOptions,
   type RawGatewayModel
 } from '../gateway/gatewayClient';
+import { stripTrailingSlashes } from '../linearText';
 
 /**
  * Minimal HTTP/HTTPS client for Google Gemini's GenerateContent REST API.
@@ -42,7 +43,7 @@ function buildGeminiHeaders(
  * Filters for models supporting `generateContent`.
  */
 export function fetchGeminiModels(opts: GatewayOptions, timeoutMs = 10000): Promise<RawGatewayModel[]> {
-  const baseUrl = (opts.url?.trim() || DEFAULT_GEMINI_BASE_URL).replace(/\/+$/, '');
+  const baseUrl = stripTrailingSlashes(opts.url?.trim() || DEFAULT_GEMINI_BASE_URL);
   const target = `${baseUrl}/v1beta/models`;
   const isHttps = target.startsWith('https:');
   const client = requestModule(target);
@@ -131,7 +132,7 @@ export function postGeminiStream(
   const { model: _strippedModel, ...bodyToSend } = payloadObj;
   const bodyText = JSON.stringify(bodyToSend);
 
-  const baseUrl = (opts.url?.trim() || DEFAULT_GEMINI_BASE_URL).replace(/\/+$/, '');
+  const baseUrl = stripTrailingSlashes(opts.url?.trim() || DEFAULT_GEMINI_BASE_URL);
   const cleanModel = model.replace(/^models\//, '');
   const target = `${baseUrl}/v1beta/models/${cleanModel}:streamGenerateContent?alt=sse`;
 

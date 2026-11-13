@@ -2,6 +2,7 @@ import type { IssueComment, IssueDetails, DeliveryWorkflowSettings } from '../ty
 import type { AiProvider } from '../types';
 import type { AgentTaskDefinition, AgentWorkflowReference, DeliveryTaskResult } from './agentTypes';
 import * as path from 'node:path';
+import { trimRepeatedChar } from './linearText';
 
 const DELIVERY_ANALYSIS_RESULT_MARKER = 'DELIVERY_ANALYSIS_RESULT';
 const DELIVERY_RESULT_MARKER = 'DELIVERY_RESULT';
@@ -35,28 +36,69 @@ function toPowerShellLiteral(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
+const POWERSHELL_SHELL = /^(pwsh|powershell(?:\.exe)?)/i;
+
+/**
+ * Splits `pwsh|powershell[.exe] <prefix> -File <script> <suffix>`. Linear stand-in
+ * for `^(shell)([\s\S]*?)\s+-File\s+("..."|'...'|\S+)([\s\S]*)$`, whose lazy prefix
+ * and `\s+` both claimed the same whitespace. The earliest `-File` that is
+ * preceded and followed by whitespace and then has a script wins.
+ */
+function matchPowershellFile(command: string): { shell: string; prefix: string; script: string; suffix: string } | undefined {
+  const shell = POWERSHELL_SHELL.exec(command);
+  if (!shell) return undefined;
+  const shellEnd = shell[0].length;
+  const flag = /-File(?=\s)/gi;
+  flag.lastIndex = shellEnd;
+  for (let m = flag.exec(command); m !== null; m = flag.exec(command)) {
+    let prefixEnd = m.index;
+    while (prefixEnd > shellEnd && /\s/.test(command[prefixEnd - 1])) prefixEnd -= 1;
+    if (prefixEnd === m.index) continue; // `-File` needs whitespace before it
+    let scriptStart = m.index + m[0].length;
+    while (scriptStart < command.length && /\s/.test(command[scriptStart])) scriptStart += 1;
+    if (scriptStart >= command.length) break;
+    const quote = command[scriptStart];
+    let scriptEnd = -1;
+    if (quote === '"' || quote === "'") {
+      const close = command.indexOf(quote, scriptStart + 1);
+      if (close > scriptStart + 1) scriptEnd = close + 1;
+    }
+    if (scriptEnd === -1) {
+      scriptEnd = scriptStart;
+      while (scriptEnd < command.length && !/\s/.test(command[scriptEnd])) scriptEnd += 1;
+    }
+    return {
+      shell: shell[1],
+      prefix: command.slice(shellEnd, prefixEnd),
+      script: command.slice(scriptStart, scriptEnd),
+      suffix: command.slice(scriptEnd)
+    };
+  }
+  return undefined;
+}
+
 export function resolveDeliveryPublishCommand(publishCommand: string, worktreePath: string): string {
   const trimmed = publishCommand.trim();
   if (!trimmed) {
     return trimmed;
   }
 
-  const powershellFileMatch = /^(?<shell>pwsh|powershell(?:\.exe)?)(?<prefix>[\s\S]*?)\s+-File\s+(?<script>"[^"]+"|'[^']+'|[^\s]+)(?<suffix>[\s\S]*)$/i.exec(trimmed);
-  if (!powershellFileMatch?.groups) {
+  const powershellFileMatch = matchPowershellFile(trimmed);
+  if (!powershellFileMatch) {
     return trimmed;
   }
 
-  const scriptPath = stripMatchingQuotes(powershellFileMatch.groups.script.trim());
+  const scriptPath = stripMatchingQuotes(powershellFileMatch.script.trim());
   // This builds a PowerShell command line for a Windows delivery runner, so path
   // joins must use Windows semantics even when the orchestrator runs on Linux or
   // macOS — `path.resolve` on a posix host would mangle `.\scripts\x.ps1`.
   const resolvedScriptPath = path.win32.isAbsolute(scriptPath)
     ? scriptPath
     : path.win32.resolve(worktreePath, scriptPath);
-  const suffix = powershellFileMatch.groups.suffix?.trim();
+  const suffix = powershellFileMatch.suffix?.trim();
 
   return [
-    `${powershellFileMatch.groups.shell}${powershellFileMatch.groups.prefix} -Command`,
+    `${powershellFileMatch.shell}${powershellFileMatch.prefix} -Command`,
     `"& { Set-Location -LiteralPath ${toPowerShellLiteral(worktreePath)}; & ${toPowerShellLiteral(resolvedScriptPath)}${suffix ? ` ${suffix}` : ''} }"`
   ].join(' ');
 }
@@ -185,7 +227,7 @@ const MODEL_SHORTHAND_MAP: Record<string, string> = {
 
 /** Normalise a raw model value from a ticket directive into a CLI model ID. */
 export function normalizeModelId(raw: string): string {
-  const trimmed = raw.trim().replace(/^`+|`+$/g, '').trim();
+  const trimmed = trimRepeatedChar(raw.trim(), '`').trim();
   if (!trimmed) {
     return '';
   }

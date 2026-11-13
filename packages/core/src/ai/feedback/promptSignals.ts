@@ -27,7 +27,34 @@ const EDIT_INTENT_PATTERN = /\b(implement|create|write|edit|modify|update|refact
 /** An imperative opening ("put…", "make…", "move…") is a request to change something even without a code verb. */
 const IMPERATIVE_START_PATTERN = /^(?:please\s+)?(put|move|make|do|change|set|replace|swap|convert|migrate|clean|tidy|improve|handle|sort|get|turn|use|hook|connect|finish|apply|bump|upgrade|tweak|adjust|align|place|insert|drop|stick|wrap|merge|split|deploy|run)\b/i;
 const READ_ONLY_INTENT_PATTERN = /\b(do not edit|don't edit|read[- ]only|without modifying|only analyze|just explain|investigate only)\b/i;
-const FILE_OR_PATH_ANCHOR_PATTERN = /(?:[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+|\b[A-Za-z0-9_-]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|css|html|py|go|rs|cs|dart)\b|`[^`]{2,80}`|@[A-Za-z0-9_./-]{3,})/;
+const BOUNDED_ANCHOR_PATTERN = /`[^`]{2,80}`|@[A-Za-z0-9_./-]{3,}/;
+const FILE_EXTENSION_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|css|html|py|go|rs|cs|dart)\b/g;
+const isPathStem = (ch: string | undefined): boolean => ch !== undefined && /[A-Za-z0-9_.-]/.test(ch);
+const isNameChar = (ch: string | undefined): boolean => ch !== undefined && /[A-Za-z0-9_-]/.test(ch);
+
+/**
+ * Whether the text names a file or path (`src/app.ts`, `app.ts`, `` `x` ``, `@x`).
+ * Linear scanner for what was one alternation of unbounded runs
+ * (`[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+`, `\b[A-Za-z0-9_-]+\.(?:ts|...)\b`) that rescanned
+ * every run from each start position.
+ */
+export function hasFileOrPathAnchor(text: string): boolean {
+  if (BOUNDED_ANCHOR_PATTERN.test(text)) return true;
+  // `dir/file`: a slash with a path-ish character before it and one after it.
+  for (let i = text.indexOf('/'); i !== -1; i = text.indexOf('/', i + 1)) {
+    if (i > 0 && isPathStem(text[i - 1]) && i + 1 < text.length && (isPathStem(text[i + 1]) || text[i + 1] === '/')) return true;
+  }
+  // `name.ext`: a run of name characters containing a word character, then a known extension.
+  const ext = new RegExp(FILE_EXTENSION_PATTERN.source, 'g');
+  for (let m = ext.exec(text); m !== null; m = ext.exec(text)) {
+    let hasWord = false;
+    for (let i = m.index - 1; i >= 0 && isNameChar(text[i]); i -= 1) {
+      if (text[i] !== '-') { hasWord = true; break; }
+    }
+    if (hasWord) return true;
+  }
+  return false;
+}
 const TICKET_ANCHOR_PATTERN = /\b(?:FX-[A-Z]+-\d+|TASK-\d+|[A-Z]{2,10}-\d+|#\d+)\b/;
 const VERIFICATION_PATTERN = /\b(test|tests|unit test|e2e|playwright|verify|verification|check-types|typecheck|compile|build|lint|assert|npm run|node --test)\b/i;
 const QUESTION_LEAD_PATTERN = /^(how|what|why|where|which|who|when|does|is|are|should|(?:can|could) you (?:explain|tell me|describe)|explain|tell me|describe)\b/i;
@@ -122,7 +149,7 @@ export function analyzePromptSignals(input: {
     : heuristicIntent;
   const hasEditIntent = hasActionIntent(text);
   const namesKnownSymbol = Boolean(input.workspaceHints?.symbols?.some(symbol => symbol.found));
-  const hasScopeAnchor = FILE_OR_PATH_ANCHOR_PATTERN.test(text) || TICKET_ANCHOR_PATTERN.test(text) || namesKnownSymbol;
+  const hasScopeAnchor = hasFileOrPathAnchor(text) || TICKET_ANCHOR_PATTERN.test(text) || namesKnownSymbol;
   const hasVerificationClause = VERIFICATION_PATTERN.test(text);
   const inheritsContext = hasPriorTurns && (intent === 'follow-up' || answers?.kind === 'conversation');
   const isQuestionLike = intent === 'question' || intent === 'review';
