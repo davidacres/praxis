@@ -64,6 +64,7 @@ import {
   writeIdeaTranscriptToMarkdownFile
 } from './markdownStatusWriter';
 import { generateIssueMarkdown, type IssueType } from './markdownTemplate';
+import { trimEdgeChars } from '../text/linearText';
 
 // ── Workflow ────────────────────────────────────────────────────────
 
@@ -126,9 +127,8 @@ function slugifyPathSegment(value: string): string {
     .normalize('NFKD')
     .replace(/[^\x00-\x7F]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'item';
+    .replace(/[^a-z0-9]+/g, '-');
+  return trimEdgeChars(slug, '-') || 'item';
 }
 
 function buildFeatureDirectoryName(featureId: number, summary: string): string {

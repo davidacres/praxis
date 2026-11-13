@@ -75,9 +75,20 @@ export async function writeStatusToMarkdownFile(
 function writeFrontMatterStatus(content: string, newPlanStatus: string): string {
   const block = /^(---[ \t]*\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n|$))/.exec(content);
   if (!block) return content;
-  const statusRe = /^(status:[ \t]*)(["']?).*?\2[ \t]*$/m;
+  // The value is taken to the end of the line and unpacked by hand: a single regex with `.*?` beside
+  // `[ \t]*` backtracked quadratically on a long run of spaces.
+  const statusRe = /^status:(.*)$/m;
   if (!statusRe.test(block[2])) return content;
-  const body = block[2].replace(statusRe, `$1$2${newPlanStatus}$2`);
+  const body = block[2].replace(statusRe, (_match, rest: string) => {
+    let valueStart = 0;
+    while (valueStart < rest.length && (rest[valueStart] === ' ' || rest[valueStart] === '\t')) valueStart++;
+    let valueEnd = rest.length;
+    while (valueEnd > valueStart && (rest[valueEnd - 1] === ' ' || rest[valueEnd - 1] === '\t')) valueEnd--;
+    const first = rest[valueStart];
+    // A quote is kept only when the value both opens and closes with the same one.
+    const quote = (first === '"' || first === "'") && valueEnd - valueStart >= 2 && rest[valueEnd - 1] === first ? first : '';
+    return `status:${rest.slice(0, valueStart)}${quote}${newPlanStatus}${quote}`;
+  });
   return block[1] + body + block[3] + content.slice(block[0].length);
 }
 
