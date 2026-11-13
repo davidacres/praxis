@@ -349,6 +349,7 @@ pub async fn thumbnail(app: &AppHandle, html: &str) -> Option<String> {
     )
     .parse()
     .ok()?;
+    let may_navigate = crate::application::html_preview::preview_navigation_guard();
     let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
     let sender = Mutex::new(Some(sender));
     let window = tauri::WebviewWindowBuilder::new(
@@ -360,6 +361,7 @@ pub async fn thumbnail(app: &AppHandle, html: &str) -> Option<String> {
     .visible(false)
     .focused(false)
     .skip_taskbar(true)
+    .on_navigation(move |target| may_navigate(target.as_str()))
     .on_page_load(move |_, payload| {
         if matches!(payload.event(), PageLoadEvent::Finished)
             && let Some(sender) = sender.lock().ok().and_then(|mut s| s.take())

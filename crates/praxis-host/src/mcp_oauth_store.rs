@@ -58,7 +58,9 @@ impl OAuthTokens {
             expires_at_ms: response["expires_in"]
                 .as_u64()
                 .or_else(|| response["expires_in"].as_str().and_then(|s| s.parse().ok()))
-                .map(|seconds| now_ms + seconds * 1000),
+                // The server chooses this number: an absurd one must not overflow (a panic in a
+                // debug build, a wrapped expiry in the past in a release one).
+                .map(|seconds| now_ms.saturating_add(seconds.saturating_mul(1000))),
         })
     }
 
@@ -308,5 +310,12 @@ mod tests {
         let next = OAuthTokens::from_response(&rotated, Some("old"), 0).unwrap();
         assert_eq!(next.refresh_token.as_deref(), Some("r3"));
         assert!(!next.needs_refresh(u64::MAX / 2));
+    }
+
+    #[test]
+    fn an_absurd_expires_in_saturates_instead_of_overflowing() {
+        let response = serde_json::json!({"access_token": "a", "expires_in": u64::MAX});
+        let tokens = OAuthTokens::from_response(&response, None, 1_000).unwrap();
+        assert_eq!(tokens.expires_at_ms, Some(u64::MAX));
     }
 }

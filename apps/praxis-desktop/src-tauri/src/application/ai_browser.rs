@@ -183,13 +183,47 @@ fn parse_page(url: &str, html: &str) -> Page {
     }
 }
 
-async fn load(url: &str) -> Result<Page, String> {
-    if let Some(reason) = blocked_browser_url_reason(url, allow_private_hosts()) {
-        return Err(reason);
+/// The most of a page the fetcher reads; past this the rest is dropped (only text is kept anyway).
+const MAX_BODY_BYTES: usize = 5 * 1024 * 1024;
+const MAX_REDIRECTS: usize = 5;
+
+/// Follows a redirect only to a destination the browser could have been sent to directly. The
+/// final URL alone is not enough: every hop is a request, so a public page redirecting to a
+/// loopback or private address would have that request made before the end was checked.
+fn redirect_policy(allow_private: bool) -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            attempt.error("too many redirects")
+        } else if let Some(reason) =
+            blocked_browser_url_reason(attempt.url().as_str(), allow_private)
+        {
+            attempt.error(reason)
+        } else {
+            attempt.follow()
+        }
+    })
+}
+
+/// The body as text, reading no more than [`MAX_BODY_BYTES`].
+async fn bounded_text(mut response: reqwest::Response) -> Result<String, String> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        let room = MAX_BODY_BYTES - body.len();
+        body.extend_from_slice(&chunk[..chunk.len().min(room)]);
+        if body.len() >= MAX_BODY_BYTES {
+            break;
+        }
     }
+    Ok(String::from_utf8_lossy(&body).into_owned())
+}
+
+async fn load(url: &str) -> Result<Page, String> {
+    let allow_private = allow_private_hosts();
+    // Resolves the host too, so a public name that points at a private address is refused.
+    crate::webviews::resolved_browser_url_block_reason(url, allow_private).await?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
-        .redirect(reqwest::redirect::Policy::limited(5))
+        .redirect(redirect_policy(allow_private))
         .user_agent("Praxis-Browser")
         .build()
         .map_err(|e| e.to_string())?;
@@ -199,10 +233,10 @@ async fn load(url: &str) -> Result<Page, String> {
         .await
         .map_err(|e| format!("Could not load {url}: {e}"))?;
     let final_url = response.url().to_string();
-    if let Some(reason) = blocked_browser_url_reason(&final_url, allow_private_hosts()) {
+    if let Some(reason) = blocked_browser_url_reason(&final_url, allow_private) {
         return Err(reason);
     }
-    let body = response.text().await.map_err(|e| e.to_string())?;
+    let body = bounded_text(response).await?;
     Ok(parse_page(&final_url, &body))
 }
 
@@ -629,5 +663,77 @@ pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, St
     match result {
         Ok(text) => (true, text),
         Err(message) => (false, message),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    /// Serves one canned response on loopback and returns its address.
+    fn serve_once(response: Vec<u8>) -> std::net::SocketAddr {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut request = [0u8; 2048];
+                let _ = stream.read(&mut request);
+                let _ = stream.write_all(&response);
+            }
+        });
+        address
+    }
+
+    #[tokio::test]
+    async fn a_redirect_to_a_private_address_is_never_requested() {
+        // The private destination records whether anything reached it.
+        let reached = Arc::new(AtomicBool::new(false));
+        let inner = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let inner_address = inner.local_addr().expect("address");
+        let flag = Arc::clone(&reached);
+        std::thread::spawn(move || {
+            inner.set_nonblocking(false).ok();
+            if inner.accept().is_ok() {
+                flag.store(true, Ordering::SeqCst);
+            }
+        });
+        let outer = serve_once(
+            format!(
+                "HTTP/1.1 302 Found\r\nLocation: http://{inner_address}/admin\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .into_bytes(),
+        );
+        // The first hop stands in for a public page (it is fetched directly, past `load`'s own
+        // check); the redirect policy alone must stop the second.
+        let client = reqwest::Client::builder()
+            .redirect(redirect_policy(false))
+            .build()
+            .expect("client");
+        let result = client.get(format!("http://{outer}/")).send().await;
+        assert!(result.is_err(), "the redirect was followed");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            !reached.load(Ordering::SeqCst),
+            "the private host was requested"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_huge_page_is_read_only_up_to_the_cap() {
+        let size = MAX_BODY_BYTES + 512 * 1024;
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {size}\r\nConnection: close\r\n\r\n"
+        )
+        .into_bytes();
+        response.extend(std::iter::repeat_n(b'a', size));
+        let address = serve_once(response);
+        let response = reqwest::get(format!("http://{address}/"))
+            .await
+            .expect("response");
+        let text = bounded_text(response).await.expect("text");
+        assert_eq!(text.len(), MAX_BODY_BYTES);
     }
 }

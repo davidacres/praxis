@@ -23,8 +23,12 @@ static CSP_META: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)<meta\b[^>]*\bhttp-equiv\s*=\s*["']?content-security-policy\b[^>]*>"#)
         .expect("csp regex")
 });
-static HEAD: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)<head\b[^>]*>").expect("head regex"));
+/// A leading byte-order mark, whitespace and comments, then a doctype: the only things that may
+/// precede the policy. Anything else (a `<script>` before `<head>`, or a `<head>` hidden inside a
+/// comment) would run before the policy exists, or bury it where it never applies.
+static DOCTYPE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)\A\u{FEFF}?(?:\s|<!--.*?-->)*<!doctype\b[^>]*>").expect("doctype regex")
+});
 
 pub fn is_html_path(path: &str) -> bool {
     let bare = path
@@ -62,11 +66,41 @@ pub fn apply_policy(source: &str) -> String {
     let policy = format!(
         "<meta http-equiv=\"Content-Security-Policy\" content=\"{PREVIEW_CSP}\">{BOOTSTRAP}"
     );
-    match HEAD.find(&stripped) {
-        Some(m) => format!("{}{}{}", &stripped[..m.end()], policy, &stripped[m.end()..]),
-        None => format!(
-            "<!doctype html><html><head><meta charset=\"utf-8\">{policy}</head><body>{stripped}</body></html>"
-        ),
+    // The policy is the first element the parser meets, so it opens the (implied) `<head>` and is in
+    // force before any of the source's own markup. The source's `<html>`/`<head>` tags that follow
+    // are merged into the ones already open, as the HTML parser always does.
+    let (doctype, rest) = match DOCTYPE.find(&stripped) {
+        Some(m) => (&stripped[..m.end()], &stripped[m.end()..]),
+        None => ("<!doctype html>", &stripped[..]),
+    };
+    format!("{doctype}<meta charset=\"utf-8\">{policy}{rest}")
+}
+
+/// Whether a preview window may go to `target`. It shows the one document it was opened with
+/// (and in-page anchors on it); a script setting `location` to anything else is refused, since a
+/// navigation is a way out of the no-network policy (the data rides in the URL).
+pub fn preview_may_navigate(initial: &str, target: &str) -> bool {
+    let without_fragment = |url: &str| url.split('#').next().unwrap_or_default().to_owned();
+    target == "about:blank" || without_fragment(target) == without_fragment(initial)
+}
+
+/// A navigation filter for a preview window: the first `data:` document it loads is the preview
+/// (taken as the engine reports it, so no re-serialisation can make the preview refuse itself), and
+/// from then on [`preview_may_navigate`] decides.
+pub fn preview_navigation_guard() -> impl Fn(&str) -> bool + Send + 'static {
+    let document = std::sync::Mutex::new(None::<String>);
+    move |target: &str| {
+        let mut document = document
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match document.as_deref() {
+            Some(initial) => preview_may_navigate(initial, target),
+            None if target.starts_with("data:") => {
+                *document = Some(target.to_owned());
+                true
+            }
+            None => target == "about:blank",
+        }
     }
 }
 
@@ -85,7 +119,64 @@ mod tests {
 
     #[test]
     fn wraps_a_fragment_and_checks_extensions() {
-        assert!(apply_policy("<h1>x</h1>").contains("<body><h1>x</h1></body>"));
+        let out = apply_policy("<h1>x</h1>");
+        assert!(out.starts_with("<!doctype html><meta charset=\"utf-8\"><meta http-equiv"));
+        assert!(out.ends_with("</script><h1>x</h1>"));
         assert!(is_html_path("a/b.HTML?x") && !is_html_path("a.txt"));
+    }
+
+    fn policy_offset(out: &str) -> usize {
+        out.find("Content-Security-Policy").expect("policy present")
+    }
+
+    #[test]
+    fn the_policy_precedes_a_script_placed_before_head() {
+        // A script ahead of `<head>` used to run before the policy was parsed, with full network.
+        let source = "<!DOCTYPE html><script>fetch('https://evil.test/')</script><html><head></head><body>x</body></html>";
+        let out = apply_policy(source);
+        assert!(out.starts_with("<!DOCTYPE html><meta"));
+        assert!(policy_offset(&out) < out.find("evil.test").expect("script kept"));
+    }
+
+    #[test]
+    fn a_head_inside_a_comment_cannot_swallow_the_policy() {
+        // The policy used to be spliced in after the first `<head`, even one inside a comment,
+        // where it is inert text and the page ran with no policy at all.
+        let source = "<!-- <head> --><script>new Image().src='https://evil.test/'</script>";
+        let out = apply_policy(source);
+        assert!(policy_offset(&out) < out.find("<!--").expect("comment kept"));
+    }
+
+    #[test]
+    fn a_leading_comment_and_doctype_stay_ahead_of_the_policy() {
+        let out = apply_policy("\u{FEFF}<!-- hi -->\n<!doctype html><html><head></head></html>");
+        assert!(out.starts_with("\u{FEFF}<!-- hi -->\n<!doctype html><meta charset"));
+    }
+
+    #[test]
+    fn a_preview_only_navigates_within_its_own_document() {
+        let initial = "data:text/html;charset=utf-8,%3Ch1%3Ex";
+        assert!(preview_may_navigate(initial, initial));
+        assert!(preview_may_navigate(initial, &format!("{initial}#section")));
+        assert!(preview_may_navigate(initial, "about:blank"));
+        assert!(!preview_may_navigate(
+            initial,
+            "https://evil.test/?d=secret"
+        ));
+        assert!(!preview_may_navigate(
+            initial,
+            "data:text/html,<script>fetch('x')</script>"
+        ));
+    }
+
+    #[test]
+    fn the_guard_admits_its_first_document_and_nothing_else() {
+        let guard = preview_navigation_guard();
+        assert!(guard("about:blank"));
+        assert!(!guard("https://evil.test/"), "nothing remote, even first");
+        assert!(guard("data:text/html,doc"));
+        assert!(guard("data:text/html,doc#a"));
+        assert!(!guard("data:text/html,other"));
+        assert!(!guard("https://evil.test/?d=1"));
     }
 }

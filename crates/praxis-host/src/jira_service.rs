@@ -132,10 +132,13 @@ fn b64url(bytes: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn random_token(bytes: usize) -> String {
+/// A random URL-safe token. Fails rather than hand back the zeroed buffer: a PKCE verifier or an
+/// OAuth `state` that is all zeros is a known value an attacker can forge a callback with.
+fn random_token(bytes: usize) -> Result<String, String> {
     let mut buffer = vec![0u8; bytes];
-    let _ = getrandom::getrandom(&mut buffer);
-    b64url(&buffer)
+    getrandom::getrandom(&mut buffer)
+        .map_err(|error| format!("The OS random source is unavailable: {error}"))?;
+    Ok(b64url(&buffer))
 }
 
 /// Everything one MCP session over HTTP needs, including the OAuth loop on a 401.
@@ -528,11 +531,10 @@ impl HttpSession {
             )
         };
 
-        let verifier = random_token(32);
+        let verifier = random_token(32)?;
         let challenge_code = b64url(&Sha256::digest(verifier.as_bytes()));
-        let state = random_token(16);
-        let mut authorize_url =
-            url::Url::parse(&authorization_endpoint).map_err(|e| e.to_string())?;
+        let state = random_token(16)?;
+        let mut authorize_url = openable_authorization_url(&authorization_endpoint)?;
         authorize_url
             .query_pairs_mut()
             .append_pair("response_type", "code")
@@ -689,6 +691,30 @@ impl HttpSession {
         }
         self.session_id = None;
         Ok(())
+    }
+}
+
+/// The authorisation endpoint as a URL that is safe to hand to the OS opener.
+///
+/// The endpoint usually comes from the server's own discovery metadata, and `open` (macOS),
+/// `explorer` (Windows) and `xdg-open` act on any scheme: a `file:` URL to an `.app` or a script
+/// would be launched, an `smb:` one mounts a share. Only a web page is a sign-in page: `https`, or
+/// `http` on the loopback interface for a local development server.
+pub(crate) fn openable_authorization_url(raw: &str) -> Result<url::Url, String> {
+    let url = url::Url::parse(raw)
+        .map_err(|e| format!("The authorisation endpoint is not a valid URL: {e}"))?;
+    let loopback = match url.host() {
+        Some(url::Host::Domain(name)) => name.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    };
+    match url.scheme() {
+        "https" if url.host().is_some() => Ok(url),
+        "http" if loopback => Ok(url),
+        scheme => Err(format!(
+            "Refusing to open an authorisation endpoint with the \"{scheme}\" scheme; it must be an https URL."
+        )),
     }
 }
 
@@ -1985,6 +2011,41 @@ pub fn unconfigured() -> Arc<dyn IssueTrackerService> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_web_sign_in_page_is_handed_to_the_os_opener() {
+        for allowed in [
+            "https://auth.atlassian.com/authorize",
+            "http://127.0.0.1:8080/authorize",
+            "http://localhost:3000/oauth/authorize",
+            "http://[::1]:9000/authorize",
+        ] {
+            assert!(openable_authorization_url(allowed).is_ok(), "{allowed}");
+        }
+        // Discovery metadata is the server's to write; none of these may reach `open`.
+        for refused in [
+            "file:///Applications/Calculator.app",
+            "file:///tmp/payload.command",
+            "smb://attacker.test/share",
+            "javascript:alert(1)",
+            "http://auth.example.test/authorize",
+            "x-apple.systempreferences:com.apple.preference.security",
+            "not a url",
+        ] {
+            assert!(openable_authorization_url(refused).is_err(), "{refused}");
+        }
+    }
+
+    #[test]
+    fn random_tokens_are_distinct_and_url_safe() {
+        let a = random_token(32).unwrap();
+        let b = random_token(32).unwrap();
+        assert_ne!(a, b);
+        assert!(
+            a.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        );
+    }
 
     #[test]
     fn callback_state_gates_the_authorisation_code() {

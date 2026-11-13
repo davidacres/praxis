@@ -116,6 +116,9 @@ pub fn dispose_for_session(host: &HostContext, dir: &std::path::Path, key: &str)
     }
 }
 
+/// The largest JSON-RPC body accepted. Browser tool calls are a URL or a few words of text.
+const MAX_BODY: usize = 1_000_000;
+
 async fn read_request(
     stream: &mut TcpStream,
 ) -> Option<(String, BTreeMap<String, String>, Vec<u8>)> {
@@ -145,6 +148,11 @@ async fn read_request(
         .get("content-length")
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
+    // The body is read before the bearer token is checked, so its size is bounded here: any local
+    // process (or a web page posting to loopback) could otherwise make the host buffer gigabytes.
+    if length > MAX_BODY {
+        return None;
+    }
     let mut body = buffer[head_end + 4..].to_vec();
     while body.len() < length {
         let read = stream.read(&mut chunk).await.ok()?;
@@ -315,4 +323,47 @@ async fn call_tool(registration: &Registration, params: &Value) -> Value {
         );
     }
     tool_result(ok, text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn request_over_loopback(raw: Vec<u8>) -> Option<(String, Vec<u8>)> {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let address = listener.local_addr().expect("address");
+        let client = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(address).await.expect("connect");
+            let _ = stream.write_all(&raw).await;
+            stream
+        });
+        let (mut stream, _) = listener.accept().await.expect("accept");
+        let read = read_request(&mut stream).await;
+        drop(client.await);
+        read.map(|(line, _, body)| (line, body))
+    }
+
+    #[tokio::test]
+    async fn an_oversized_body_is_refused_before_it_is_buffered() {
+        // Pre-auth: no token is needed to declare a length, so the declared length is capped.
+        let raw = format!(
+            "POST /mcp HTTP/1.1\r\nContent-Length: {}\r\n\r\n{{}}",
+            MAX_BODY + 1
+        );
+        assert!(request_over_loopback(raw.into_bytes()).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn an_ordinary_request_is_read_whole() {
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
+        let raw = format!(
+            "POST /mcp HTTP/1.1\r\nAuthorization: Bearer x\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        let (line, read) = request_over_loopback(raw.into_bytes())
+            .await
+            .expect("request");
+        assert!(line.starts_with("POST /mcp"));
+        assert_eq!(read, body.as_bytes());
+    }
 }
