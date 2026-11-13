@@ -7,6 +7,57 @@ use serde_json::{Value, json};
 use super::storage::{parse, read, write_atomic};
 use super::{Result, failure, now, text};
 
+/// The thumbnail of a chat session's HTML artifact, cached by the page's own content so an edit
+/// draws a fresh one. Null for anything that is not a readable HTML file in the session workspace.
+fn artifact_page_thumbnail(user_data_dir: &Path, args: &[Value]) -> Result<Value> {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use sha2::{Digest, Sha256};
+    const MAX_BYTES: usize = 2 * 1024 * 1024;
+    let file = args.get(1).and_then(Value::as_str).unwrap_or_default();
+    if !super::html_preview::is_html_path(file) {
+        return Ok(Value::Null);
+    }
+    let Ok(source) =
+        super::ai_session_ops::read_artifact_text(user_data_dir, &args[..2.min(args.len())])
+    else {
+        return Ok(Value::Null);
+    };
+    let source = source.as_str().unwrap_or_default();
+    if source.len() > MAX_BYTES {
+        return Ok(Value::Null);
+    }
+    let key = format!("{:x}", Sha256::digest(source.as_bytes()));
+    let cache = user_data_dir
+        .join("artifact-thumbnails")
+        .join(format!("ai-{}.jpg", &key[..40]));
+    if let Ok(bytes) = std::fs::read(&cache) {
+        return Ok(json!(format!(
+            "data:image/jpeg;base64,{}",
+            BASE64.encode(bytes)
+        )));
+    }
+    match args.get(2) {
+        Some(request) if request["prepare"] == true => {
+            Ok(json!({ "html": super::html_preview::apply_policy(source) }))
+        }
+        Some(Value::String(drawn)) => {
+            if let Some(encoded) = drawn.strip_prefix("data:image/jpeg;base64,")
+                && let Ok(bytes) = BASE64.decode(encoded)
+                && bytes.len() <= MAX_BYTES
+            {
+                if let Some(dir) = cache.parent() {
+                    std::fs::create_dir_all(dir).map_err(failure)?;
+                }
+                std::fs::write(&cache, &bytes).map_err(failure)?;
+                return Ok(json!(drawn));
+            }
+            Ok(Value::Null)
+        }
+        _ => Ok(Value::Null),
+    }
+}
+
 fn analysis_file(user_data_dir: &Path) -> std::path::PathBuf {
     user_data_dir.join("ai-analysis.json")
 }
@@ -468,8 +519,9 @@ pub fn dispatch(
                 "html": super::html_preview::apply_policy(source.as_str().unwrap_or_default()),
             }))
         }
-        // A thumbnail is decoration: null unless the shell has already drawn and cached it.
-        "ai:artifactPageThumbnail" => Ok(Value::Null),
+        // A thumbnail is decoration: the cached one if there is one; otherwise the shell asks for the
+        // page to draw (`{ prepare: true }`) and offers the JPEG back to be cached.
+        "ai:artifactPageThumbnail" => artifact_page_thumbnail(user_data_dir, args),
 
         // 5. Workflow packs & ticket review
         "ai:listWorkflowPacks" => Ok(json!(super::workflow_packs::discover(

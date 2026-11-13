@@ -343,7 +343,7 @@ async fn praxis_rpc(
             });
             Ok(Value::Null)
         }
-        "artifacts:pageThumbnail" => {
+        "artifacts:pageThumbnail" | "ai:artifactPageThumbnail" => {
             // The host serves a cached thumbnail; on a miss the shell draws the page and hands the
             // JPEG back so the host can cache it.
             let cached = invoke_host(state.host.clone(), channel.clone(), args.clone()).await?;

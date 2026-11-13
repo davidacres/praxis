@@ -2519,3 +2519,78 @@ fn phone_reads_and_commands_run_on_the_desktops_own_services() {
         1
     );
 }
+
+#[test]
+fn a_chat_artifact_thumbnail_is_asked_for_drawn_offered_and_then_served_from_the_cache() {
+    let profile = Profile::new();
+    let workspace = profile.root.join("session-workspace");
+    std::fs::create_dir_all(workspace.join("designs")).expect("workspace");
+    std::fs::write(
+        workspace.join("designs/landing.html"),
+        "<!doctype html><h1>Landing</h1>",
+    )
+    .expect("page");
+    std::fs::write(workspace.join("notes.txt"), "not a page").expect("text");
+    super::session_store::store(&profile.root)
+        .put(
+            "SESSION-9",
+            json!({
+                "issueKey": "SESSION-9",
+                "sessionId": "sess-9",
+                "state": "completed",
+                "workingDirectory": workspace.to_string_lossy(),
+            }),
+        )
+        .expect("session");
+    let ask = |args: Vec<Value>| profile.rpc("ai:artifactPageThumbnail", args);
+
+    // Nothing is drawn yet, so the shell is asked for the page under the restricted policy.
+    assert_eq!(
+        ask(vec![json!("SESSION-9"), json!("designs/landing.html")]),
+        Value::Null
+    );
+    let prepared = ask(vec![
+        json!("SESSION-9"),
+        json!("designs/landing.html"),
+        json!({ "prepare": true }),
+    ]);
+    let html = prepared["html"].as_str().expect("the page to draw");
+    assert!(html.contains("Content-Security-Policy") && html.contains("Landing"));
+
+    // The drawn JPEG is cached and then served without asking again.
+    let drawn = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+    assert_eq!(
+        ask(vec![
+            json!("SESSION-9"),
+            json!("designs/landing.html"),
+            json!(drawn)
+        ]),
+        json!(drawn)
+    );
+    assert_eq!(
+        ask(vec![json!("SESSION-9"), json!("designs/landing.html")]),
+        json!(drawn)
+    );
+
+    // Only HTML inside the session workspace is drawn.
+    assert_eq!(
+        ask(vec![
+            json!("SESSION-9"),
+            json!("notes.txt"),
+            json!({ "prepare": true })
+        ]),
+        Value::Null
+    );
+    assert_eq!(
+        ask(vec![
+            json!("SESSION-9"),
+            json!("../outside.html"),
+            json!({ "prepare": true })
+        ]),
+        Value::Null
+    );
+    assert_eq!(
+        ask(vec![json!("NO-SUCH"), json!("designs/landing.html")]),
+        Value::Null
+    );
+}
