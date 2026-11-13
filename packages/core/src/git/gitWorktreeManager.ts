@@ -32,6 +32,13 @@ export interface PreparedWorktree {
   baseBranch: string;
 }
 
+/** Refuse branch names git could parse as options or that are not plain ref names. */
+export function assertSafeBranchName(name: string): void {
+  if (!name || name.startsWith('-') || /[\s\0~^:?*[\\]/.test(name) || name.includes('..')) {
+    throw new Error(`Refusing unsafe branch name: ${JSON.stringify(name)}`);
+  }
+}
+
 async function readStdout(command: string, args: string[], cwd: string): Promise<string> {
   const { stdout } = await execFile(command, args, {
     cwd,
@@ -302,6 +309,10 @@ export class GitWorktreeManager {
     subTaskWorktreePath: string,
     options?: { gitExtraArgs?: string[] }
   ): Promise<{ mergeCommit: string }> {
+    // A branch name beginning with '-' would be parsed by git as an option
+    // (e.g. `--upload-pack=<cmd>` on pull/fetch), so refuse it before any git call.
+    assertSafeBranchName(subTaskBranch);
+    assertSafeBranchName(featureBranch);
     const repoRoot = await readStdout('git', ['rev-parse', '--show-toplevel'], workspacePath);
 
     // Fetch latest to ensure we have current state of both branches

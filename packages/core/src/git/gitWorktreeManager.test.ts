@@ -8,12 +8,20 @@ import * as util from 'node:util';
 import {
   GitWorktreeManager,
   WorktreeConflictError,
+  assertSafeBranchName,
   ensureWorktreesExcluded,
   resolveRepoWorktreeRoot
 } from './gitWorktreeManager';
 
 const execFile = util.promisify(execFileCallback);
 const silentLogger = { appendLine: () => {} };
+
+test('assertSafeBranchName refuses option-like and malformed branch names', () => {
+  for (const bad of ['--upload-pack=touch /tmp/x', '-f', '', 'a b', 'a..b', 'a:b']) {
+    assert.throws(() => assertSafeBranchName(bad), /unsafe branch name/);
+  }
+  assert.doesNotThrow(() => assertSafeBranchName('feature/FX-123-thing'));
+});
 
 test('resolveRepoWorktreeRoot stores worktrees under the repository', () => {
   const repoRoot = path.join(path.parse(path.resolve('.')).root, 'dev', 'praxis');
