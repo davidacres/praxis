@@ -77,11 +77,12 @@ test('every enabled provider gets its own card, whatever each one reports', asyn
   const page = app.window;
   await openAiUsage(page);
 
-  // The section renders once the slowest provider answers, and Codex and Claude
-  // Code each spawn their own CLI (Claude's `/usage` takes a few seconds cold).
+  // The section is there at once, but its cards arrive when the slowest provider answers, and Codex
+  // and Claude Code each spawn their own CLI (Claude's `/usage` takes a few seconds cold, longer
+  // when several workers start CLIs together), so each card is given the same generous wait.
   await expect(page.getByTestId('ai-usage-budgets-section')).toBeVisible({ timeout: 20_000 });
   for (const id of ['anthropic', 'gemini', 'codex-cli', 'claude-code-cli']) {
-    await expect(page.getByTestId(`ai-usage-budgets-card-${id}`)).toBeVisible();
+    await expect(page.getByTestId(`ai-usage-budgets-card-${id}`)).toBeVisible({ timeout: 20_000 });
   }
   // The batch itself succeeded, so there is no section-level error.
   await expect(page.getByTestId('ai-usage-budgets-error')).toHaveCount(0);
