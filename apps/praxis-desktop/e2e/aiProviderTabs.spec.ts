@@ -262,6 +262,9 @@ test('prompt analysis provider and model persist independently of other routing'
   const list = win.getByRole('listbox', { name: 'Prompt analysis model options' });
   await list.getByRole('textbox').fill('dedicated-clarity-model');
   await list.getByRole('option', { name: /Use “dedicated-clarity-model”/ }).click();
+  // The choice reaches the backend asynchronously, so wait for it to be saved before reading it back.
+  await expect.poll(async () => (await win.evaluate(() => window.praxis.settings.get())).ai.promptAnalysisModel)
+    .toBe('dedicated-clarity-model');
   const saved = await win.evaluate(() => window.praxis.settings.get());
   expect(saved.ai.promptAnalysisProvider).toBe('anthropic');
   expect(saved.ai.promptAnalysisModel).toBe('dedicated-clarity-model');
