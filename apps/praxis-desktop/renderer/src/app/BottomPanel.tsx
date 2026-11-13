@@ -233,8 +233,13 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     requestAnimationFrame(() => { fitTerminal(); terminal.focus(); });
     const observer = new ResizeObserver(fitTerminal);
     observer.observe(host);
+    // Keystrokes are separate async calls and the backend does not promise to handle concurrent
+    // calls in arrival order (typing "$TERM" quickly arrived as "$TREM"), so chain them: each
+    // write starts only once the previous one has been accepted.
+    let writeQueue: Promise<unknown> = Promise.resolve();
     const input = terminal.onData(data => {
-      void window.praxis.terminal.write(activeId, data)
+      writeQueue = writeQueue
+        .then(() => window.praxis.terminal.write(activeId, data))
         .catch(error => terminal.writeln(`\r\n[terminal] ${String(error)}`));
     });
     const selection = terminal.onSelectionChange(() => {
