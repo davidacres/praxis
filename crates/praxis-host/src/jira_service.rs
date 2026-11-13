@@ -132,10 +132,13 @@ fn b64url(bytes: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn random_token(bytes: usize) -> String {
+/// A random URL-safe token. Fails rather than hand back the zeroed buffer: a PKCE verifier or an
+/// OAuth `state` that is all zeros is a known value an attacker can forge a callback with.
+fn random_token(bytes: usize) -> Result<String, String> {
     let mut buffer = vec![0u8; bytes];
-    let _ = getrandom::getrandom(&mut buffer);
-    b64url(&buffer)
+    getrandom::getrandom(&mut buffer)
+        .map_err(|error| format!("The OS random source is unavailable: {error}"))?;
+    Ok(b64url(&buffer))
 }
 
 /// Everything one MCP session over HTTP needs, including the OAuth loop on a 401.
@@ -528,9 +531,9 @@ impl HttpSession {
             )
         };
 
-        let verifier = random_token(32);
+        let verifier = random_token(32)?;
         let challenge_code = b64url(&Sha256::digest(verifier.as_bytes()));
-        let state = random_token(16);
+        let state = random_token(16)?;
         let mut authorize_url =
             url::Url::parse(&authorization_endpoint).map_err(|e| e.to_string())?;
         authorize_url

@@ -23,12 +23,21 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     let tmp = path.with_extension("tmp");
-    fs::write(&tmp, bytes).map_err(|error| error.to_string())?;
+    // Created 0600 rather than chmod-ed after the write, so the secrets are never readable by
+    // others, not even for the moment between the two. A stale temp file (perhaps left with wider
+    // permissions by an older build) is removed first so the mode applies to a new file.
+    let _ = fs::remove_file(&tmp);
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))
-            .map_err(|error| error.to_string())?;
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    {
+        use std::io::Write;
+        let mut file = options.open(&tmp).map_err(|error| error.to_string())?;
+        file.write_all(bytes).map_err(|error| error.to_string())?;
     }
     fs::rename(&tmp, path).map_err(|error| error.to_string())
 }
@@ -365,6 +374,26 @@ mod tests {
             fs::metadata(&path).expect("meta").permissions().mode() & 0o777,
             0o600
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_stale_permissive_temp_file_does_not_widen_the_written_secrets() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("praxis-secrets-tmp-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("secrets.json");
+        let tmp = path.with_extension("tmp");
+        fs::write(&tmp, "{}").expect("stale tmp");
+        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o644)).expect("chmod");
+        write_private(&path, br#"{"k":"v"}"#).expect("write");
+        assert_eq!(
+            fs::metadata(&path).expect("meta").permissions().mode() & 0o777,
+            0o600
+        );
+        assert!(!tmp.exists());
         let _ = fs::remove_dir_all(dir);
     }
 
