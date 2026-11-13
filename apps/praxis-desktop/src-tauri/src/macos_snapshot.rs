@@ -15,7 +15,7 @@ use block2::RcBlock;
 use objc2::MainThreadMarker;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSImage};
+use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSImage, NSWindow};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{NSDictionary, NSError, NSNumber, NSString};
 use objc2_web_kit::{WKSnapshotConfiguration, WKWebView};
@@ -117,4 +117,23 @@ pub async fn snapshot<R: Runtime>(
         Ok(Err(_)) => Err("The page snapshot was abandoned.".into()),
         Err(_) => Err("The page snapshot timed out.".into()),
     }
+}
+
+/// Makes a window all but invisible and untouchable while macOS still treats it as on screen.
+///
+/// A hidden or far off-screen window is never painted, so a snapshot of its page is blank. A window
+/// at 1% opacity that ignores the mouse is painted and cannot be seen or clicked.
+pub fn make_unseen<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    let Ok(ns_window) = window.ns_window() else {
+        return;
+    };
+    let ns_window = ns_window as usize;
+    let _ = window.run_on_main_thread(move || {
+        // SAFETY: this runs on the main thread, and the window it was taken from is kept alive by
+        // the caller until the snapshot is done.
+        let window: &NSWindow = unsafe { &*(ns_window as *const NSWindow) };
+        window.setAlphaValue(0.01);
+        window.setIgnoresMouseEvents(true);
+        window.orderBack(None);
+    });
 }

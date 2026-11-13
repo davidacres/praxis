@@ -311,14 +311,17 @@ async fn praxis_rpc(
             let prepared = invoke_host(state.host.clone(), channel, args).await?;
             let title = prepared["title"].as_str().unwrap_or("Preview").to_owned();
             let html = prepared["html"].as_str().unwrap_or_default();
-            let url = format!("data:text/html;charset=utf-8,{}", percent_encode(html));
-            let url: tauri::Url = url.parse().map_err(shell_error)?;
-            let may_navigate = application::html_preview::preview_navigation_guard();
+            // Loaded over loopback: a window opened on a `data:` URL is never painted.
+            let served =
+                application::html_preview::serve_document(html.to_owned()).map_err(shell_error)?;
+            let url: tauri::Url = served.url.parse().map_err(shell_error)?;
+            let may_navigate =
+                application::html_preview::served_navigation_guard(served.url.clone());
             let label = format!(
                 "html-preview-{}",
                 PREVIEW_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             );
-            tauri::WebviewWindowBuilder::new(
+            let preview = tauri::WebviewWindowBuilder::new(
                 window.app_handle(),
                 label,
                 tauri::WebviewUrl::External(url),
@@ -329,6 +332,15 @@ async fn praxis_rpc(
             .min_inner_size(560.0, 360.0)
             .build()
             .map_err(shell_error)?;
+            // The document is served for as long as the window is open.
+            let served = std::sync::Mutex::new(Some(served));
+            preview.on_window_event(move |event| {
+                if matches!(event, tauri::WindowEvent::Destroyed)
+                    && let Ok(mut held) = served.lock()
+                {
+                    held.take();
+                }
+            });
             Ok(Value::Null)
         }
         "artifacts:pageThumbnail" => {
@@ -356,19 +368,6 @@ async fn praxis_rpc(
 }
 
 static PREVIEW_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
-
-/// `encodeURIComponent` for a `data:` document: everything but unreserved characters is escaped.
-fn percent_encode(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() * 2);
-    for byte in text.bytes() {
-        if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
-            out.push(byte as char);
-        } else {
-            out.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    out
-}
 
 async fn invoke_host(
     host: praxis_host::HostContext,
@@ -508,6 +507,37 @@ fn main() {
                 app.handle().clone(),
             ));
             app.manage(state);
+            // Debug builds only: draw one HTML file the way the artifacts page does and write the JPEG,
+            // so the capture can be checked without a person at the screen.
+            #[cfg(debug_assertions)]
+            if let (Ok(input), Ok(output)) = (
+                std::env::var("PRAXIS_SELF_TEST_THUMBNAIL"),
+                std::env::var("PRAXIS_SELF_TEST_THUMBNAIL_OUT"),
+            ) {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Windows can only be created once the event loop is running.
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    let html = application::html_preview::apply_policy(
+                        &std::fs::read_to_string(&input).unwrap_or_default(),
+                    );
+                    let started = std::time::Instant::now();
+                    let drawn = native_browser::thumbnail(&handle, &html).await;
+                    let outcome = match drawn.as_deref().and_then(|u| u.split_once("base64,")) {
+                        Some((_, data)) => {
+                            use base64::Engine;
+                            let bytes = base64::engine::general_purpose::STANDARD
+                                .decode(data)
+                                .unwrap_or_default();
+                            let _ = std::fs::write(&output, &bytes);
+                            format!("drawn {} bytes in {:?}", bytes.len(), started.elapsed())
+                        }
+                        None => format!("no thumbnail after {:?}", started.elapsed()),
+                    };
+                    eprintln!("[self-test thumbnail] {outcome}");
+                    std::process::exit(0);
+                });
+            }
             app.set_menu(tauri::menu::Menu::default(app.handle())?)?;
             if let Ok(dev_url) = std::env::var("PRAXIS_DEV_SERVER_URL")
                 && let Some(main_window) = app.get_webview_window("main")

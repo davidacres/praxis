@@ -84,23 +84,90 @@ pub fn preview_may_navigate(initial: &str, target: &str) -> bool {
     target == "about:blank" || without_fragment(target) == without_fragment(initial)
 }
 
-/// A navigation filter for a preview window: the first `data:` document it loads is the preview
-/// (taken as the engine reports it, so no re-serialisation can make the preview refuse itself), and
-/// from then on [`preview_may_navigate`] decides.
-pub fn preview_navigation_guard() -> impl Fn(&str) -> bool + Send + 'static {
-    let document = std::sync::Mutex::new(None::<String>);
-    move |target: &str| {
-        let mut document = document
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        match document.as_deref() {
-            Some(initial) => preview_may_navigate(initial, target),
-            None if target.starts_with("data:") => {
-                *document = Some(target.to_owned());
-                true
-            }
-            None => target == "about:blank",
+/// One HTML document served from a loopback port, for as long as this value lives.
+///
+/// A window loaded from a `data:` URL stays blank in the platform webview (and is capped by URL
+/// length), so previews and thumbnails load the document over `http://127.0.0.1` instead. The path
+/// carries a random token, only that path is answered, and the server stops when this is dropped.
+pub struct ServedDocument {
+    pub url: String,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Drop for ServedDocument {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// How long a served document stays up even if nobody drops it.
+const SERVE_LIMIT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
+pub fn serve_document(html: String) -> std::io::Result<ServedDocument> {
+    use std::io::{Read, Write};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    listener.set_nonblocking(true)?;
+    let port = listener.local_addr()?.port();
+    let path = format!("/{}/", uuid::Uuid::new_v4().simple());
+    let stop = std::sync::Arc::new(AtomicBool::new(false));
+    let flag = std::sync::Arc::clone(&stop);
+    let served_path = path.clone();
+    std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + SERVE_LIMIT;
+        while !flag.load(Ordering::Relaxed) && std::time::Instant::now() < deadline {
+            let mut stream = match listener.accept() {
+                Ok((stream, _)) => stream,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                    continue;
+                }
+                Err(_) => break,
+            };
+            let _ = stream.set_nonblocking(false);
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+            let mut head = [0u8; 4096];
+            let read = stream.read(&mut head).unwrap_or(0);
+            let request = String::from_utf8_lossy(&head[..read]);
+            let target = request
+                .lines()
+                .next()
+                .and_then(|line| line.strip_prefix("GET "))
+                .and_then(|rest| rest.split_whitespace().next())
+                .unwrap_or_default();
+            let (status, body) = if target.split('?').next() == Some(served_path.as_str()) {
+                ("200 OK", html.as_bytes())
+            } else {
+                ("404 Not Found", &b""[..])
+            };
+            let response = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\
+                 Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.write_all(body);
         }
+    });
+    Ok(ServedDocument {
+        url: format!("http://127.0.0.1:{port}{path}"),
+        stop,
+    })
+}
+
+/// A navigation filter for a window showing a [`ServedDocument`]: the first navigation must be to
+/// that document, and from then on [`preview_may_navigate`] decides.
+pub fn served_navigation_guard(url: String) -> impl Fn(&str) -> bool + Send + 'static {
+    let opened = std::sync::atomic::AtomicBool::new(false);
+    move |target: &str| {
+        if !opened.load(std::sync::atomic::Ordering::Relaxed) {
+            if target == url {
+                opened.store(true, std::sync::atomic::Ordering::Relaxed);
+                return true;
+            }
+            return target == "about:blank";
+        }
+        preview_may_navigate(&url, target)
     }
 }
 
@@ -169,14 +236,50 @@ mod tests {
         ));
     }
 
+    fn get(url: &str, path_override: Option<&str>) -> String {
+        use std::io::{Read, Write};
+        let rest = url.strip_prefix("http://").expect("http url");
+        let (host, path) = rest.split_once('/').expect("path");
+        let mut stream = std::net::TcpStream::connect(host).expect("connect");
+        let path = path_override.map_or_else(|| format!("/{path}"), str::to_owned);
+        write!(stream, "GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n").expect("write");
+        let mut out = String::new();
+        stream.read_to_string(&mut out).expect("read");
+        out
+    }
+
     #[test]
-    fn the_guard_admits_its_first_document_and_nothing_else() {
-        let guard = preview_navigation_guard();
-        assert!(guard("about:blank"));
-        assert!(!guard("https://evil.test/"), "nothing remote, even first");
-        assert!(guard("data:text/html,doc"));
-        assert!(guard("data:text/html,doc#a"));
-        assert!(!guard("data:text/html,other"));
-        assert!(!guard("https://evil.test/?d=1"));
+    fn a_served_document_answers_only_its_own_path_and_stops_when_dropped() {
+        let served = serve_document("<h1>hello</h1>".into()).expect("serve");
+        assert!(served.url.starts_with("http://127.0.0.1:"));
+        let ok = get(&served.url, None);
+        assert!(ok.starts_with("HTTP/1.1 200 OK"), "{ok}");
+        assert!(ok.contains("nosniff") && ok.ends_with("<h1>hello</h1>"));
+        let elsewhere = get(&served.url, Some("/"));
+        assert!(elsewhere.starts_with("HTTP/1.1 404"), "{elsewhere}");
+        let url = served.url.clone();
+        drop(served);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let host = url
+            .strip_prefix("http://")
+            .and_then(|r| r.split('/').next())
+            .expect("host");
+        assert!(
+            std::net::TcpStream::connect(host).is_err(),
+            "the server stopped"
+        );
+    }
+
+    #[test]
+    fn the_served_guard_opens_the_document_then_refuses_everything_else() {
+        let guard = served_navigation_guard("http://127.0.0.1:9/abc/".into());
+        assert!(
+            !guard("https://example.com/"),
+            "nothing but the document first"
+        );
+        assert!(guard("http://127.0.0.1:9/abc/"));
+        assert!(guard("http://127.0.0.1:9/abc/#section"));
+        assert!(!guard("https://example.com/"));
+        assert!(!guard("http://127.0.0.1:9/other/"));
     }
 }

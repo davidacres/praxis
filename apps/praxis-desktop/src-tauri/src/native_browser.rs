@@ -353,13 +353,13 @@ pub async fn thumbnail(app: &AppHandle, html: &str) -> Option<String> {
     static GATE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let _turn = GATE.lock().await;
 
-    let url: tauri::Url = format!(
-        "data:text/html;charset=utf-8;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(html)
-    )
-    .parse()
-    .ok()?;
-    let may_navigate = crate::application::html_preview::preview_navigation_guard();
+    // The page is loaded over loopback: a window opened on a `data:` URL is never painted.
+    let served = crate::application::html_preview::serve_document(html.to_owned())
+        .map_err(|error| eprintln!("[thumbnail] could not serve the page: {error}"))
+        .ok()?;
+    let url: tauri::Url = served.url.parse().ok()?;
+    let may_navigate =
+        crate::application::html_preview::served_navigation_guard(served.url.clone());
     let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
     let sender = Mutex::new(Some(sender));
     let window = tauri::WebviewWindowBuilder::new(
@@ -368,7 +368,11 @@ pub async fn thumbnail(app: &AppHandle, html: &str) -> Option<String> {
         WebviewUrl::External(url),
     )
     .inner_size(960.0, 600.0)
-    .visible(false)
+    // A hidden window is never painted, so its snapshot is blank. The window is shown instead,
+    // undecorated and without focus, and made all but invisible just below.
+    .position(40.0, 40.0)
+    .decorations(false)
+    .visible(true)
     .focused(false)
     .skip_taskbar(true)
     .on_navigation(move |target| may_navigate(target.as_str()))
@@ -380,10 +384,12 @@ pub async fn thumbnail(app: &AppHandle, html: &str) -> Option<String> {
         }
     })
     .build()
+    .map_err(|error| eprintln!("[thumbnail] could not create the drawing window: {error}"))
     .ok()?;
+    crate::macos_snapshot::make_unseen(&window);
     let _ = tokio::time::timeout(Duration::from_secs(8), receiver).await;
     // Let fonts and first paint settle.
-    tokio::time::sleep(Duration::from_millis(400)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
     let jpeg = crate::macos_snapshot::snapshot(
         window.as_ref(),
         crate::macos_snapshot::Capture {
@@ -394,6 +400,10 @@ pub async fn thumbnail(app: &AppHandle, html: &str) -> Option<String> {
     )
     .await;
     let _ = window.destroy();
+    drop(served);
+    if let Err(error) = &jpeg {
+        eprintln!("[thumbnail] the page could not be captured: {error}");
+    }
     jpeg.ok().map(|bytes| {
         format!(
             "data:image/jpeg;base64,{}",
