@@ -374,6 +374,11 @@ fn session_scope(dir: &Path, session_id: &str) -> Option<GadgetScope> {
 
 /// This installation's stable host id.
 fn host_id(dir: &Path) -> String {
+    // Read-or-create must be one step: two concurrent first calls (a gadget being published while
+    // another is answered) each minted their own id, so an envelope was issued under an id that the
+    // next write replaced and its action was refused as "issued by a different host".
+    static CREATE: Mutex<()> = Mutex::new(());
+    let _guard = CREATE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let path = dir.join("host-identity.json");
     if let Ok(Some(raw)) = read(&path)
         && let Ok(document) = parse(&path, Some(&raw))
