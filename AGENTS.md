@@ -287,7 +287,8 @@ starts the real `praxis-desktop` binary in `--e2e-server` mode (the same composi
 GUI uses, answering every channel from Rust) and opens the real renderer's `tauri.html`
 in Chromium at 1440x900, with `window.praxis` bridged to that server. The renderer comes
 from `apps/praxis-desktop/renderer/dist`, served by `vite preview` (Playwright starts it;
-`PRAXIS_E2E_PORT` picks the port, so parallel checkouts must each set their own). A frontend
+`PRAXIS_E2E_PORT` picks the port, so parallel checkouts must each set their own; `PRAXIS_E2E_WORKERS`
+sets the worker count, default 2, or 1 when `CI` is set). A frontend
 change is invisible to e2e until you `npm run build:renderer`. A Rust change needs a
 rebuilt binary; point `PRAXIS_TAURI_BIN` at your own copy when several agents share a
 target dir (see `scripts/agent-build.sh`). Specs replace what used to be Electron main-process

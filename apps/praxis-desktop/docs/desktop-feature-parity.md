@@ -8,24 +8,48 @@ main process is retired. The renderer (`apps/praxis-desktop/renderer`) is unchan
 talks to Rust through the generated `window.praxis` bridge. The "Electron" wording in the
 older rows below describes where a feature originated, not where it runs now.
 
-## Tauri port status (2026-11-12)
+## Tauri port status (2026-11-13)
 
 All 407 renderer channels and 30 event channels are registered in Rust
 (`tauri-contract-audit.json`: `registeredCount 407`, `missingCount 0`). Registration is not
 proof of parity: the audit still reports `verifiedCount 0`. The evidence that exists is the
 functional Playwright suite, which runs the real renderer in Chromium against
-`praxis-desktop --e2e-server` (see "Verification" below).
+`praxis-desktop --e2e-server` (see "Verification" below). Channels outside the list below are
+registered but have no individual behavioural evidence.
 
-**Ported to Rust and exercised by the functional e2e suite:** settings, workspaces/projects/
-connections stores; folder, demo, GitHub, GitLab and Jira backends; boards, issues, board prefs;
-notes, artifacts, activity and log bus; terminal PTYs; git; marketplace (registry, install,
-activation); agent runtime discovery/authoring/import; ACP and API-provider AI sessions, session
-lifecycle (handover, model change, multi-AI, recovery, close guard), usage ledger and dashboard,
-gadgets and interactive ticket review, durable team chat/assistant, delivery, decomposition,
-merge-request and peer-review workflows; workflow validation, orchestrator, worktrees, check
-execution, template/agent recommendation; scheduled runs and request-file import; Task Designer
-state and plan generation; session coordination broker; mobile host transport;
-child webviews with the loopback guard proxy.
+**Ported to Rust and passing the functional e2e suite:**
+
+- AI sessions and providers: ACP and API-provider sessions, session lifecycle (handover, model
+  change, multi-AI, recovery, close guard), ACP `asyncTasks` background tasks.
+- Gadgets and artifacts; durable team chat and the team assistant.
+- Workflow engine, scheduled runs, and the AI delivery workflows: delivery, decomposition,
+  peer review and merge request.
+- Coordination broker (`crates/praxis-ai/src/coordination/`).
+- Jira: read, create, edit, delete, comments, transitions. Attach, download and board
+  create/delete refuse as the original TypeScript did. Board rename is service-level only; no
+  IPC channel wires it yet.
+- Mobile access: listener, pairing, relay, phone reads and commands, event feed, gate reject.
+- In-app browser and browser MCP (the e2e harness covers the in-page browser; see unverified).
+- Feedback scorer, including the CLI one-shot clarity check.
+- Marketplace; native sources and MCP servers; notifications.
+- Usage: Codex and Claude Code quota readers, Alibaba.
+- Security properties; folder boards; `startDiagnosis`.
+- MCP OAuth tokens, persisted in the keychain.
+- Change-scope detection at merge (`declaredPaths` / `outOfScope`).
+- Code intelligence service integration. It is CLI-driven; the service is not yet bundled in
+  the Tauri package.
+
+**Compiled but unverified.** These build, but the e2e harness has no native window, so nothing
+in the functional suite exercises them:
+
+- The native Tauri child-webview browser (`apps/praxis-desktop/src-tauri/src/webviews/`).
+- macOS hidden-window artifact thumbnails.
+- Desktop notification click routing.
+- The window-state plugin.
+
+**Keychain.** All secrets are stored in a single keychain item, `praxis.secrets.v1`
+(`crates/praxis-host/src/secret_backends.rs`), so startup asks for access once. Earlier builds
+used per-key items; they are migrated into the single item once.
 
 **Not ported or not functional on Tauri yet:**
 
@@ -34,19 +58,22 @@ child webviews with the loopback guard proxy.
 | Auto-update | ✗ `update:*` channels answer `state: unsupported` ("only checked in a packaged build"); FX-BE-034 signing credentials still outstanding |
 | Window vibrancy ("Window blur") | ✗ `window:supportsVibrancy` returns `false` and `setSurfaceVibrancy` is a no-op, so the Settings toggle never shows in the real app |
 | Single-instance lock, deep links (`praxis://`), tray, global shortcuts | ✗ not implemented in the shell |
-| Browser diagnostics for the AI browser | ✗ `browser_diagnostics` reports "not supported by this browser host" |
+| Browser diagnostics for the AI browser | ✗ `browser_diagnostics` reports "Console and network diagnostics are not supported by this browser host" |
 | Local-project ticket comments | ? "Comments are not available on local project tickets yet" |
 | Other backend modes | ✗ any mode without a `case` in `application/connections.rs` answers "not available in the Tauri shell yet" |
-| Behavioural parity proof | ? 0 of 407 channels independently verified; the four-stage `test:desktop:tauri` script is headless contract/storage checks, not a webview run |
-| Native-webview e2e | ✗ WKWebView/WebView2 cannot be driven by Playwright, so e2e runs in Chromium; the real native window is checked by hand |
-| Windows/Linux verification | ✗ local builds and e2e are macOS only |
+| Behavioural parity proof | ? 0 of 407 channels independently verified; the `test:desktop:tauri` script is headless contract/storage checks, not a webview run |
+| Native-webview e2e | ✗ WKWebView/WebView2 cannot be driven by Playwright, so e2e runs in Chromium; the real native window is checked by hand (see unverified list above) |
+| Bundling the code-intelligence service | ✗ not in the Tauri package; the service is driven through the CLI |
+| Usage-ledger event for feedback prompt checks | ✗ not recorded |
+| Windows/Linux verification | ✗ local builds and e2e are macOS only; the coordination broker socket is Unix-only |
 
 **Known open product issues found while re-baselining e2e (2026-11-12):**
 
-- The Overview page (`OverviewPage`) is unreachable: the title-bar Home button navigates to
-  `feature: 'overview'`, which `App.tsx` routes to the EasyMode canvas first, so the Overview
-  branch below it is dead code. `overview.spec.ts`, `overviewAiUsage.spec.ts` and
-  `overviewProviderBudgets.spec.ts` fail for this reason.
+- The Overview page (`OverviewPage`) is unreachable since `f977690f`: the title-bar Home button
+  navigates to `feature: 'overview'`, which `App.tsx` routes to the EasyMode canvas first, so the
+  Overview branch below it is dead code. AI usage now lives in Settings → AI Usage.
+  `overview.spec.ts`, `overviewAiUsage.spec.ts` and `overviewProviderBudgets.spec.ts` fail for this
+  reason.
 - Rust's `built_in_look` (`crates/praxis-core/src/config/app_settings.rs`) and core's `builtInLook`
   give every built-in Look the dark theme while the top-level default theme is light. The renderer
   used to repaint a fresh profile with the active Look's dark theme; it now applies the top-level
@@ -57,10 +84,19 @@ child webviews with the loopback guard proxy.
 - Unit/native: `npm run test:rust`, `npm run test:core`, `npm run test:renderer`.
 - Contract gate: `npm run test:desktop:tauri` (registration audit and headless storage checks).
 - Playwright e2e (`apps/praxis-desktop/playwright.config.ts`, projects `functional`, `smoke`,
-  `themes`, `live-agent`): `npm run test:desktop:e2e` / `:smoke` / `:themes`. Each test starts the
-  `praxis-desktop` binary in `--e2e-server` mode and loads `renderer/dist/tauri.html` in Chromium
-  at 1440x900. Dialogs, window controls and `shell:openExternal` are inert in that mode; specs use
-  `app.overrideChannel` for anything the host cannot answer. Screenshot baselines are 1440x900.
+  `themes`, `live-agent`):
+  - `npm run test:desktop`: the contract gate, then `test:desktop:e2e` (the functional project).
+  - `npm run test:desktop:smoke` and `npm run test:desktop:themes`: the smoke set and the themes
+    project.
+- `apps/praxis-desktop/e2e/launchTestApp.ts` starts the `praxis-desktop` binary in `--e2e-server`
+  mode and loads `renderer/dist/tauri.html` in Chromium at 1440x900. Dialogs, window controls and
+  `shell:openExternal` are inert in that mode; specs use `app.overrideChannel` for anything the
+  host cannot answer. Screenshot baselines are 1440x900.
+- Environment: `PRAXIS_TAURI_BIN` points at the binary under test (agent worktrees build with
+  `scripts/agent-build.sh build` and use `.agent-bin/praxis-desktop`); `PRAXIS_E2E_PORT` sets the
+  `vite preview` port (default 5173, so parallel checkouts each need their own); `PRAXIS_E2E_WORKERS`
+  sets the worker count (default 2, or 1 when `CI` is set). The e2e server serves
+  `renderer/dist`, so run `npm run build:renderer` before e2e after any frontend change.
 
 ## Backends & connections
 
@@ -77,7 +113,7 @@ child webviews with the loopback guard proxy.
 | GitHub boards | ✓ | REST API client (`GitHubBoardService`); one board per repository, columns synthesized from "status: …" labels already on the repo (FX-BE-035) |
 | Connections manager UI | ✓ | Sidebar + detail pane; add/remove/test connections |
 | Connection health check | ✓ | Test button; reports auth/network status inline |
-| Encrypted secret storage | ✓ | OS credential store (keyring) in shipping builds, a 0600 file in e2e; one-time read-only import of Electron `safeStorage` entries on macOS (Windows/Linux import not implemented) |
+| Encrypted secret storage | ✓ | OS credential store (keyring) in shipping builds: every secret lives in one keychain item (`praxis.secrets.v1`), migrated once from per-key items; a 0600 file in e2e. One-time read-only import of Electron `safeStorage` entries on macOS (Windows/Linux import not implemented) |
 | Multi-connection board merge | ✓ | Virtual board fuses multiple connections' issues |
 
 ## Boards

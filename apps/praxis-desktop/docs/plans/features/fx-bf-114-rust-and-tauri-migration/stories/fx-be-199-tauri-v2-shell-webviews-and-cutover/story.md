@@ -45,3 +45,7 @@ status: In Progress
 User requested the Tauri cutover. Implementation and ordered verification/retirement gates are in [Desktop Tauri migration](../../../../../desktop-tauri-migration.md). The new shell is a preview; this item remains In Progress until application contracts, child webview isolation and packaged release gates pass.
 
 Issue mirror: [FX-BE-199](../../../../../issues/features/fx-bf-114-rust-and-tauri-migration/stories/fx-be-199-tauri-v2-shell-webviews-and-cutover/issue.md).
+
+## Status - 2026-11-13
+
+The Tauri shell is the live desktop host, and the functional e2e suite passes against it for the areas listed in `apps/praxis-desktop/docs/desktop-feature-parity.md`. Still open: the child-webview browser is compiled but has not been exercised in a native window; the packaged `tauri build` bundles and the zero-TypeScript UI are not verified; Windows and Linux are not verified. Stays In Progress.

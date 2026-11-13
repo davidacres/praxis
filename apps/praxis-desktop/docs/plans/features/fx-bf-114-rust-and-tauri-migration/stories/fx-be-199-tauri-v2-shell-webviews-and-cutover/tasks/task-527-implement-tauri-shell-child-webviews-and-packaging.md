@@ -33,3 +33,7 @@ status: In Progress
 ## Activated shell migration - 2026-11-10
 
 User requested the Tauri cutover. Implementation and ordered verification/retirement gates are in [Desktop Tauri migration](../../../../../../desktop-tauri-migration.md). The native shell has achieved 100% channel registration (407/407 desktop channels, 0 missing). Behavioral parity verification and the Tauri E2E test runner (`scripts/test-tauri-e2e.cjs`) have been implemented and verified across all 407 methods. 34 native unit/integration tests, 95 renderer tests, and 290 desktop node parity tests pass.
+
+## Status - 2026-11-13
+
+The child webviews are compiled into `apps/praxis-desktop/src-tauri` and have no native-window verification yet, since the e2e harness cannot drive a native window. Isolation (no `praxis_rpc` from untrusted child webviews, private-subresource blocking) and packaged `tauri build` output are therefore unverified. Listed as unverified in `apps/praxis-desktop/docs/desktop-feature-parity.md`. Stays In Progress.
