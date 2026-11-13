@@ -23,6 +23,7 @@ mod board_prefs;
 mod boards;
 mod browser_mcp;
 pub mod browser_native;
+pub mod browser_policy;
 mod builtin_mcp;
 mod cli_usage;
 mod code_intelligence;
@@ -527,6 +528,7 @@ impl Application {
     pub fn register(host: &HostContext, version: &str) {
         // The Output tab backfills from this bus; the launch line proves the
         // ring buffer and `log:getRecent` end to end.
+        browser_policy::install_host(host);
         let bus = log_bus::restart(&host.config().user_data_dir);
         // Persisted as well, so the next session sees where this one began.
         if !bus.recent().is_empty() {

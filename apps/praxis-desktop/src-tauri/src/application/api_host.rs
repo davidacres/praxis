@@ -513,53 +513,32 @@ async fn run_mcp_tool(
     }
 }
 
-/// An in-app browser tool. Navigating to a host that is not on the allow-list asks first; the
-/// approval is remembered in Settings. Loopback and private hosts stay refused (see `ai_browser`).
+/// An in-app browser tool. Any navigation it causes to a host that is not on the allow-list —
+/// the tool's own URL, a clicked link, a submitted form, a redirect — is asked about on the
+/// session's permission card first, and an approval is remembered in Settings. Loopback and
+/// private destinations stay refused (see `browser_policy`).
 async fn run_browser_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
     if !task.host.settings().read().ai.browser_tools.enabled {
         return failed("The in-app browser is turned off in Settings.");
-    }
-    if call.name == "browser_navigate" {
-        let url = call.arguments["url"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned();
-        if let Some(host_name) = super::ai_browser::host_of(&url) {
-            let allowed = task
-                .host
-                .settings()
-                .read()
-                .ai
-                .browser_tools
-                .allowed_hosts
-                .iter()
-                .any(|h| h.eq_ignore_ascii_case(&host_name));
-            if !allowed {
-                let request = json!({ "toolCallId": call.id, "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": "browser_navigate", "rawInput": call.arguments });
-                if task.request_permission(request).await == super::acp_host::Decision::Deny {
-                    return failed(format!("Permission denied to open {host_name}."));
-                }
-                let mut hosts = task
-                    .host
-                    .settings()
-                    .read()
-                    .ai
-                    .browser_tools
-                    .allowed_hosts
-                    .clone();
-                hosts.push(host_name);
-                let _ = super::ai_providers::write_settings(
-                    &task.host,
-                    &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }),
-                );
-            }
-        }
     }
     // The browser is held for the session's whole sequence of calls; a person using it, or another session, refuses it.
     if let Err(reason) = super::coordination::hold_browser_for_sequence(&task.key).await {
         return failed(reason);
     }
-    let (ok, content) = super::ai_browser::run_tool(&task.host, &call.name, &call.arguments).await;
+    let approver: super::browser_policy::Approver = {
+        let task = Arc::clone(task);
+        let call_id = call.id.clone();
+        let tool = call.name.clone();
+        Arc::new(move |host_name: String, url: String| {
+            let task = Arc::clone(&task);
+            let request = json!({ "toolCallId": call_id, "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": tool, "rawInput": { "url": url } });
+            Box::pin(async move {
+                task.request_permission(request).await != super::acp_host::Decision::Deny
+            })
+        })
+    };
+    let (ok, content) =
+        super::ai_browser::run_tool(&task.host, &call.name, &call.arguments, &approver).await;
     ToolOutcome {
         ok,
         content,

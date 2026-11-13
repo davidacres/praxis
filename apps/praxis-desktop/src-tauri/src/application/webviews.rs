@@ -93,8 +93,12 @@ impl WebviewManager {
             }
             "browser:navigate" => {
                 let url = text(args, 0)?;
-                let page = super::runtime::block_on(super::ai_browser::navigate(host, url))
-                    .map_err(failure)?;
+                let page = super::runtime::block_on(super::ai_browser::navigate(
+                    host,
+                    url,
+                    &super::browser_policy::Driver::Person,
+                ))
+                .map_err(failure)?;
                 *self.browser_url.lock().map_err(failure)? = page.url.clone();
                 *self.browser_title.lock().map_err(failure)? = page.title.clone();
                 Ok(json!({ "ok": true, "url": page.url, "title": page.title }))
@@ -112,6 +116,7 @@ impl WebviewManager {
                 Ok(Value::Null)
             }
             "browser:personInput" => {
+                super::browser_policy::note_person_input();
                 super::runtime::block_on(super::coordination::person_used_browser());
                 Ok(Value::Null)
             }

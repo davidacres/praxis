@@ -44,7 +44,7 @@ const browserTitle = (win: TestApp['window']) => win.evaluate(async () => (await
 
 test('markdown, autolink and bare URLs open in the in-app browser; file names stay plain text', async () => {
   const win = await startLinkSession(
-    { PRAXIS_BROWSER_ALLOW_LOOPBACK: '1' },
+    { PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: '1' },
     `Open [the docs](${origin}/docs) or <${origin}/auto> or ${origin}/bare. Edit README.md too.`
   );
   const thread = win.locator('[data-testid="session-chat-thread"]');
@@ -74,7 +74,7 @@ test('markdown, autolink and bare URLs open in the in-app browser; file names st
 });
 
 test('a link to a private host is refused with a visible reason', async () => {
-  // No PRAXIS_BROWSER_ALLOW_LOOPBACK: the local server is a loopback address.
+  // No PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: the local server is a loopback address.
   const win = await startLinkSession({}, `Open [internal](${origin}/secret) please.`);
   await win.locator('[data-testid="session-chat-thread"] a', { hasText: 'internal' }).click();
 

@@ -51,7 +51,7 @@ test('an ACP session drives the in-app browser via the MCP server', async () => 
   app = await launchTestApp(
     { ai: { browserTools: { enabled: true, allowedHosts: ['127.0.0.1'] } } },
     undefined,
-    { PRAXIS_BROWSER_ALLOW_LOOPBACK: '1', FAKE_ACP_BROWSER_URL: `${pageOrigin}/` }
+    { PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: '1', FAKE_ACP_BROWSER_URL: `${pageOrigin}/` }
   );
   const win = app.window;
   await startAcpBrowserSession(win, app.userDataDir, 'USE_BROWSER and report the needle');
@@ -69,7 +69,7 @@ test('the browser stays connected across a follow-up turn', async () => {
   app = await launchTestApp(
     { ai: { browserTools: { enabled: true, allowedHosts: ['127.0.0.1'] } } },
     undefined,
-    { PRAXIS_BROWSER_ALLOW_LOOPBACK: '1', FAKE_ACP_BROWSER_URL: `${pageOrigin}/` }
+    { PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: '1', FAKE_ACP_BROWSER_URL: `${pageOrigin}/` }
   );
   const win = app.window;
   await startAcpBrowserSession(win, app.userDataDir, 'USE_BROWSER first pass');
@@ -97,7 +97,7 @@ test('an unlisted host prompts on the session card, then proceeds when allowed',
   app = await launchTestApp(
     { ai: { browserTools: { enabled: true, allowedHosts: [] } } },
     undefined,
-    { PRAXIS_BROWSER_ALLOW_LOOPBACK: '1', FAKE_ACP_BROWSER_URL: `${pageOrigin}/` }
+    { PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: '1', FAKE_ACP_BROWSER_URL: `${pageOrigin}/` }
   );
   const win = app.window;
   await startAcpBrowserSession(win, app.userDataDir, 'USE_BROWSER');

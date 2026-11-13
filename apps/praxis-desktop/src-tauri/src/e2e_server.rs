@@ -85,6 +85,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("--e2e-server requires PRAXIS_E2E_TOKEN (16+ chars)".into());
     }
 
+    // The specs serve their pages from loopback mock servers; only this headless server, past the
+    // checks above, may let the in-app browser reach them. A normal launch never reads the flag.
+    crate::application::browser_policy::enable_e2e_allowance_from_env();
     let env: BTreeMap<String, String> = std::env::vars().collect();
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let host = HostContext::new(HostConfig::from_args_and_env(&args, &env)?);

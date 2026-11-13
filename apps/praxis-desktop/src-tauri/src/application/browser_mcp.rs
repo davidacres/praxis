@@ -3,7 +3,8 @@
 //!
 //! One endpoint per session, living for the whole session (a follow-up turn reuses the same URL
 //! and token so the agent's MCP connection never drops). Navigation to a host that is not on the
-//! allow-list is raised on that session's permission card, and an approval is remembered.
+//! allow-list — by the tool itself, a link it clicks, a form it submits or a redirect — is raised
+//! on that session's permission card, and an approval is remembered.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -277,40 +278,33 @@ async fn call_tool(registration: &Registration, params: &Value) -> Value {
     let arguments = params["arguments"].clone();
     let host = &registration.host;
     let task = acp_host::find_task_public(&registration.dir, &registration.key);
-    let settings = host.settings().read().ai.browser_tools.clone();
-    if !settings.enabled {
+    if !host.settings().read().ai.browser_tools.enabled {
         return tool_result(
             false,
             "The in-app browser is turned off in Settings.".into(),
-        );
-    }
-    if name == "browser_navigate"
-        && let Some(host_name) = ai_browser::host_of(arguments["url"].as_str().unwrap_or_default())
-        && !settings
-            .allowed_hosts
-            .iter()
-            .any(|h| h.eq_ignore_ascii_case(&host_name))
-    {
-        let request = json!({ "toolCallId": format!("browser-{}", uuid::Uuid::new_v4().simple()), "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": "browser_navigate", "rawInput": arguments });
-        let decision = match &task {
-            Some(task) => task.request_permission(request).await,
-            None => acp_host::Decision::Deny,
-        };
-        if decision == acp_host::Decision::Deny {
-            return tool_result(false, format!("Permission denied to open {host_name}."));
-        }
-        let mut hosts = settings.allowed_hosts.clone();
-        hosts.push(host_name);
-        let _ = super::ai_providers::write_settings(
-            host,
-            &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }),
         );
     }
     // The browser is held for the session's whole sequence of calls; a person using it, or another session, refuses it.
     if let Err(reason) = super::coordination::hold_browser_for_sequence(&registration.key).await {
         return tool_result(false, reason);
     }
-    let (ok, text) = ai_browser::run_tool(host, &name, &arguments).await;
+    let approver: super::browser_policy::Approver = {
+        let task = task.clone();
+        let tool = name.clone();
+        std::sync::Arc::new(move |host_name: String, url: String| {
+            let task = task.clone();
+            let request = json!({ "toolCallId": format!("browser-{}", uuid::Uuid::new_v4().simple()), "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": tool, "rawInput": { "url": url } });
+            Box::pin(async move {
+                match task {
+                    Some(task) => {
+                        task.request_permission(request).await != acp_host::Decision::Deny
+                    }
+                    None => false,
+                }
+            })
+        })
+    };
+    let (ok, text) = ai_browser::run_tool(host, &name, &arguments, &approver).await;
     if let Some(task) = &task {
         task.append(
             acp_host::evt(

@@ -15,8 +15,8 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUr
 use tokio::sync::watch;
 
 use crate::application::browser_native::{NativeBrowser, PAGE_SCRIPT};
+use crate::application::browser_policy;
 use crate::state::DesktopState;
-use crate::webviews::blocked_browser_url_reason;
 
 const LABEL: &str = "browser";
 const LOAD_TIMEOUT: Duration = Duration::from_secs(15);
@@ -113,10 +113,6 @@ fn state_of(nav: &Nav) -> Value {
     })
 }
 
-fn allow_loopback() -> bool {
-    std::env::var("PRAXIS_BROWSER_ALLOW_LOOPBACK").as_deref() == Ok("1")
-}
-
 #[async_trait]
 impl NativeBrowser for TauriBrowser {
     fn exists(&self) -> bool {
@@ -144,7 +140,21 @@ impl NativeBrowser for TauriBrowser {
             if url.as_str() == "about:blank" {
                 return true;
             }
-            if blocked_browser_url_reason(url.as_str(), allow_loopback()).is_some() {
+            // Every navigation, whatever started it (an agent's click, a redirect, a page
+            // script), passes the destination and allow-list checks. WebKit asks this for frames
+            // as well as the page, so an embedded frame from an unapproved host does not load.
+            let (current, programmatic) = {
+                let nav = nav.lock().unwrap_or_else(PoisonError::into_inner);
+                (nav.history.get(nav.index).cloned(), nav.programmatic)
+            };
+            if !browser_policy::native_navigation_allowed(
+                current.as_deref(),
+                url.as_str(),
+                programmatic,
+            ) {
+                nav.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .programmatic = false;
                 return false;
             }
             let mut nav = nav.lock().unwrap_or_else(PoisonError::into_inner);

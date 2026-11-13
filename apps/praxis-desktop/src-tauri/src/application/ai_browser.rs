@@ -6,7 +6,7 @@
 //! interactive elements, and follows links. It does not run page scripts. Every state change is
 //! published as `browser:didNavigate`, which is what opens and updates the renderer's browser pane.
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use praxis_host::HostContext;
@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 use super::browser_native::{self, NativeBrowser};
-use crate::webviews::blocked_browser_url_reason;
+use super::browser_policy::{self, Allowance, Approver, Driver};
 
 const MAX_TEXT: usize = 12_000;
 const MAX_ELEMENTS: usize = 150;
@@ -46,19 +46,6 @@ struct Browser {
 fn browser() -> &'static Mutex<Browser> {
     static BROWSER: OnceLock<Mutex<Browser>> = OnceLock::new();
     BROWSER.get_or_init(Default::default)
-}
-
-/// Unit tests point the browser at a local server without touching the process environment.
-#[cfg(test)]
-pub static ALLOW_PRIVATE_IN_TESTS: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-fn allow_private_hosts() -> bool {
-    #[cfg(test)]
-    if ALLOW_PRIVATE_IN_TESTS.load(std::sync::atomic::Ordering::SeqCst) {
-        return true;
-    }
-    std::env::var("PRAXIS_BROWSER_ALLOW_LOOPBACK").as_deref() == Ok("1")
 }
 
 fn decode_entities(text: &str) -> String {
@@ -187,23 +174,6 @@ fn parse_page(url: &str, html: &str) -> Page {
 const MAX_BODY_BYTES: usize = 5 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
 
-/// Follows a redirect only to a destination the browser could have been sent to directly. The
-/// final URL alone is not enough: every hop is a request, so a public page redirecting to a
-/// loopback or private address would have that request made before the end was checked.
-fn redirect_policy(allow_private: bool) -> reqwest::redirect::Policy {
-    reqwest::redirect::Policy::custom(move |attempt| {
-        if attempt.previous().len() >= MAX_REDIRECTS {
-            attempt.error("too many redirects")
-        } else if let Some(reason) =
-            blocked_browser_url_reason(attempt.url().as_str(), allow_private)
-        {
-            attempt.error(reason)
-        } else {
-            attempt.follow()
-        }
-    })
-}
-
 /// The body as text, reading no more than [`MAX_BODY_BYTES`].
 async fn bounded_text(mut response: reqwest::Response) -> Result<String, String> {
     let mut body = Vec::new();
@@ -217,27 +187,57 @@ async fn bounded_text(mut response: reqwest::Response) -> Result<String, String>
     Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
-async fn load(url: &str) -> Result<Page, String> {
-    let allow_private = allow_private_hosts();
-    // Resolves the host too, so a public name that points at a private address is refused.
-    crate::webviews::resolved_browser_url_block_reason(url, allow_private).await?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .redirect(redirect_policy(allow_private))
-        .user_agent("Praxis-Browser")
-        .build()
-        .map_err(|e| e.to_string())?;
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| format!("Could not load {url}: {e}"))?;
-    let final_url = response.url().to_string();
-    if let Some(reason) = blocked_browser_url_reason(&final_url, allow_private) {
-        return Err(reason);
+/// Fetches `url` for the fetched-page backend, following redirects one hop at a time. Every hop
+/// is a request, so every hop is checked before it is made: its destination must be public (it is
+/// resolved here and the connection is pinned to the vetted address, so the HTTP client cannot
+/// look the name up again and land somewhere else), and when an agent is driving, its host must be
+/// approved — the same host as the hop before it, on the allow-list, or approved now.
+async fn load(
+    host: Option<&HostContext>,
+    url: &str,
+    from: Option<&str>,
+    driver: &Driver,
+    allowance: &Allowance,
+) -> Result<Page, String> {
+    let mut target = url.to_owned();
+    let mut previous = from.map(str::to_owned);
+    for _ in 0..=MAX_REDIRECTS {
+        let pinned = browser_policy::vet_destination(&target, allowance).await?;
+        if let Driver::Agent(approver) = driver {
+            browser_policy::check_agent_navigation(host, approver, previous.as_deref(), &target)
+                .await?;
+        }
+        let mut builder = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
+            // A proxy would resolve the name itself, undoing the pin.
+            .no_proxy()
+            .user_agent("Praxis-Browser");
+        if let Some((name, address)) = &pinned {
+            builder = builder.resolve(name, *address);
+        }
+        let client = builder.build().map_err(|e| e.to_string())?;
+        let response = client
+            .get(&target)
+            .send()
+            .await
+            .map_err(|e| format!("Could not load {target}: {e}"))?;
+        if response.status().is_redirection()
+            && let Some(location) = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+        {
+            let next = Url::parse(&target)
+                .and_then(|base| base.join(location))
+                .map_err(|e| format!("A redirect from {target} went nowhere: {e}"))?;
+            previous = Some(std::mem::replace(&mut target, next.to_string()));
+            continue;
+        }
+        let body = bounded_text(response).await?;
+        return Ok(parse_page(&target, &body));
     }
-    let body = bounded_text(response).await?;
-    Ok(parse_page(&final_url, &body))
+    Err(format!("Too many redirects loading {url}."))
 }
 
 /// The page a native webview currently shows, read through the page script.
@@ -323,18 +323,55 @@ pub fn get_state() -> Value {
     )
 }
 
-pub async fn navigate(host: &HostContext, url: &str) -> Result<Page, String> {
+/// The URL the browser is on now, whichever engine shows it.
+fn current_url() -> Option<String> {
+    match browser_native::shell() {
+        Some(shell) if shell.exists() => shell.state()["url"]
+            .as_str()
+            .filter(|u| !u.is_empty())
+            .map(str::to_owned),
+        _ => current().map(|p| p.url),
+    }
+}
+
+/// Opens `url`. A person's navigation is their own approval (for this run); an agent's goes
+/// through the allow-list, and so does every redirect and link it leads to (see `browser_policy`).
+pub async fn navigate(host: &HostContext, url: &str, driver: &Driver) -> Result<Page, String> {
+    let from = current_url();
     if let Some(shell) = browser_native::shell() {
-        if let Some(reason) = blocked_browser_url_reason(url, allow_private_hosts()) {
-            return Err(reason);
+        // The native engine never gets the e2e allowance: it only exists in real launches.
+        browser_policy::vet_destination(url, &Allowance::None).await?;
+        match driver {
+            Driver::Agent(approver) => {
+                browser_policy::check_agent_navigation(Some(host), approver, from.as_deref(), url)
+                    .await?;
+            }
+            Driver::Person => {
+                browser_policy::note_person_opened(url);
+                // Redirects of the person's own navigation are theirs too.
+                browser_policy::note_person_input();
+            }
         }
         browser_native::reset_diagnostics();
         shell.ensure()?;
         shell.navigate(url).await?;
+        if let Driver::Agent(approver) = driver {
+            browser_policy::resolve_blocked_after_action(host, approver, shell.as_ref()).await?;
+        }
         publish(host);
         return native_page(shell.as_ref()).await;
     }
-    let page = load(url).await?;
+    if matches!(driver, Driver::Person) {
+        browser_policy::note_person_opened(url);
+    }
+    let page = load(
+        Some(host),
+        url,
+        from.as_deref(),
+        driver,
+        &browser_policy::allowance(),
+    )
+    .await?;
     {
         let mut guard = browser()
             .lock()
@@ -402,7 +439,15 @@ pub async fn reload(host: &HostContext) -> Result<(), String> {
         return Ok(());
     }
     let Some(page) = current() else { return Ok(()) };
-    let fresh = load(&page.url).await?;
+    // The person pressed reload; the page's own host is already where they are.
+    let fresh = load(
+        Some(host),
+        &page.url,
+        Some(&page.url),
+        &Driver::Person,
+        &browser_policy::allowance(),
+    )
+    .await?;
     {
         let mut guard = browser()
             .lock()
@@ -420,7 +465,7 @@ pub fn read() -> Result<Page, String> {
     })
 }
 
-pub async fn click(host: &HostContext, reference: &str) -> Result<Page, String> {
+pub async fn click(host: &HostContext, reference: &str, driver: &Driver) -> Result<Page, String> {
     let page = read()?;
     let element = page
         .elements
@@ -436,7 +481,7 @@ pub async fn click(host: &HostContext, reference: &str) -> Result<Page, String> 
         if target.scheme() == "javascript" {
             return Ok(page);
         }
-        return navigate(host, target.as_str()).await;
+        return navigate(host, target.as_str(), driver).await;
     }
     Ok(page)
 }
@@ -471,7 +516,7 @@ pub fn tool_definitions() -> Vec<(&'static str, &'static str, Value)> {
     vec![
         (
             "browser_navigate",
-            "Open a URL in the in-app browser. Returns the resolved URL, page title, and only a short excerpt of the text — call browser_read afterwards if you need the full page body. Navigating to a host that is not pre-approved asks the user to allow it first.",
+            "Open a URL in the in-app browser. Returns the resolved URL, page title, and only a short excerpt of the text — call browser_read afterwards if you need the full page body. Every navigation is checked, not just this one: leaving the current host for one that is not on the user's allow-list — here, through a link you click, a form you submit, a redirect, or the page's own scripts — pauses and asks the user to allow that host first; a refusal comes back as \"Permission denied to open <host>\" and the browser stays where it was. Staying on the same host never asks. Loopback, link-local and private-network addresses (including names that resolve to them) are always refused.",
             json!({ "type": "object", "properties": { "url": { "type": "string", "description": "Absolute http(s) URL." } }, "required": ["url"] }),
         ),
         (
@@ -486,12 +531,12 @@ pub fn tool_definitions() -> Vec<(&'static str, &'static str, Value)> {
         ),
         (
             "browser_click",
-            "Click the element with the given ref (from browser_snapshot), then return the updated title, URL, and a short excerpt.",
+            "Click the element with the given ref (from browser_snapshot), then return the updated title, URL, and a short excerpt. If the click leads to a host that is not approved, the user is asked first (see browser_navigate).",
             json!({ "type": "object", "properties": { "ref": { "type": "string" } }, "required": ["ref"] }),
         ),
         (
             "browser_type",
-            "Type text into the input/textarea with the given ref. Set submit=true to press Enter afterwards (e.g. to run a search). Returns the updated title, URL, and a short excerpt.",
+            "Type text into the input/textarea with the given ref. Set submit=true to press Enter afterwards (e.g. to run a search). Returns the updated title, URL, and a short excerpt. A submit that leads to a host that is not approved asks the user first (see browser_navigate).",
             json!({ "type": "object", "properties": { "ref": { "type": "string" }, "text": { "type": "string" }, "submit": { "type": "boolean" } }, "required": ["ref", "text"] }),
         ),
         (
@@ -505,13 +550,6 @@ pub fn tool_definitions() -> Vec<(&'static str, &'static str, Value)> {
             json!({ "type": "object", "properties": {} }),
         ),
     ]
-}
-
-/// The host part of a URL, as the allow-list is keyed.
-pub fn host_of(url: &str) -> Option<String> {
-    Url::parse(url)
-        .ok()
-        .and_then(|u| u.host_str().map(str::to_lowercase))
 }
 
 fn native_shell() -> Option<std::sync::Arc<dyn NativeBrowser>> {
@@ -535,8 +573,30 @@ async fn settle(host: &HostContext, shell: &dyn NativeBrowser) {
     publish(host);
 }
 
-/// Runs one tool (after the caller has dealt with host approval) and returns `(ok, text)`.
-pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, String) {
+/// After an agent's click or submit on the native webview: anything the navigation hook refused
+/// for want of approval is asked about now, then the pane is told where the browser ended up.
+async fn after_native_action(
+    host: &HostContext,
+    approver: &Approver,
+    shell: &dyn NativeBrowser,
+) -> Result<Page, String> {
+    let followed = browser_policy::resolve_blocked_after_action(host, approver, shell).await;
+    publish(host);
+    followed?;
+    native_page(shell).await
+}
+
+/// Runs one tool and returns `(ok, text)`. Any navigation it causes — `browser_navigate`, a link
+/// it clicks, a form it submits, the redirects that follow, a page script — that leaves the
+/// current host for one that is not approved is put to `approver` first.
+pub async fn run_tool(
+    host: &HostContext,
+    name: &str,
+    args: &Value,
+    approver: &Approver,
+) -> (bool, String) {
+    let _turn = browser_policy::begin_agent_turn(approver);
+    let driver = Driver::Agent(Arc::clone(approver));
     let result: Result<String, String> = async {
         match name {
             "browser_navigate" => {
@@ -544,7 +604,7 @@ pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, St
                 if url.is_empty() {
                     return Err("url is required.".into());
                 }
-                Ok(excerpt(&navigate(host, url).await?))
+                Ok(excerpt(&navigate(host, url, &driver).await?))
             }
             "browser_read" => {
                 let page = current_page().await?;
@@ -601,9 +661,11 @@ pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, St
                         .await?;
                     require_element(&clicked, reference)?;
                     settle(host, shell.as_ref()).await;
-                    return Ok(excerpt(&native_page(shell.as_ref()).await?));
+                    return Ok(excerpt(
+                        &after_native_action(host, approver, shell.as_ref()).await?,
+                    ));
                 }
-                Ok(excerpt(&click(host, reference).await?))
+                Ok(excerpt(&click(host, reference, &driver).await?))
             }
             "browser_type" => {
                 let reference = args["ref"].as_str().unwrap_or_default();
@@ -620,6 +682,9 @@ pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, St
                     require_element(&typed, reference)?;
                     if submit {
                         settle(host, shell.as_ref()).await;
+                        return Ok(excerpt(
+                            &after_native_action(host, approver, shell.as_ref()).await?,
+                        ));
                     }
                     return Ok(excerpt(&native_page(shell.as_ref()).await?));
                 }
@@ -670,7 +735,6 @@ pub async fn run_tool(host: &HostContext, name: &str, args: &Value) -> (bool, St
 mod tests {
     use super::*;
     use std::io::{Read, Write};
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     /// Serves one canned response on loopback and returns its address.
@@ -687,37 +751,83 @@ mod tests {
         address
     }
 
-    #[tokio::test]
-    async fn a_redirect_to_a_private_address_is_never_requested() {
-        // The private destination records whether anything reached it.
+    /// A listener that records whether anything connected to it.
+    fn tripwire() -> (std::net::SocketAddr, Arc<AtomicBool>) {
         let reached = Arc::new(AtomicBool::new(false));
-        let inner = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
-        let inner_address = inner.local_addr().expect("address");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
         let flag = Arc::clone(&reached);
         std::thread::spawn(move || {
-            inner.set_nonblocking(false).ok();
-            if inner.accept().is_ok() {
+            if listener.accept().is_ok() {
                 flag.store(true, Ordering::SeqCst);
             }
         });
-        let outer = serve_once(
-            format!(
-                "HTTP/1.1 302 Found\r\nLocation: http://{inner_address}/admin\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-            )
-            .into_bytes(),
-        );
-        // The first hop stands in for a public page (it is fetched directly, past `load`'s own
-        // check); the redirect policy alone must stop the second.
-        let client = reqwest::Client::builder()
-            .redirect(redirect_policy(false))
-            .build()
-            .expect("client");
-        let result = client.get(format!("http://{outer}/")).send().await;
-        assert!(result.is_err(), "the redirect was followed");
+        (address, reached)
+    }
+
+    fn redirect_to(location: &str) -> Vec<u8> {
+        format!(
+            "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .into_bytes()
+    }
+
+    #[tokio::test]
+    async fn a_redirect_to_a_private_address_is_never_requested() {
+        let (inner, reached) = tripwire();
+        let outer = serve_once(redirect_to(&format!("http://{inner}/admin")));
+        // Only the first hop's port is let through, standing in for a public page.
+        let allowance = Allowance::LoopbackPorts(vec![outer.port()]);
+        let result = load(
+            None,
+            &format!("http://{outer}/"),
+            None,
+            &Driver::Person,
+            &allowance,
+        )
+        .await;
+        let error = result.expect_err("the redirect was followed");
+        assert!(error.contains("loopback / private"), "{error}");
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(
             !reached.load(Ordering::SeqCst),
             "the private host was requested"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_agents_redirect_to_an_unapproved_host_asks_and_a_refusal_stops_it() {
+        let (inner, reached) = tripwire();
+        // `localhost` is a different host from `127.0.0.1`, so leaving for it needs approval.
+        let outer = serve_once(redirect_to(&format!("http://localhost:{}/", inner.port())));
+        let allowance = Allowance::LoopbackPorts(vec![outer.port(), inner.port()]);
+        let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+        let record = Arc::clone(&asked);
+        let approver: Approver = Arc::new(move |host, _url| {
+            record.lock().expect("asked").push(host.clone());
+            Box::pin(async move { host == "127.0.0.1" })
+        });
+        let result = load(
+            None,
+            &format!("http://{outer}/"),
+            None,
+            &Driver::Agent(approver),
+            &allowance,
+        )
+        .await;
+        assert_eq!(
+            result.err().as_deref(),
+            Some("Permission denied to open localhost.")
+        );
+        // (`127.0.0.1` is asked about too unless another test has already opened it this run.)
+        assert_eq!(
+            asked.lock().expect("asked").last().map(String::as_str),
+            Some("localhost")
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            !reached.load(Ordering::SeqCst),
+            "the unapproved host was requested"
         );
     }
 

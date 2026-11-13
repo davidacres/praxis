@@ -114,6 +114,7 @@ async fn drain(shell: &dyn NativeBrowser) {
     };
     ingest(&batch);
     if batch["input"].as_u64().unwrap_or(0) > 0 {
+        super::browser_policy::note_person_input();
         super::coordination::person_used_browser().await;
     }
 }

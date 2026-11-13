@@ -44,7 +44,7 @@ test('restores the selected session and browser URL and keeps an explicit close 
   app = await launchTestApp(
     { ai: { browserTools: { enabled: true, allowedHosts: [] } } },
     undefined,
-    { ...NO_GATEWAY_ENV, AI_GATEWAY_API_KEY: 'k', AI_GATEWAY_URL: mock.baseUrl, PRAXIS_BROWSER_ALLOW_LOOPBACK: '1' }
+    { ...NO_GATEWAY_ENV, AI_GATEWAY_API_KEY: 'k', AI_GATEWAY_URL: mock.baseUrl, PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: '1' }
   );
   const win = app.window;
   const session = await win.evaluate(async wd => window.praxis.ai.delegate({
@@ -96,7 +96,7 @@ test('a full-tools session drives the in-app browser and reads the page', async 
       ...NO_GATEWAY_ENV,
       AI_GATEWAY_API_KEY: 'e2e-gateway-key',
       AI_GATEWAY_URL: mock.baseUrl,
-      PRAXIS_BROWSER_ALLOW_LOOPBACK: '1'
+      PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: '1'
     }
   );
   const win = app.window;
@@ -127,7 +127,7 @@ test('the toolbar navigates the in-app browser by hand', async () => {
   app = await launchTestApp(
     { ai: { browserTools: { enabled: true, allowedHosts: [] } } },
     undefined,
-    { ...NO_GATEWAY_ENV, AI_GATEWAY_API_KEY: 'k', AI_GATEWAY_URL: mock.baseUrl, PRAXIS_BROWSER_ALLOW_LOOPBACK: '1' }
+    { ...NO_GATEWAY_ENV, AI_GATEWAY_API_KEY: 'k', AI_GATEWAY_URL: mock.baseUrl, PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: '1' }
   );
   const win = app.window;
 

@@ -1458,9 +1458,9 @@ fn webviews_navigation_and_detached_chats() {
         });
         url
     };
-    super::ai_browser::ALLOW_PRIVATE_IN_TESTS.store(true, std::sync::atomic::Ordering::SeqCst);
+    super::browser_policy::ALLOW_PRIVATE_IN_TESTS.store(true, std::sync::atomic::Ordering::SeqCst);
     let nav = profile.rpc("browser:navigate", vec![json!(page)]);
-    super::ai_browser::ALLOW_PRIVATE_IN_TESTS.store(false, std::sync::atomic::Ordering::SeqCst);
+    super::browser_policy::ALLOW_PRIVATE_IN_TESTS.store(false, std::sync::atomic::Ordering::SeqCst);
     assert_eq!(nav["ok"], true);
     assert_eq!(nav["url"], page.as_str());
     assert_eq!(nav["title"], "Test page");

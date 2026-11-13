@@ -10829,6 +10829,9 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
    still belongs is the Allow button itself, which *is* the primary action. */
 .session-permission-card {
   display: flex;
+  /* With the browser docked beside the chat the card can be narrower than its
+     buttons; they wrap under the text instead of covering it. */
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3);
@@ -10839,7 +10842,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 
 .session-permission-body {
-  flex: 1;
+  flex: 1 1 14rem;
   min-width: 0;
 }
 
@@ -10912,6 +10915,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-permission-actions {
   display: flex;
   flex-shrink: 0;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
