@@ -1,3 +1,4 @@
+import { parseNextLinkEntry, trimTrailingChars } from '../text/linearText';
 const GITHUB_API_VERSION = '2022-11-28';
 
 export interface GitHubApiConfig {
@@ -199,9 +200,9 @@ export function parseGitHubNextLink(linkHeader: string | null): string | undefin
     return undefined;
   }
   for (const part of linkHeader.split(',')) {
-    const match = /<([^>]+)>;\s*rel="next"/.exec(part.trim());
+    const match = parseNextLinkEntry(part.trim());
     if (match) {
-      return match[1];
+      return match;
     }
   }
   return undefined;
@@ -338,7 +339,7 @@ export class GitHubApiService {
   }
 
   private buildUrl(pathname: string, query?: Record<string, string | undefined>): URL {
-    const url = new URL(`${this.config.baseUrl.replace(/\/+$/, '')}${pathname}`);
+    const url = new URL(`${trimTrailingChars(this.config.baseUrl, '/')}${pathname}`);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (!value) {
         continue;

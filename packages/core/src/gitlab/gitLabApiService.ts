@@ -1,5 +1,6 @@
 import { execFile as execFileCallback } from 'node:child_process';
 import * as util from 'node:util';
+import { trimTrailingChars } from '../text/linearText';
 
 const execFile = util.promisify(execFileCallback);
 
@@ -933,7 +934,7 @@ export class GitLabApiService {
     query?: Record<string, string | undefined>,
     body?: Record<string, unknown>
   ): Promise<{ data: T; headers: Headers }> {
-    const url = new URL(`${this.config.baseUrl.replace(/\/+$/, '')}${pathname}`);
+    const url = new URL(`${trimTrailingChars(this.config.baseUrl, '/')}${pathname}`);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (!value) {
         continue;

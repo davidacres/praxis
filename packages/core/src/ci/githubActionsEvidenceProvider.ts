@@ -1,3 +1,4 @@
+import { trimTrailingChars } from '../text/linearText';
 /**
  * GitHub Actions read-only evidence provider (FX-BE-053 / TASK-138).
  *
@@ -160,7 +161,7 @@ export class GitHubActionsEvidenceProvider implements CiEvidenceProvider {
   }
 
   private buildUrl(pathname: string, query?: Record<string, string>): string {
-    const url = new URL(`${this.config.baseUrl.replace(/\/+$/, '')}${pathname}`);
+    const url = new URL(`${trimTrailingChars(this.config.baseUrl, '/')}${pathname}`);
     for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
     return url.toString();
   }

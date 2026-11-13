@@ -7,6 +7,7 @@ import { REASONING_EFFORT_LEVELS, type ReasoningEffort } from '../ai/providers/r
 import type { MobileAccessMode } from '../host/mobileAccessPolicy';
 import type { MobileAccessSettings } from '../host/mobileAccessAdministration';
 import { normalizeMobileSubnet } from '../ai/tools/networkAddress';
+import { trimTrailingChars } from '../text/linearText';
 
 /**
  * Typed settings shape shared between the Electron desktop app and the VS Code
@@ -1747,11 +1748,11 @@ export function resolveSharedSettingsPath(
   // Replicated locally to avoid pulling `node:path` into core type-only consumers.
   // Hosts always pass already-resolved segments, so a forward-slash join is OK
   // on Windows (VS Code/Electron both normalise separators internally).
-  const join = (...parts: string[]): string =>
+  const joinRaw = (...parts: string[]): string =>
     parts
       .filter(p => p.length > 0)
-      .join(platform === 'win32' ? '\\' : '/')
-      .replace(/[\\/]+$/, '');
+      .join(platform === 'win32' ? '\\' : '/');
+  const join = (...parts: string[]): string => trimTrailingChars(joinRaw(...parts), '\\/');
 
   if (platform === 'win32') {
     const base = env.APPDATA ?? join(env.home, 'AppData', 'Roaming');

@@ -22,6 +22,7 @@
 
 import type { GitHubActionsConfig } from '../ci/githubActionsEvidenceProvider';
 import type { WorkflowEvidenceSourceRef } from '../workflows/workflowEvidence';
+import { trimTrailingChars } from '../text/linearText';
 
 const GITHUB_API_VERSION = '2022-11-28';
 
@@ -191,7 +192,7 @@ export class GitHubActionsObserver {
   }
 
   private buildUrl(pathname: string, query?: Record<string, string>): string {
-    const base = `${this.config.baseUrl.replace(/\/+$/, '')}${pathname}`;
+    const base = `${trimTrailingChars(this.config.baseUrl, '/')}${pathname}`;
     if (!query || Object.keys(query).length === 0) return base;
     const params = new URLSearchParams(query);
     return `${base}?${params.toString()}`;

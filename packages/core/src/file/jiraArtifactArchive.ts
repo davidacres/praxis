@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { ZipFile } from 'yazl';
+import { trimEdgeChars } from '../text/linearText';
 
 export interface PreparedJiraArtifactUpload {
   uploadPath: string;
@@ -17,12 +18,14 @@ interface PrepareJiraArtifactUploadOptions {
 }
 
 function normalizeAttachmentSegment(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return trimEdgeChars(
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-'),
+    '-'
+  );
 }
 
 function escapeRegExp(value: string): string {

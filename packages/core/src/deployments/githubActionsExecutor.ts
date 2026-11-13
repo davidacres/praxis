@@ -41,6 +41,7 @@
 
 import { load as loadYaml } from 'js-yaml';
 import type { GitHubActionsConfig } from '../ci/githubActionsEvidenceProvider';
+import { trimTrailingChars } from '../text/linearText';
 
 const GITHUB_API_VERSION = '2022-11-28';
 
@@ -159,7 +160,7 @@ export class GitHubActionsDeploymentExecutor {
   }
 
   private buildUrl(pathname: string): string {
-    return `${this.config.baseUrl.replace(/\/+$/, '')}${pathname}`;
+    return `${trimTrailingChars(this.config.baseUrl, '/')}${pathname}`;
   }
 
   private async get(pathname: string): Promise<{ json: unknown }> {
