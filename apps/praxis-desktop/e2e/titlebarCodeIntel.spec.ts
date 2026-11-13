@@ -90,6 +90,15 @@ test('the chip shows keyword search without a model and never wakes an idle serv
   await expect(chip).toHaveText('Keyword');
   await expect(chip.locator('.titlebar-code-intel-icon')).toHaveClass(/is-search/);
 
+  // The chip refreshes again while the app finishes starting (its folder and settings resolve), so let
+  // those calls land before counting; otherwise a late one is counted against the focus refresh below.
+  let seen = -1;
+  await expect.poll(() => Promise.resolve().then(() => {
+    const settled = ciStub.calls.length === seen;
+    seen = ciStub.calls.length;
+    return settled;
+  }), { intervals: [400], timeout: 10000 }).toBe(true);
+
   // The service idles out; a focus refresh only asks whether it is running.
   ciStub.running = false; ciStub.calls.length = 0;
   await win.evaluate(() => window.dispatchEvent(new Event('focus')));
