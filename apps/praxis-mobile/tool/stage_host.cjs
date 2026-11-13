@@ -1010,9 +1010,11 @@ http.createServer((request, response) => {
   let body = 'ok';
   if (url.startsWith('/theme/')) {
     const name = url.slice('/theme/'.length);
-    appearance = name === 'none' ? undefined : THEMES[name] ?? appearance;
+    const known = name === 'none' || Object.prototype.hasOwnProperty.call(THEMES, name);
+    if (known) appearance = name === 'none' ? undefined : THEMES[name];
     if (appearance) emit({ type: 'host.appearance', appearance });
-    body = `theme ${name}`;
+    // Never echo the request path back: a reflected value is an XSS sink.
+    body = known ? `theme ${name}` : 'unknown theme';
   } else if (url === '/reply') {
     streamReply(sessions.get('sess-pairing'), cannedReply('a follow-up from the stage control port'));
   } else if (url === '/permission') {
@@ -1029,6 +1031,8 @@ http.createServer((request, response) => {
     response.writeHead(404);
     body = 'unknown';
   }
+  if (!response.headersSent) response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  response.setHeader('X-Content-Type-Options', 'nosniff');
   response.end(`${body}\n`);
 }).listen(CONTROL_PORT, '127.0.0.1');
 
