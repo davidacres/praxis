@@ -32,7 +32,7 @@ mod context_snapshot;
 mod coordination;
 mod deployments;
 mod gadget_service;
-mod html_preview;
+pub mod html_preview;
 mod log_bus;
 mod marketplace;
 mod mobile_host;
