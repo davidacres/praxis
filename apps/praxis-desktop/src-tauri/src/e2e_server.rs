@@ -171,6 +171,9 @@ struct Request {
     body: Vec<u8>,
 }
 
+/// Generous for any fixture a spec posts, far short of what would take the server down.
+const MAX_BODY: usize = 64 * 1024 * 1024;
+
 fn read_request(stream: &TcpStream) -> std::io::Result<Request> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut first = String::new();
@@ -197,6 +200,13 @@ fn read_request(stream: &TcpStream) -> std::io::Result<Request> {
         {
             length = value.trim().parse().unwrap_or(0);
         }
+    }
+    // Read before the token is checked, so an absurd declared length must not become an allocation.
+    if length > MAX_BODY {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "request body too large",
+        ));
     }
     let mut body = vec![0u8; length];
     reader.read_exact(&mut body)?;
@@ -446,5 +456,40 @@ fn rpc(shared: &Shared, channel: String, args: Vec<Value>) -> Value {
                 json!({ "ok": false, "error": response.error })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read_raw(raw: String) -> std::io::Result<Request> {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        let client = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).expect("connect");
+            let _ = stream.write_all(raw.as_bytes());
+            stream
+        });
+        let (stream, _) = listener.accept().expect("accept");
+        let read = read_request(&stream);
+        drop(client.join());
+        read
+    }
+
+    #[test]
+    fn a_declared_length_past_the_cap_is_refused_without_allocating_it() {
+        let refused = read_raw(format!(
+            "POST /rpc?token=x HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+            usize::MAX
+        ));
+        assert_eq!(
+            refused.err().map(|e| e.kind()),
+            Some(std::io::ErrorKind::InvalidData)
+        );
+        let read = read_raw("POST /rpc?token=x HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}".into())
+            .expect("request");
+        assert_eq!(read.body, b"{}");
+        assert_eq!(read.query.get("token").map(String::as_str), Some("x"));
     }
 }
