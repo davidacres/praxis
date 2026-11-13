@@ -759,9 +759,10 @@ async function handleRequest(
       sendResponse(res, result.status, result.body, result.extraHeaders);
       return;
     } catch (error) {
+      console.error('[mockGitLabApi] route error', error);
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ message: 'mock server error', detail: String(error) }));
+      res.end(JSON.stringify({ message: 'mock server error' }));
       return;
     }
   }

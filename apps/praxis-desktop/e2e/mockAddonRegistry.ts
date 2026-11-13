@@ -123,7 +123,7 @@ export async function startMockAddonRegistry(options: {
     }
 
     // npm registry — packument.
-    const name = decodeURIComponent(url.pathname.replace(/^\//, '').replace('%2F', '/'));
+    const name = decodeURIComponent(url.pathname.replace(/^\//, '').replaceAll('%2F', '/'));
     const addon = built.get(name);
     if (addon) {
       send(200, {

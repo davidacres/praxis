@@ -370,7 +370,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, state: M
       sendResponse(res, result.status, result.body);
       return;
     } catch (error) {
-      sendResponse(res, 500, { message: 'mock server error', detail: String(error) });
+      console.error('[mockGitHubApi] route error', error);
+      sendResponse(res, 500, { message: 'mock server error' });
       return;
     }
   }

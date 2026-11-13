@@ -57,7 +57,7 @@ test('restores the selected session and browser URL and keeps an explicit close 
   const url = win.locator('[data-testid="browser-url-input"]');
   await url.fill(`${pageOrigin}/next`);
   await url.press('Enter');
-  await expect(url).toHaveValue(new RegExp(`${pageOrigin.replace(/[.]/g, '\\.')}/next`), { timeout: 15000 });
+  await expect(url).toHaveValue(new RegExp(`${pageOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/next`), { timeout: 15000 });
   await win.screenshot({ path: '../.praxis/session-artifacts/session-browser-verified.png' });
   await win.getByRole('button', { name: 'Close browser' }).click();
   expect(await win.evaluate(() => JSON.parse(localStorage.getItem(`praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`) ?? '{}'))).toMatchObject({
@@ -117,7 +117,7 @@ test('a full-tools session drives the in-app browser and reads the page', async 
   // The browser pane auto-opens when the agent first drives it, and shows the
   // page the tool navigated to.
   await expect(win.locator('[data-testid="browser-pane"]')).toBeVisible({ timeout: 15000 });
-  await expect(win.locator('[data-testid="browser-url-input"]')).toHaveValue(new RegExp(pageOrigin.replace(/[.]/g, '\\.')));
+  await expect(win.locator('[data-testid="browser-url-input"]')).toHaveValue(new RegExp(pageOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 });
@@ -146,7 +146,7 @@ test('the toolbar navigates the in-app browser by hand', async () => {
   await expect(url).toBeVisible();
   await url.fill(`${pageOrigin}/`);
   await url.press('Enter');
-  await expect(url).toHaveValue(new RegExp(pageOrigin.replace(/[.]/g, '\\.')), { timeout: 15000 });
+  await expect(url).toHaveValue(new RegExp(pageOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 15000 });
 
   // Maximize widens the dock to fill the console; restore brings it back.
   const dock = win.locator('.session-browser-dock');

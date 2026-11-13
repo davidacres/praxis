@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { backgroundTaskIsLive } from './backgroundTasks';
 import type { BackgroundTask } from './agentTypes';
 import { Emitter } from '../host/emitter';
@@ -1414,8 +1415,7 @@ export class AiSessionManager {
   // ── Internals ──────────────────────────────────────────────────
 
   private generateSessionId(): string {
-    const hex = () => Math.random().toString(16).slice(2, 10);
-    return `${hex()}${hex()}`;
+    return randomBytes(8).toString('hex');
   }
 
   private loadSessions(): Map<string, AiAssignment> {

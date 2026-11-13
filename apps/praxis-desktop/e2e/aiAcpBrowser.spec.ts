@@ -61,7 +61,7 @@ test('an ACP session drives the in-app browser via the MCP server', async () => 
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('needle 90210', { timeout: 20000 });
   await expect(win.locator('[data-testid="browser-pane"]')).toBeVisible({ timeout: 15000 });
   await expect(win.locator('[data-testid="browser-url-input"]')).toHaveValue(
-    new RegExp(pageOrigin.replace(/[.]/g, '\\.'))
+    new RegExp(pageOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   );
 });
 

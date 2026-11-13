@@ -480,6 +480,18 @@ test('re-publishing markdown blocks replaces in place rather than stacking dupli
   assert.deepEqual(blocks.map(b => b.blockId), ['msg-0-md-0', 'msg-0-md-1']);
 });
 
+test('session ids that name Object.prototype members do not pollute prototypes', () => {
+  const gadgets = service();
+  for (const id of ['__proto__', 'constructor', 'prototype']) {
+    gadgets.publish(id, [{ type: 'gadget', gadget: gadget({ gadgetId: 'p' }) }]);
+    gadgets.revoke(id, 'p');
+    gadgets.clearSession(id);
+  }
+  assert.equal(({} as Record<string, unknown>).state, undefined);
+  assert.equal(Array.isArray(Object.prototype), false);
+  assert.equal(Object.keys(Object.prototype).length, 0);
+});
+
 test('loading legacy store with duplicate markdown blocks sanitizes them on initialization', () => {
   const memoryStore = new Map<string, unknown>();
   const store = {

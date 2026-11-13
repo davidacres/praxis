@@ -13,12 +13,17 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ALL_GRANTED, createCodeIntelligenceMcpServer, invokeCodeIntelligence, repositoryNames, type CodeIntelligenceBridgeOptions } from './mcpBridge';
 import { mcpServerAppliesToProvider, type McpServerConfig } from '../ai/mcp/mcpServerConfig';
 
+/** A JS string literal that is safe to embed in generated source (escapes <, U+2028, U+2029). */
+function jsLiteral(value: string): string {
+  return JSON.stringify(value).replace(new RegExp('[<\\u2028\\u2029]', 'g'), ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
 test('stdio searches follow live composer settings for code and knowledge, with explicit overrides', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'pci-search-mode-'));
   const mock = path.join(directory, 'service.cjs');
   const settingsPath = path.join(directory, 'settings.json');
   const received = path.join(directory, 'received.json');
-  await writeFile(mock, `const fs=require('node:fs');let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const request=JSON.parse(input);fs.writeFileSync(${JSON.stringify(received)},input);console.log(JSON.stringify({schemaVersion:'1.2',repositoryId:request.arguments.repositoryId,indexGeneration:null,queryEpoch:null,error:{code:'INVALID_ARGUMENT',message:'recorded',retryable:false}}));});`);
+  await writeFile(mock, `const fs=require('node:fs');let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const request=JSON.parse(input);fs.writeFileSync(${jsLiteral(received)},input);console.log(JSON.stringify({schemaVersion:'1.2',repositoryId:request.arguments.repositoryId,indexGeneration:null,queryEpoch:null,error:{code:'INVALID_ARGUMENT',message:'recorded',retryable:false}}));});`);
   const contracts = path.resolve(__dirname, '../../../../services/code-intelligence/contracts.json');
   const client = new Client({ name: 'mode-fixture', version: '1.0' });
   const transport = new StdioClientTransport({ command: process.execPath,
@@ -161,7 +166,7 @@ test('stdio MCP cancellation stops an in-flight RPC child and preserves the sess
   const directory = await mkdtemp(path.join(os.tmpdir(), 'pci-cancel-'));
   const mock = path.join(directory, 'rpc.cjs');
   const marker = path.join(directory, 'active.praxis.json');
-  await writeFile(mock, `const fs=require('node:fs');let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const request=JSON.parse(input);if(request.tool==='search_code'){fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify({pid:process.pid}));setInterval(()=>{},1000);}else console.log(JSON.stringify({schemaVersion:'1.2',repositoryId:'repo',indexGeneration:null,queryEpoch:null,error:{code:'INVALID_ARGUMENT',message:'Fixture rejection',retryable:false}}));});`);
+  await writeFile(mock, `const fs=require('node:fs');let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const request=JSON.parse(input);if(request.tool==='search_code'){fs.writeFileSync(${jsLiteral(marker)},JSON.stringify({pid:process.pid}));setInterval(()=>{},1000);}else console.log(JSON.stringify({schemaVersion:'1.2',repositoryId:'repo',indexGeneration:null,queryEpoch:null,error:{code:'INVALID_ARGUMENT',message:'Fixture rejection',retryable:false}}));});`);
   const contractsPath = path.resolve(__dirname, '../../../../services/code-intelligence/contracts.json');
   const client = new Client({ name: 'cancellation-fixture', version: '1.0' });
   const transport = new StdioClientTransport({ command: process.execPath,
@@ -218,7 +223,7 @@ test('an all-granted bridge serves every granted repository by name and refuses 
   const received = path.join(directory, 'received.json');
   // `grants` prints the grant file; `rpc` records what the bridge sent and answers with an envelope.
   const mock = path.join(directory, 'service.cjs');
-  await writeFile(mock, `const fs=require('node:fs');if(process.argv.includes('grants')){console.log(fs.readFileSync(${JSON.stringify(grants)},'utf8'));}else{let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const request=JSON.parse(input);fs.writeFileSync(${JSON.stringify(received)},input);const status={schemaVersion:'1.2',repositoryId:request.arguments.repositoryId,indexGeneration:1,queryEpoch:1,freshness:{state:'current',lastReconciledUtc:null,pendingContextCount:0,basis:'observedSnapshot'},data:{desiredRevision:1,contexts:[],jobsByState:{pending:0,leased:0,succeeded:0,failed:0,obsolete:0},models:[],lastReconciledUtc:null,diagnostics:[],ownerState:'mock'},evidence:[],warnings:[],truncated:false,nextCursor:null};const recorded={schemaVersion:'1.2',repositoryId:request.arguments.repositoryId,indexGeneration:null,queryEpoch:null,error:{code:'INVALID_ARGUMENT',message:'recorded by fixture',retryable:false}};console.log(JSON.stringify(request.tool==='get_index_status'?status:recorded));});}`);
+  await writeFile(mock, `const fs=require('node:fs');if(process.argv.includes('grants')){console.log(fs.readFileSync(${jsLiteral(grants)},'utf8'));}else{let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const request=JSON.parse(input);fs.writeFileSync(${jsLiteral(received)},input);const status={schemaVersion:'1.2',repositoryId:request.arguments.repositoryId,indexGeneration:1,queryEpoch:1,freshness:{state:'current',lastReconciledUtc:null,pendingContextCount:0,basis:'observedSnapshot'},data:{desiredRevision:1,contexts:[],jobsByState:{pending:0,leased:0,succeeded:0,failed:0,obsolete:0},models:[],lastReconciledUtc:null,diagnostics:[],ownerState:'mock'},evidence:[],warnings:[],truncated:false,nextCursor:null};const recorded={schemaVersion:'1.2',repositoryId:request.arguments.repositoryId,indexGeneration:null,queryEpoch:null,error:{code:'INVALID_ARGUMENT',message:'recorded by fixture',retryable:false}};console.log(JSON.stringify(request.tool==='get_index_status'?status:recorded));});}`);
   // Other tools answer with a valid error envelope; what matters is what the bridge sent.
   const grant = (...entries: Array<[string, string]>) => writeFile(grants, JSON.stringify({ data: entries.map(([repositoryId, root]) => ({ repositoryId, root, state: 'ready' })) }));
   const contracts = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../services/code-intelligence/contracts.json'), 'utf8')) as CodeIntelligenceBridgeOptions['contracts'];
