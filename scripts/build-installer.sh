@@ -52,6 +52,7 @@ else
 fi
 
 printf '\033[36m==> Packaging Praxis (%s) via Tauri\033[0m\n' "$TARGET"
+node "$REPO_ROOT/scripts/bundle-code-intelligence.mjs"
 (cd "$REPO_ROOT/apps/praxis-desktop/renderer" && npm run tauri:build)
 
 printf '\033[32m  + Distribution artifacts are ready in target/debug\033[0m\n'

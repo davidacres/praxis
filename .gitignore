@@ -104,3 +104,4 @@ __pycache__/
 /osv.sarif
 /osv-report.sarif
 .agent-bin/
+apps/praxis-desktop/src-tauri/resources/
