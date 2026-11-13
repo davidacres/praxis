@@ -321,7 +321,13 @@ test('builds an agent handoff stage from the palette and attaches a specialist s
   await audit.click();
   await expect(reviewerStage).toContainText('code-audit');
   await expect(inspectorOf(page).getByTestId('wf-node-skill-code-audit')).toBeVisible();
-  await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-composition.png');
+  // The composition is asserted structurally. A pixel baseline of this canvas was unusable: headless
+  // Chromium painted the stages in some captures and left the canvas empty in others (998 to 33,000
+  // differing pixels between identical runs), and the committed baseline was the empty frame.
+  await expect(canvas.getByRole('button', { name: /^Implement/ })).toBeVisible();
+  await expect(canvas.getByRole('button', { name: /^Approve/ })).toBeVisible();
+  await expect(reviewerStage).toContainText('Code Reviewer');
+  await expect(reviewerStage).toContainText('code-audit');
 });
 
 test('a folder-backed project commits its workflow to .praxis/workflows and reloads it', async () => {
