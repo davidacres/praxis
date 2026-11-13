@@ -54,7 +54,7 @@
     "test:desktop:rust-dual-mode": "npm run test:desktop:tauri",
     "test:desktop:rust-parity": "npm run test:desktop:tauri",
     "test:desktop:mobile": "cargo test -p praxis-desktop -- mobile",
-    "desktop:dist": "npm run tauri:build --workspace=@praxis/desktop-renderer",
+    "desktop:dist": "npm run bundle:code-intelligence && npm run tauri:build --workspace=@praxis/desktop-renderer",
     "app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-app.ps1",
     "app:demo": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-app.ps1 -Demo",
     "app:demo:mac": "./scripts/run-app.sh --demo",
@@ -85,6 +85,7 @@
     "build:code-intelligence": "node scripts/build-service.mjs",
     "test:code-intelligence": "node scripts/build-service.mjs --test",
     "package:code-intelligence": "node scripts/build-service.mjs --package",
+    "bundle:code-intelligence": "node scripts/bundle-code-intelligence.mjs",
     "connect:code-intelligence": "node services/code-intelligence/scripts/connect.mjs"
   },
   "overrides": {

@@ -104,6 +104,28 @@ pub(super) fn data_directory(host: &HostContext) -> PathBuf {
     }
 }
 
+/// Where a packaged app keeps the service, relative to the app executable's directory, in
+/// lookup order: beside the binary (Windows/Linux, `--no-bundle`), Tauri's `resources` folder,
+/// and a macOS `.app`'s `Contents/Resources` (executable is in `Contents/MacOS`).
+fn bundled_candidates(exe_dir: &Path, exe_name: &str) -> Vec<PathBuf> {
+    let mut roots = vec![exe_dir.to_path_buf(), exe_dir.join("resources")];
+    if let Some(contents) = exe_dir.parent() {
+        roots.push(contents.join("Resources"));
+        roots.push(contents.join("Resources").join("resources"));
+        roots.push(contents.join("lib").join("Praxis"));
+    }
+    roots
+        .into_iter()
+        .map(|r| r.join("code-intelligence").join(exe_name))
+        .collect()
+}
+
+fn find_bundled(exe_dir: &Path, exe_name: &str) -> Option<PathBuf> {
+    bundled_candidates(exe_dir, exe_name)
+        .into_iter()
+        .find(|p| p.is_file())
+}
+
 pub(super) fn service() -> std::result::Result<Runtime, String> {
     let exe_name = if cfg!(windows) {
         "Praxis.CodeIntelligence.exe"
@@ -115,13 +137,8 @@ pub(super) fn service() -> std::result::Result<Runtime, String> {
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .or_else(|| {
-            // A packaged app ships the service beside itself.
-            let beside = std::env::current_exe()
-                .ok()?
-                .parent()?
-                .join("code-intelligence")
-                .join(exe_name);
-            beside.exists().then_some(beside)
+            let exe = std::env::current_exe().ok()?;
+            find_bundled(exe.parent()?, exe_name)
         });
     if let Some(native) = native {
         if !native.exists() {
@@ -940,5 +957,57 @@ pub fn session_server(
             eprintln!("Code intelligence folder setup failed; using existing grants: {error}");
             Some(entry("*"))
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod bundled_lookup_tests {
+    use super::*;
+
+    fn touch(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, b"").unwrap();
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("praxis-ci-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn finds_service_beside_the_binary() {
+        let root = scratch("beside");
+        let exe_dir = root.join("app");
+        let want = exe_dir.join("code-intelligence").join("svc");
+        touch(&want);
+        assert_eq!(find_bundled(&exe_dir, "svc"), Some(want));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn finds_service_in_macos_app_resources() {
+        let root = scratch("macos");
+        let exe_dir = root.join("Praxis.app/Contents/MacOS");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        let want = root.join("Praxis.app/Contents/Resources/code-intelligence/svc");
+        touch(&want);
+        assert_eq!(find_bundled(&exe_dir, "svc"), Some(want));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn prefers_beside_binary_over_resources_and_ignores_missing() {
+        let root = scratch("order");
+        let exe_dir = root.join("Contents/MacOS");
+        assert_eq!(find_bundled(&exe_dir, "svc"), None);
+        let resources = root.join("Contents/Resources/code-intelligence/svc");
+        let beside = exe_dir.join("code-intelligence/svc");
+        touch(&resources);
+        touch(&beside);
+        assert_eq!(find_bundled(&exe_dir, "svc"), Some(beside));
+        let _ = std::fs::remove_dir_all(root);
     }
 }
