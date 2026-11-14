@@ -1,0 +1,68 @@
+- generic [active] [ref=f4e1]:
+  - banner [ref=f4e2]:
+    - generic [ref=f4e3]: PRAXIS / AMBIENT · BOTTOM DOCKS
+    - navigation [ref=f4e4]:
+      - button "01 Aurora Shelf" [ref=f4e5] [cursor=pointer]
+      - button "02 Prism Tabs" [ref=f4e6] [cursor=pointer]
+      - button "03 Signal Circuit" [ref=f4e7] [cursor=pointer]
+      - button "04 Context Bay" [ref=f4e8] [cursor=pointer]
+      - button "05 Liquid Capsule" [ref=f4e9] [cursor=pointer]
+  - main [ref=f4e10]:
+    - generic [ref=f4e11]:
+      - generic [ref=f4e12]:
+        - generic [ref=f4e13]: BOTTOM DOCK / CONCEPT 05
+        - heading "Liquid Capsule" [level=1] [ref=f4e14]
+      - paragraph [ref=f4e15]: One bottom-anchored capsule. Colour-coded chip wells expand their labels inside the same silhouette.
+    - generic [ref=f4e16]:
+      - generic [ref=f4e17]:
+        - generic [ref=f4e18]: ✦
+        - text: Refine the session experience
+        - generic [ref=f4e19]: PRAXIS / DESIGN WORKSPACE • SONNET
+      - generic [ref=f4e20]:
+        - generic [ref=f4e21]: Keep the writing area at the bottom. Make the controls feel part of it.
+        - generic [ref=f4e22]:
+          - generic [ref=f4e23]:
+            - generic [ref=f4e24]: ✦
+            - text: PRAXIS
+          - paragraph [ref=f4e25]:
+            - strong [ref=f4e26]: A little atmosphere. A lot less clutter.
+          - paragraph [ref=f4e27]: The composer stays connected to the conversation. Context, model and permissions become part of its shape, with subtle motion that makes every control feel intentional.
+          - paragraph [ref=f4e28]: Your draft stays readable, and the tools are close when you need them.The glow follows activity; the layout stays still.
+          - generic [ref=f4e29]:
+            - generic [ref=f4e30]: ✓ Ready for your next thought
+            - generic [ref=f4e31]: 18k context
+            - generic [ref=f4e32]: ↗ 2 references
+      - generic [ref=f4e33]:
+        - generic [ref=f4e34]:
+          - generic [ref=f4e35]: AMBIENT
+          - generic [ref=f4e36]: 18k / 200k context
+        - generic [ref=f4e37]:
+          - 'button "Choose model: Sonnet" [ref=f4e38] [cursor=pointer]':
+            - generic [ref=f4e39]: ✦
+            - generic [ref=f4e40]: Sonnet
+            - generic: ⌄
+          - 'button "Choose context: praxis" [ref=f4e41] [cursor=pointer]':
+            - generic [ref=f4e42]: ⌁
+            - generic: praxis
+            - generic: ⌄
+          - 'button "Choose permission: Read only" [ref=f4e43] [cursor=pointer]':
+            - generic [ref=f4e44]: ◇
+            - generic: Read only
+            - generic: ⌄
+        - textbox "Draft" [ref=f4e46]: Make this feel calm, compact and a little unexpected.
+        - button "Preview sending" [ref=f4e47] [cursor=pointer]:
+          - generic [ref=f4e48]: ↑
+        - generic [ref=f4e49]: ⌘ ↵ send · hover a control to unfold it
+    - generic [ref=f4e50]:
+      - generic [ref=f4e51]: Hover the coloured wells to expand their labels without opening another toolbar.
+      - button "◌ Preview working state" [ref=f4e52] [cursor=pointer]
+    - generic [ref=f4e53]:
+      - generic [ref=f4e54]:
+        - text: INTEGRATION
+        - paragraph [ref=f4e55]: The model, folder and permission controls are embedded in the capsule, directly beside the draft.
+      - generic [ref=f4e56]:
+        - text: CHARACTER
+        - paragraph [ref=f4e57]: A single sculpted shape with cool glass highlights and a restrained, almost liquid glow.
+      - generic [ref=f4e58]:
+        - text: MOTION
+        - paragraph [ref=f4e59]: Control labels unfurl on hover, then ease back into their wells. The send control floats at the far end.

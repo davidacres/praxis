@@ -1,0 +1,75 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]: PRAXIS / AMBIENT · BOTTOM DOCKS
+    - navigation [ref=e4]:
+      - button "01 Aurora Shelf" [ref=e5] [cursor=pointer]
+      - button "02 Prism Tabs" [ref=e6] [cursor=pointer]
+      - button "03 Signal Circuit" [ref=e7] [cursor=pointer]
+      - button "04 Context Bay" [ref=e8] [cursor=pointer]
+      - button "05 Liquid Capsule" [ref=e9] [cursor=pointer]
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: BOTTOM DOCK / CONCEPT 01
+        - heading "Aurora Shelf" [level=1] [ref=e14]
+      - paragraph [ref=e15]: A compact glass dock with chips set into its lower edge. One continuous surface, softly lit from within.
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]: ✦
+        - text: Refine the session experience
+        - generic [ref=e19]: PRAXIS / DESIGN WORKSPACE • SONNET
+      - generic [ref=e20]:
+        - generic [ref=e21]: Keep the writing area at the bottom. Make the controls feel part of it.
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - generic [ref=e24]: ✦
+            - text: PRAXIS
+          - paragraph [ref=e25]:
+            - strong [ref=e26]: A little atmosphere. A lot less clutter.
+          - paragraph [ref=e27]: The composer stays connected to the conversation. Context, model and permissions become part of its shape, with subtle motion that makes every control feel intentional.
+          - paragraph [ref=e28]: Your draft stays readable, and the tools are close when you need them.The glow follows activity; the layout stays still.
+          - generic [ref=e29]:
+            - generic [ref=e30]: ✓ Ready for your next thought
+            - generic [ref=e31]: 18k context
+            - generic [ref=e32]: ↗ 2 references
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - button "Add context" [ref=e35] [cursor=pointer]: +
+          - textbox "Draft" [ref=e36]: Make this feel calm, compact and a little unexpected.
+        - button "Preview sending" [ref=e37] [cursor=pointer]:
+          - generic [ref=e38]: ↑
+        - generic [ref=e39]:
+          - 'button "Choose model: Sonnet" [ref=e40] [cursor=pointer]':
+            - generic [ref=e41]: ✦
+            - generic [ref=e42]: Sonnet
+            - generic [ref=e43]: ⌄
+          - 'button "Choose context: praxis" [ref=e44] [cursor=pointer]':
+            - generic [ref=e45]: ⌁
+            - generic [ref=e46]: praxis
+            - generic [ref=e47]: ⌄
+          - 'button "Choose files: 2 files" [ref=e48] [cursor=pointer]':
+            - generic [ref=e49]: ▤
+            - generic [ref=e50]: 2 files
+            - generic [ref=e51]: ⌄
+          - 'button "Choose permission: Read only" [ref=e52] [cursor=pointer]':
+            - generic [ref=e53]: ◇
+            - generic [ref=e54]: Read only
+            - generic [ref=e55]: ⌄
+          - 'button "Choose tools: 3 tools" [ref=e56] [cursor=pointer]':
+            - generic [ref=e57]: ☷
+            - generic [ref=e58]: 3 tools
+            - generic [ref=e59]: ⌄
+          - generic [ref=e60]: 18k / 200k
+    - generic [ref=e62]:
+      - generic [ref=e63]: Click a chip to try its selector. Hover for a slow light sweep.
+      - button "◌ Preview working state" [ref=e64] [cursor=pointer]
+    - generic [ref=e65]:
+      - generic [ref=e66]:
+        - text: INTEGRATION
+        - paragraph [ref=e67]: The chip wells are moulded into the footer of the writing surface, with a shared glass finish.
+      - generic [ref=e68]:
+        - text: CHARACTER
+        - paragraph [ref=e69]: A restrained mint glow, softly bevelled controls and a luminous horizon behind the draft.
+      - generic [ref=e70]:
+        - text: MOTION
+        - paragraph [ref=e71]: Light sweeps through each chip on hover. Activity quickens the horizon while controls fade in place.

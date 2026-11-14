@@ -1,0 +1,76 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]: PRAXIS / AMBIENT STUDIES
+    - navigation [ref=e4]:
+      - button "01 Horizon Dock" [ref=e5] [cursor=pointer]
+      - button "02 Orbit" [ref=e6] [cursor=pointer]
+      - button "03 Tidal Ribbon" [ref=e7] [cursor=pointer]
+      - button "04 Quiet Wings" [ref=e8] [cursor=pointer]
+      - button "05 Command Island" [active] [ref=e9] [cursor=pointer]
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: CONCEPT 05 / AMBIENT
+        - heading "Command Island" [level=1] [ref=e142]
+      - paragraph [ref=e15]: One small island beneath the draft. Model and context are compact launch points for two floating, contextual menus.
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - text: Design workspace
+        - generic [ref=e19]: /
+        - text: Session 24
+        - generic [ref=e20]: ⌘ K · ● Local project
+      - generic [ref=e21]:
+        - generic [ref=e22]: Give this workspace a little more atmosphere.
+        - generic [ref=e24]: PRAXIS
+        - paragraph [ref=e25]:
+          - strong [ref=e26]: Room to think. Nothing in the way.
+          - text: A quiet workspace, with the right tools appearing at the right moment.
+      - generic [ref=e143]:
+        - textbox "Draft" [ref=e145]: Make the session feel a little more alive.
+        - generic [ref=e146]: ⌘ ↵ to send
+        - generic [ref=e147]:
+          - button "Choose model" [ref=e148] [cursor=pointer]: ✦ Sonnet ⌄
+          - button "Choose context" [ref=e150] [cursor=pointer]: ⌁ praxis ⌄
+          - button "Preview sending" [ref=e151] [cursor=pointer]: ↑
+          - generic [ref=e152]:
+            - generic [ref=e153]:
+              - generic [ref=e154]: INTELLIGENCE
+              - button "✦ Claude Sonnet ✓" [ref=e155] [cursor=pointer]:
+                - text: ✦
+                - generic [ref=e156]: Claude Sonnet
+                - emphasis [ref=e157]: ✓
+              - button "◇ Read only ⌄" [ref=e158] [cursor=pointer]:
+                - text: ◇
+                - generic [ref=e159]: Read only
+                - emphasis [ref=e160]: ⌄
+              - button "☷ 3 tools →" [ref=e161] [cursor=pointer]:
+                - text: ☷
+                - generic [ref=e162]: 3 tools
+                - emphasis [ref=e163]: →
+            - generic [ref=e164]:
+              - generic [ref=e165]: CONTEXT
+              - button "⌁ praxis ✓" [ref=e166] [cursor=pointer]:
+                - text: ⌁
+                - generic [ref=e167]: praxis
+                - emphasis [ref=e168]: ✓
+              - button "▤ 2 files →" [ref=e169] [cursor=pointer]:
+                - text: ▤
+                - generic [ref=e170]: 2 files
+                - emphasis [ref=e171]: →
+              - button "+ Add reference" [ref=e172] [cursor=pointer]:
+                - text: +
+                - generic [ref=e173]: Add reference
+                - emphasis
+    - generic [ref=e48]:
+      - generic [ref=e49]: Hover the island to reveal its floating menus.
+      - button "◌ Preview working state" [ref=e50] [cursor=pointer]
+    - generic [ref=e51]:
+      - generic [ref=e174]:
+        - strong [ref=e175]: CONTROLS
+        - paragraph [ref=e176]: Two named anchors instead of a row of chips. Each opens a compact menu directly above its position.
+      - generic [ref=e177]:
+        - strong [ref=e178]: MOTION
+        - paragraph [ref=e179]: Menus float up like small glass islands. The active anchor glows, and selection settles back into a short label.
+      - generic [ref=e180]:
+        - strong [ref=e181]: WHILE WORKING
+        - paragraph [ref=e182]: The menus sink away and the island contracts visually into an activity capsule with Stop.

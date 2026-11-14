@@ -1,0 +1,74 @@
+- generic [active] [ref=f3e1]:
+  - banner [ref=f3e2]:
+    - generic [ref=f3e3]: PRAXIS / AMBIENT · BOTTOM DOCKS
+    - navigation [ref=f3e4]:
+      - button "01 Aurora Shelf" [ref=f3e5] [cursor=pointer]
+      - button "02 Prism Tabs" [ref=f3e6] [cursor=pointer]
+      - button "03 Signal Circuit" [ref=f3e7] [cursor=pointer]
+      - button "04 Context Bay" [ref=f3e8] [cursor=pointer]
+      - button "05 Liquid Capsule" [ref=f3e9] [cursor=pointer]
+  - main [ref=f3e10]:
+    - generic [ref=f3e11]:
+      - generic [ref=f3e12]:
+        - generic [ref=f3e13]: BOTTOM DOCK / CONCEPT 04
+        - heading "Context Bay" [level=1] [ref=f3e14]
+      - paragraph [ref=f3e15]: "A compact two-part dock: a built-in context bay on the left, a clean writing lane and runtime controls on the right."
+    - generic [ref=f3e16]:
+      - generic [ref=f3e17]:
+        - generic [ref=f3e18]: ✦
+        - text: Refine the session experience
+        - generic [ref=f3e19]: PRAXIS / DESIGN WORKSPACE • SONNET
+      - generic [ref=f3e20]:
+        - generic [ref=f3e21]: Keep the writing area at the bottom. Make the controls feel part of it.
+        - generic [ref=f3e22]:
+          - generic [ref=f3e23]:
+            - generic [ref=f3e24]: ✦
+            - text: PRAXIS
+          - paragraph [ref=f3e25]:
+            - strong [ref=f3e26]: A little atmosphere. A lot less clutter.
+          - paragraph [ref=f3e27]: The composer stays connected to the conversation. Context, model and permissions become part of its shape, with subtle motion that makes every control feel intentional.
+          - paragraph [ref=f3e28]: Your draft stays readable, and the tools are close when you need them.The glow follows activity; the layout stays still.
+          - generic [ref=f3e29]:
+            - generic [ref=f3e30]: ✓ Ready for your next thought
+            - generic [ref=f3e31]: 18k context
+            - generic [ref=f3e32]: ↗ 2 references
+      - generic [ref=f3e33]:
+        - generic [ref=f3e34]:
+          - generic [ref=f3e35]: Context bay
+          - 'button "Choose context: praxis" [ref=f3e36] [cursor=pointer]':
+            - generic [ref=f3e37]: ⌁
+            - generic [ref=f3e38]: praxis
+            - generic [ref=f3e39]: ⌄
+          - 'button "Choose files: 2 attached files" [ref=f3e40] [cursor=pointer]':
+            - generic [ref=f3e41]: ▤
+            - generic [ref=f3e42]: 2 attached files
+            - generic [ref=f3e43]: ⌄
+        - textbox "Draft" [ref=f3e45]: Make this feel calm, compact and a little unexpected.
+        - generic [ref=f3e46]:
+          - 'button "Choose model: Sonnet" [ref=f3e47] [cursor=pointer]':
+            - generic [ref=f3e48]: ✦
+            - generic [ref=f3e49]: Sonnet
+            - generic [ref=f3e50]: ⌄
+          - 'button "Choose permission: Read only" [ref=f3e51] [cursor=pointer]':
+            - generic [ref=f3e52]: ◇
+            - generic [ref=f3e53]: Read only
+            - generic [ref=f3e54]: ⌄
+          - 'button "Choose tools: 3 tools" [ref=f3e55] [cursor=pointer]':
+            - generic [ref=f3e56]: ☷
+            - generic [ref=f3e57]: 3 tools
+            - generic [ref=f3e58]: ⌄
+        - button "Preview sending" [ref=f3e59] [cursor=pointer]:
+          - generic [ref=f3e60]: ↑
+    - generic [ref=f3e61]:
+      - generic [ref=f3e62]: Click the context tiles or runtime chips to explore their menus.
+      - button "◌ Preview working state" [ref=f3e63] [cursor=pointer]
+    - generic [ref=f3e64]:
+      - generic [ref=f3e65]:
+        - text: INTEGRATION
+        - paragraph [ref=f3e66]: Folder and file chips become inset tiles in a dedicated context bay, inside the composer.
+      - generic [ref=f3e67]:
+        - text: CHARACTER
+        - paragraph [ref=f3e68]: Warm edge light, smoked metal and a calm asymmetric layout. Useful without looking like a form.
+      - generic [ref=f3e69]:
+        - text: MOTION
+        - paragraph [ref=f3e70]: Context tiles slide slightly toward the draft. Runtime chips glow quietly on approach.

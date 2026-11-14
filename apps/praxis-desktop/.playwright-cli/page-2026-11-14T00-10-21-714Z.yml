@@ -1,0 +1,53 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]: PRAXIS / AMBIENT STUDIES
+    - navigation [ref=e4]:
+      - button "01 Horizon Dock" [ref=e5] [cursor=pointer]
+      - button "02 Orbit" [active] [ref=e6] [cursor=pointer]
+      - button "03 Tidal Ribbon" [ref=e7] [cursor=pointer]
+      - button "04 Quiet Wings" [ref=e8] [cursor=pointer]
+      - button "05 Command Island" [ref=e9] [cursor=pointer]
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: CONCEPT 02 / AMBIENT
+        - heading "Orbit" [level=1] [ref=e61]
+      - paragraph [ref=e15]: A small luminous nucleus replaces the toolbar. Context and capabilities orbit it, then disappear when you start writing.
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - text: Design workspace
+        - generic [ref=e19]: /
+        - text: Session 24
+        - generic [ref=e20]: ⌘ K · ● Local project
+      - generic [ref=e21]:
+        - generic [ref=e22]: Give this workspace a little more atmosphere.
+        - generic [ref=e24]: PRAXIS
+        - paragraph [ref=e25]:
+          - strong [ref=e26]: Room to think. Nothing in the way.
+          - text: A quiet workspace, with the right tools appearing at the right moment.
+      - generic [ref=e62]:
+        - generic [ref=e63]:
+          - button "Reveal orbit controls" [ref=e64] [cursor=pointer]: ✦
+          - generic [ref=e65]:
+            - button "✧ Sonnet" [ref=e66] [cursor=pointer]
+            - button "⌁ praxis" [ref=e67] [cursor=pointer]
+            - button "◇ Read only" [ref=e68] [cursor=pointer]
+            - button "☷ Tools" [ref=e69] [cursor=pointer]
+        - textbox "Draft" [ref=e71]: Make the session feel a little more alive.
+        - button "Preview sending" [ref=e72] [cursor=pointer]: ↑
+        - generic [ref=e73]:
+          - generic [ref=e74]: A little space for your next idea.
+          - generic [ref=e75]: ↗ 18k context
+    - generic [ref=e48]:
+      - generic [ref=e49]: Hover the glowing nucleus to reveal its satellites.
+      - button "◌ Preview working state" [ref=e50] [cursor=pointer]
+    - generic [ref=e51]:
+      - generic [ref=e76]:
+        - strong [ref=e77]: CONTROLS
+        - paragraph [ref=e78]: "Four satellites: model, workspace, permissions and attached tools. A radial arrangement keeps the writing lane clear."
+      - generic [ref=e79]:
+        - strong [ref=e80]: MOTION
+        - paragraph [ref=e81]: Slow orbital rings. Satellites fan outward on hover and drift back toward the nucleus on leave.
+      - generic [ref=e82]:
+        - strong [ref=e83]: WHILE WORKING
+        - paragraph [ref=e84]: The satellites retract. The nucleus becomes the animated activity indicator; Stop stays at the far edge.

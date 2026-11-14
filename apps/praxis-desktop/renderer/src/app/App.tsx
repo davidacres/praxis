@@ -1,3 +1,4 @@
+import { recordedSessionError } from '../ai/sessionError';
 import { WorkHub } from './WorkHub';
 import { sessionLastActivityAt } from './sessionRecency';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -1097,7 +1098,7 @@ export function App() {
         const isSelected = targetKey === record.issueKey || targetKey === record.sessionId;
         const isTerminal = record.state === 'completed' || record.state === 'failed' || record.state === 'aborted';
         const recordToStore = (!isSelected && isTerminal)
-          ? { ...record, lastActivityAt: sessionLastActivityAt(record), events: [], eventsLoaded: false }
+          ? { ...record, lastError: record.state === 'failed' ? recordedSessionError(record) : record.lastError, lastActivityAt: sessionLastActivityAt(record), events: [], eventsLoaded: false }
           : record;
         return [recordToStore, ...rest].sort((a, b) => sessionLastActivityAt(b).localeCompare(sessionLastActivityAt(a)));
       });

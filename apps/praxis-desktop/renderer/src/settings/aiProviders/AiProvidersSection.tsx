@@ -100,9 +100,9 @@ export function AiProvidersSection({ settings, update, category, onOpenUsage }: 
   const catalogBuiltIns: BuiltInCatalogEntry[] = AI_PROVIDERS.map(meta => ({ id: meta.id, kind: meta.kind, label: meta.label }));
 
   const selectedMeta = listedMetas.find(meta => meta.id === selectedId) ?? listedMetas[0];
-  useEffect(() => {
-    if (selectedMeta && selectedMeta.id !== selectedId) setSelectedId(selectedMeta.id);
-  }, [selectedMeta, selectedId]);
+  // A save can return its provider id before the settings echo includes it.
+  // Render the fallback meanwhile, without erasing that pending selection.
+  // Explicit removals already select their replacement in removeProvider.
 
   const recentByProvider = useMemo(() => {
     const map = new Map<string, AgentSessionRecord[]>();

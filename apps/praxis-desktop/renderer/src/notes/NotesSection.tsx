@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ProjectNote, ProjectRecord } from '@praxis/core';
 import { SectionHeader } from '../components/sidebar/SectionHeader';
 import { ChipSelect, type ChipSelectOption } from '../ui/ChipSelect';
@@ -26,10 +26,12 @@ function readExpanded(projectId: string): string[] {
  */
 export function NotesSection({ projectId, projects }: { projectId?: string; projects: ProjectRecord[] }) {
   const { prompt, confirmChoice } = useDialogs();
-  const { notes, groups, error: loadError } = useNotesCollection(projectId);
+  const { notes, groups, error: loadError, reload } = useNotesCollection(projectId);
   const { draft, dirty } = useNotesSession();
   const [expandedFor, setExpandedFor] = useState<{ projectId?: string; ids: string[] }>({ ids: [] });
   const [composing, setComposing] = useState(false);
+  const mutationPending = useRef(false);
+  const [mutating, setMutating] = useState(false);
   const [actionError, setActionError] = useState<string>();
 
   const expanded = projectId && expandedFor.projectId === projectId ? expandedFor.ids : projectId ? readExpanded(projectId) : [];
@@ -48,10 +50,20 @@ export function NotesSection({ projectId, projects }: { projectId?: string; proj
 
   /** Runs a mutation; failures stay visible rather than looking saved. */
   async function run<T>(call: () => Promise<NotesOutcome<T>>): Promise<T | undefined> {
+    if (mutationPending.current) return undefined;
+    mutationPending.current = true;
+    setMutating(true);
     setActionError(undefined);
-    const outcome = await call();
-    if (!outcome.ok) { setActionError(outcome.message); return undefined; }
-    return outcome.value;
+    try {
+      const outcome = await call();
+      if (!outcome.ok) { setActionError(outcome.message); return undefined; }
+      // Do not let the next menu open on a row that is about to move groups.
+      await reload();
+      return outcome.value;
+    } finally {
+      mutationPending.current = false;
+      setMutating(false);
+    }
   }
 
   async function createGroup(noteIds: string[] = []) {
@@ -131,7 +143,7 @@ export function NotesSection({ projectId, projects }: { projectId?: string; proj
         onClick={() => { setComposing(true); void notesSession.open(note); }}>
         <Icon name="note" size={12} /><span className="notes-row__title">{note.title}</span>
       </button>
-      <ChipSelect value="" placeholder="" icon="ellipsis" variant="plain" menuAlign="end" className="notes-row__menu"
+      <ChipSelect value="" placeholder="" icon="ellipsis" variant="plain" menuAlign="end" className="notes-row__menu" disabled={mutating}
         ariaLabel={`Actions for note ${note.title}`} title="Note actions" options={menu.options} onChange={menu.onChange} />
     </li>;
   }
@@ -141,7 +153,7 @@ export function NotesSection({ projectId, projects }: { projectId?: string; proj
       containerTestId="section-header-notes"
       onAdd={() => { setComposing(true); void notesSession.startNew(projectId); }} />
     <div className="easymode-section__body notes-section__body">
-      {projectId && <button type="button" className="notes-section__new-group" data-testid="notes-new-group" onClick={() => { void createGroup(); }}>
+      {projectId && <button type="button" className="notes-section__new-group" data-testid="notes-new-group" disabled={mutating} onClick={() => { void createGroup(); }}>
         <Icon name="folder" size={12} /><span>New group</span>
       </button>}
       {(actionError ?? loadError) && <p className="notes-section__error" role="alert" data-testid="notes-error">{actionError ?? loadError}</p>}
@@ -156,7 +168,7 @@ export function NotesSection({ projectId, projects }: { projectId?: string; proj
                 <span className="notes-row__title">{group.title}</span>
                 <span className="notes-row__count">{group.noteIds.length}</span>
               </button>
-              <ChipSelect value="" placeholder="" icon="ellipsis" variant="plain" menuAlign="end" className="notes-row__menu"
+              <ChipSelect value="" placeholder="" icon="ellipsis" variant="plain" menuAlign="end" className="notes-row__menu" disabled={mutating}
                 ariaLabel={`Actions for group ${group.title}`} title="Group actions"
                 options={[{ value: 'rename', label: 'Rename', icon: 'pencil' }, { value: 'send', label: 'Send to session…', icon: 'arrow-right', disabled: group.noteIds.length === 0 }, { value: 'delete', label: 'Delete group', icon: 'trash' }]}
                 onChange={value => {
@@ -171,7 +183,7 @@ export function NotesSection({ projectId, projects }: { projectId?: string; proj
                 ? renderNote(note, 2, { id: group.id, noteIds: group.noteIds })
                 : <li key={noteId} className="notes-row notes-row--l2 notes-row--missing" data-testid={`notes-missing-${noteId}`}>
                   <span className="notes-row__title">Note unavailable</span>
-                  <button type="button" className="notes-row__remove" onClick={() => { void setMembers(group.id, removeMember(group.noteIds, noteId)); }}>Remove</button>
+                  <button type="button" className="notes-row__remove" disabled={mutating} onClick={() => { void setMembers(group.id, removeMember(group.noteIds, noteId)); }}>Remove</button>
                 </li>)}
             </ul>}
           </li>;

@@ -1,0 +1,61 @@
+- generic [active] [ref=f5e1]:
+  - banner [ref=f5e2]:
+    - generic [ref=f5e3]: PRAXIS / AMBIENT STUDIES
+    - navigation [ref=f5e4]:
+      - button "01 Horizon Dock" [ref=f5e5] [cursor=pointer]
+      - button "02 Orbit" [ref=f5e6] [cursor=pointer]
+      - button "03 Tidal Ribbon" [ref=f5e7] [cursor=pointer]
+      - button "04 Quiet Wings" [ref=f5e8] [cursor=pointer]
+      - button "05 Command Island" [ref=f5e9] [cursor=pointer]
+  - main [ref=f5e10]:
+    - generic [ref=f5e11]:
+      - generic [ref=f5e12]:
+        - generic [ref=f5e13]: CONCEPT 04 / AMBIENT
+        - heading "Quiet Wings" [level=1] [ref=f5e14]
+      - paragraph [ref=f5e15]: A centred writing space framed by two almost invisible handles. Context lives on the left; agent behaviour lives on the right.
+    - generic [ref=f5e16]:
+      - generic [ref=f5e17]:
+        - text: Design workspace
+        - generic [ref=f5e19]: /
+        - text: Session 24
+        - generic [ref=f5e20]: ⌘ K · ● Local project
+      - generic [ref=f5e21]:
+        - generic [ref=f5e22]: Give this workspace a little more atmosphere.
+        - generic [ref=f5e24]: PRAXIS
+        - paragraph [ref=f5e25]:
+          - strong [ref=f5e26]: Room to think. Nothing in the way.
+          - text: A quiet workspace, with the right tools appearing at the right moment.
+      - generic [ref=f5e31]:
+        - textbox "Draft" [ref=f5e33]: Make the session feel a little more alive.
+        - generic:
+          - button "⌁ CONTEXT" [ref=f5e34] [cursor=pointer]
+          - generic [ref=f5e35]:
+            - generic [ref=f5e36]: YOUR CONTEXT
+            - button "⌁ praxis folder" [ref=f5e37] [cursor=pointer]:
+              - text: ⌁
+              - generic [ref=f5e38]: praxis
+              - emphasis [ref=f5e39]: folder
+            - button "▤ 2 attached files" [ref=f5e40] [cursor=pointer]:
+              - text: ▤
+              - generic [ref=f5e41]: 2 attached files
+              - emphasis
+            - button "+ Add a reference" [ref=f5e42] [cursor=pointer]:
+              - text: +
+              - generic [ref=f5e43]: Add a reference
+              - emphasis
+        - button "✦ AGENT" [ref=f5e44] [cursor=pointer]
+        - button "Preview sending" [ref=f5e45] [cursor=pointer]: ↑
+        - generic [ref=f5e46]: Send your next thought
+    - generic [ref=f5e47]:
+      - generic [ref=f5e48]: Hover either side handle to slide open a wing.
+      - button "◌ Preview working state" [ref=f5e49] [cursor=pointer]
+    - generic [ref=f5e50]:
+      - generic [ref=f5e51]:
+        - strong [ref=f5e52]: CONTROLS
+        - paragraph [ref=f5e53]: "Left wing: workspace, files and references. Right wing: model, permissions and tools. The centre stays purely for writing."
+      - generic [ref=f5e54]:
+        - strong [ref=f5e55]: MOTION
+        - paragraph [ref=f5e56]: Glass drawers glide inward from either edge. A soft accent wash follows the open wing.
+      - generic [ref=f5e57]:
+        - strong [ref=f5e58]: WHILE WORKING
+        - paragraph [ref=f5e59]: Both wings tuck away. The horizon and a centred Stop action carry the whole interaction.

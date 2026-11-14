@@ -1,0 +1,50 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]: AMBIENT / LESS
+    - navigation [ref=e4]:
+      - button "01 Hairline" [ref=e5] [cursor=pointer]
+      - button "02 Fold" [ref=e6] [cursor=pointer]
+      - button "03 Margin" [ref=e7] [cursor=pointer]
+      - button "04 Pebble" [ref=e8] [cursor=pointer]
+      - button "05 Underline" [ref=e9] [cursor=pointer]
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: MINIMAL STUDY / 01
+        - heading "Hairline" [level=1] [ref=e14]
+      - paragraph [ref=e15]: A single illuminated rule defines the writing surface. Small text chips sit beneath it, separated by space rather than boxes.
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - text: ◌ A quieter workspace
+        - generic [ref=e18]: praxis / session
+      - generic [ref=e19]:
+        - generic [ref=e20]: Make room for the idea.
+        - generic [ref=e21]:
+          - generic [ref=e22]: ✧ PRAXIS
+          - strong [ref=e23]: A little less interface. A little more space.
+          - paragraph [ref=e24]: The controls are still here — they just sit closer to the writing, appearing when you need them and settling back when you don't.
+          - generic [ref=e25]: 3 files considered · ready for your next thought
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - textbox "Draft" [ref=e28]:
+            - /placeholder: Where should we go next?
+            - text: Let’s make this feel effortless.
+          - button "Preview sending" [ref=e29] [cursor=pointer]: ↑
+        - generic [ref=e30]:
+          - button "Sonnet" [ref=e31] [cursor=pointer]
+          - button "praxis" [ref=e33] [cursor=pointer]
+          - button "Read only" [ref=e35] [cursor=pointer]
+          - generic [ref=e37]: ⌘ ↵ to send
+    - generic [ref=e38]:
+      - generic [ref=e39]: Hover the chips to brighten their labels. The horizon drifts slowly.
+      - button "Preview working state ↗" [ref=e40] [cursor=pointer]
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]: Bottom anchored
+        - text: The conversation keeps the space.
+      - generic [ref=e44]:
+        - generic [ref=e45]: Integrated controls
+        - text: Context, model, access. Nothing extra.
+      - generic [ref=e46]:
+        - generic [ref=e47]: Gentle motion
+        - text: Focus, reveal, settle. Reduced motion respected.

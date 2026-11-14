@@ -1,3 +1,4 @@
+import { recordedSessionError } from '../ai/sessionError';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import type { AgentEventSummary, AgentSessionRecord, AgentTaskState, ProjectRecord } from '@praxis/core';
 import { recencyBucket, sessionLastActivityAt } from './sessionRecency';
@@ -435,9 +436,10 @@ function pendingPermission(events: AgentEventSummary[]): AgentEventSummary | und
   return events.slice(lastCompleted + 1).find(event => event.type === 'permission_requested');
 }
 
-function failureText(session: AgentSessionRecord): string {
-  const lastError = [...session.events].reverse().find(event => event.type === 'error');
-  return session.lastError || lastError?.detail || lastError?.summary || 'The session stopped with an error.';
+function failureText(session: AgentSessionRecord, full: AgentSessionRecord): string {
+  // The fetched transcript may predate the live terminal push. Its missing error
+  // must not replace the error already retained by the session summary.
+  return recordedSessionError(session) || recordedSessionError(full) || 'The session stopped with an error.';
 }
 
 /** How long ago, in the band's few characters. */
@@ -582,7 +584,7 @@ function ShelfCard({ session, open, offset, instant, position, onOpenSession, on
       </div>
       : <p className="session-shelf__message">Loading the request…</p>)}
     {state === 'fail' && <div className="session-shelf__alert" role="alert" data-testid="shelf-failed-error">
-      <Icon name="warning" size={12} /><span>{failureText(full)}</span></div>}
+      <Icon name="warning" size={12} /><span>{failureText(session, full)}</span></div>}
     {state !== 'appr' && state !== 'fail' && (activity ?? message) && <p className="session-shelf__message">{activity ?? message}</p>}
     {changes && changes.files.length > 0 && <div className="session-shelf__changes" data-testid="session-shelf-changes">
       <div className="session-shelf__changes-head"><Icon name="file" size={12} />

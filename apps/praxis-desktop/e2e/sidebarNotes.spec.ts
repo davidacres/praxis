@@ -171,3 +171,99 @@ test('the sidebar editor reports a failed save, keeps the text and recovers on R
   await expect(section.getByTestId('note-save-state')).toHaveText('Saved');
   expect(fs.readFileSync(file, 'utf8')).toContain('first line, then more');
 });
+
+// Regression: an older read completed after the group update and moved the note
+// back out of its group, unmounting the action menu the user had already opened.
+test('a stale notes read cannot roll back membership or detach an open menu', async () => {
+  test.slow();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+  await createProject(page);
+  await page.reload();
+  const section = page.getByTestId('notes-section');
+  await addNote(page, 'Stable menu', 'saved body');
+  await section.getByRole('button', { name: 'Close editor' }).click();
+  const projectId = await page.evaluate(async () => (await window.praxis.projects.list()).find(project => project.name === 'Sidebar Notes')!.id);
+  const notes = await page.evaluate(async id => window.praxis.notes.list(id), projectId);
+  if (!notes.ok) throw new Error('Failed to read test note');
+  const noteId = notes.value.notes[0].id;
+  let captured = false;
+  let first = true;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.evaluate(() => {
+    const original = window.praxis.notes.list;
+    (window as any).__notesReads = 0;
+    window.praxis.notes.list = async id => {
+      const result = await original(id);
+      (window as any).__notesReads++;
+      return result;
+    };
+  });
+  await app.overrideChannel('notes:list', async (args, host) => {
+    const result = await host.call('notes:list', ...args);
+    if (first) { first = false; captured = true; await held; }
+    return result;
+  });
+  try {
+    await app.emitEvent('notes:changed', projectId);
+    await expect.poll(() => captured).toBe(true);
+    const group = await page.evaluate(async ({ projectId, noteId }) => window.praxis.notes.createGroup(projectId, { title: 'Stable group', noteIds: [noteId] }), { projectId, noteId });
+    if (!group.ok) throw new Error('Failed to create test group');
+    const row = section.getByTestId(`notes-group-${group.value.id}`);
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: /^Stable group/ }).click();
+    await row.getByRole('button', { name: 'Actions for note Stable menu', exact: true }).click();
+    const option = page.getByRole('option', { name: 'Add to new group…', exact: true });
+    await expect(option).toBeVisible();
+    release();
+    await expect.poll(() => page.evaluate(() => (window as any).__notesReads)).toBeGreaterThanOrEqual(2);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(row).toBeVisible();
+    await expect(option).toBeVisible();
+  if (process.env.PRAXIS_RACE_EVIDENCE === '1') {
+    const folder = path.resolve(__dirname, '../.praxis/session-artifacts/remaining-races');
+    fs.mkdirSync(folder, { recursive: true });
+    await page.screenshot({ path: path.join(folder, 'notes-menu.png') });
+  }
+    await option.click();
+    await expect(page.getByLabel('Group name')).toBeVisible();
+  } finally { release(); }
+});
+
+// Regression: the group write can finish before its fresh collection is rendered.
+// Opening the old ungrouped row during that gap detached the next action menu.
+test('group actions wait for the saved membership snapshot before becoming available', async () => {
+  test.slow();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+  await createProject(page);
+  await page.reload();
+  const section = page.getByTestId('notes-section');
+  await addNote(page, 'Moving note', 'saved body');
+  await section.getByRole('button', { name: 'Close editor' }).click();
+  let heldReads = 0;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await app.overrideChannel('notes:list', async (args, host) => {
+    const result = await host.call('notes:list', ...args);
+    heldReads++;
+    await held;
+    return result;
+  });
+  try {
+    await menu(page, 'Actions for note Moving note', 'Add to new group…');
+    await page.getByLabel('Group name').fill('Saved group');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect.poll(() => heldReads).toBeGreaterThan(0);
+    await expect(section.getByRole('button', { name: 'Actions for note Moving note', exact: true })).toBeDisabled();
+    release();
+    const group = section.getByTestId('notes-tree').locator('.notes-group').filter({ hasText: 'Saved group' });
+    await expect(group).toBeVisible();
+    const actions = group.getByRole('button', { name: 'Actions for note Moving note', exact: true });
+    await expect(actions).toBeEnabled();
+    await actions.click();
+    await page.getByRole('option', { name: 'Add to new group…', exact: true }).click();
+    await expect(page.getByLabel('Group name')).toBeVisible();
+  } finally { release(); }
+});

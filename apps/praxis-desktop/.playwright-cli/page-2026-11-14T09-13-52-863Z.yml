@@ -1,0 +1,74 @@
+- generic [active] [ref=f1e1]:
+  - banner [ref=f1e2]:
+    - generic [ref=f1e3]: PRAXIS / AMBIENT · BOTTOM DOCKS
+    - navigation [ref=f1e4]:
+      - button "01 Aurora Shelf" [ref=f1e5] [cursor=pointer]
+      - button "02 Prism Tabs" [ref=f1e6] [cursor=pointer]
+      - button "03 Signal Circuit" [ref=f1e7] [cursor=pointer]
+      - button "04 Context Bay" [ref=f1e8] [cursor=pointer]
+      - button "05 Liquid Capsule" [ref=f1e9] [cursor=pointer]
+  - main [ref=f1e10]:
+    - generic [ref=f1e11]:
+      - generic [ref=f1e12]:
+        - generic [ref=f1e13]: BOTTOM DOCK / CONCEPT 02
+        - heading "Prism Tabs" [level=1] [ref=f1e14]
+      - paragraph [ref=f1e15]: "The chips become the composer’s top edge: small, illuminated tabs that feel built into the frame."
+    - generic [ref=f1e16]:
+      - generic [ref=f1e17]:
+        - generic [ref=f1e18]: ✦
+        - text: Refine the session experience
+        - generic [ref=f1e19]: PRAXIS / DESIGN WORKSPACE • SONNET
+      - generic [ref=f1e20]:
+        - generic [ref=f1e21]: Keep the writing area at the bottom. Make the controls feel part of it.
+        - generic [ref=f1e22]:
+          - generic [ref=f1e23]:
+            - generic [ref=f1e24]: ✦
+            - text: PRAXIS
+          - paragraph [ref=f1e25]:
+            - strong [ref=f1e26]: A little atmosphere. A lot less clutter.
+          - paragraph [ref=f1e27]: The composer stays connected to the conversation. Context, model and permissions become part of its shape, with subtle motion that makes every control feel intentional.
+          - paragraph [ref=f1e28]: Your draft stays readable, and the tools are close when you need them.The glow follows activity; the layout stays still.
+          - generic [ref=f1e29]:
+            - generic [ref=f1e30]: ✓ Ready for your next thought
+            - generic [ref=f1e31]: 18k context
+            - generic [ref=f1e32]: ↗ 2 references
+      - generic [ref=f1e33]:
+        - generic [ref=f1e34]:
+          - 'button "Choose model: Sonnet" [ref=f1e35] [cursor=pointer]':
+            - generic [ref=f1e36]: ✦
+            - generic [ref=f1e37]: Sonnet
+            - generic [ref=f1e38]: ⌄
+          - 'button "Choose context: praxis · 2 files" [ref=f1e39] [cursor=pointer]':
+            - generic [ref=f1e40]: ⌁
+            - generic [ref=f1e41]: praxis · 2 files
+            - generic [ref=f1e42]: ⌄
+          - 'button "Choose permission: Read only" [ref=f1e43] [cursor=pointer]':
+            - generic [ref=f1e44]: ◇
+            - generic [ref=f1e45]: Read only
+            - generic [ref=f1e46]: ⌄
+          - 'button "Choose tools: 3 tools" [ref=f1e47] [cursor=pointer]':
+            - generic [ref=f1e48]: ☷
+            - generic [ref=f1e49]: 3 tools
+            - generic [ref=f1e50]: ⌄
+        - generic [ref=f1e51]: AMBIENT / SESSION 24
+        - generic [ref=f1e52]:
+          - button "Add context" [ref=f1e53] [cursor=pointer]: +
+          - textbox "Draft" [ref=f1e54]: Make this feel calm, compact and a little unexpected.
+        - generic [ref=f1e55]:
+          - generic [ref=f1e56]: ⌘ ↵ send
+          - generic [ref=f1e57]: ↗ 18k / 200k context
+        - button "Preview sending" [ref=f1e58] [cursor=pointer]:
+          - generic [ref=f1e59]: ↑
+    - generic [ref=f1e60]:
+      - generic [ref=f1e61]: Hover the tabs to lift them; click to change their selection.
+      - button "◌ Preview working state" [ref=f1e62] [cursor=pointer]
+    - generic [ref=f1e63]:
+      - generic [ref=f1e64]:
+        - text: INTEGRATION
+        - paragraph [ref=f1e65]: Model, workspace and permissions slot into the border itself. No separate chip row below the input.
+      - generic [ref=f1e66]:
+        - text: CHARACTER
+        - paragraph [ref=f1e67]: "A compact technical instrument: smoked glass, violet edge light and thin engraved labels."
+      - generic [ref=f1e68]:
+        - text: MOTION
+        - paragraph [ref=f1e69]: Tabs lift gently from the frame. The selected tab lights along its upper edge.

@@ -1,0 +1,61 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]: PRAXIS / AMBIENT STUDIES
+    - navigation [ref=e4]:
+      - button "01 Horizon Dock" [ref=e5] [cursor=pointer]
+      - button "02 Orbit" [ref=e6] [cursor=pointer]
+      - button "03 Tidal Ribbon" [ref=e7] [cursor=pointer]
+      - button "04 Quiet Wings" [ref=e8] [cursor=pointer]
+      - button "05 Command Island" [ref=e9] [cursor=pointer]
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: CONCEPT 01 / AMBIENT
+        - heading "Horizon Dock" [level=1] [ref=e14]
+      - paragraph [ref=e15]: An uninterrupted writing horizon. A small floating dock holds the essentials; everything else rises out of it.
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - text: Design workspace
+        - generic [ref=e19]: /
+        - text: Session 24
+        - generic [ref=e20]: ⌘ K · ● Local project
+      - generic [ref=e21]:
+        - generic [ref=e22]: Give this workspace a little more atmosphere.
+        - generic [ref=e24]: PRAXIS
+        - paragraph [ref=e25]:
+          - strong [ref=e26]: Room to think. Nothing in the way.
+          - text: A quiet workspace, with the right tools appearing at the right moment.
+      - generic [ref=e31]:
+        - textbox "Draft" [ref=e33]: Make the session feel a little more alive.
+        - generic [ref=e34]: ↵ to send · ⇧ ↵ new line
+        - generic [ref=e35]:
+          - generic [ref=e36]: ✦ Claude Sonnet ⌄
+          - generic [ref=e37]:
+            - button "Tune composer" [ref=e38] [cursor=pointer]: ☷ Tune
+            - generic [ref=e39]:
+              - button "⌁ praxis context" [ref=e40] [cursor=pointer]:
+                - text: ⌁
+                - generic [ref=e41]: praxis
+                - emphasis [ref=e42]: context
+              - button "◇ Read only" [ref=e43] [cursor=pointer]:
+                - text: ◇
+                - generic [ref=e44]: Read only
+                - emphasis
+              - button "✧ 3 tools" [ref=e45] [cursor=pointer]:
+                - text: ✧
+                - generic [ref=e46]: 3 tools
+                - emphasis
+          - button "Preview sending" [ref=e47] [cursor=pointer]: ↑
+    - generic [ref=e48]:
+      - generic [ref=e49]: Hover “Tune” to lift the control tray. Click ↑ to preview activity.
+      - button "◌ Preview working state" [ref=e50] [cursor=pointer]
+    - generic [ref=e51]:
+      - generic [ref=e52]:
+        - strong [ref=e53]: CONTROLS
+        - paragraph [ref=e54]: One model label and a Tune trigger. Context, permissions and tools live in a floating tray.
+      - generic [ref=e55]:
+        - strong [ref=e56]: MOTION
+        - paragraph [ref=e57]: The dock lifts on approach. The tray glides up with a soft stagger; the horizon breathes behind the draft.
+      - generic [ref=e58]:
+        - strong [ref=e59]: WHILE WORKING
+        - paragraph [ref=e60]: The settings dissolve, leaving a quiet activity line and a single Stop action.

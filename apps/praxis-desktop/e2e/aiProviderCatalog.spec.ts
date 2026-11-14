@@ -412,3 +412,36 @@ test('a custom endpoint can be the only provider and its default removal uses th
   expect(settings.ai.customProviders ?? []).toEqual([]);
   expect(settings.ai.recommendationProvider).toBeUndefined();
 });
+
+// Regression: save resolves before the settings echo. Falling back to a listed
+// provider must not erase the user's selection of the provider that was just saved.
+test('the saved provider remains selected when its settings echo arrives late', async () => {
+  mock = await startMockOpenAiCompatibleServer({ tools: false, models: ['llama-small'] });
+  const win = await launch();
+  await win.evaluate(() => {
+    const subscribe = window.praxis.settings.onChanged;
+    const pending: Array<() => void> = [];
+    (window as any).__pendingProviderSettings = pending;
+    window.praxis.settings.onChanged = listener => subscribe(settings => {
+      if (settings.ai.customProviders?.some(provider => provider.id === 'custom:delayed-lab')) pending.push(() => listener(settings));
+      else listener(settings);
+    });
+  });
+  await openAiSettings(win);
+  await addCustomEndpoint(win, { name: 'Delayed Lab', url: mock.baseUrl, auth: 'none' });
+  const form = win.getByTestId('custom-endpoint-form-new');
+  await expect(form.getByTestId('custom-endpoint-probe-chat')).toHaveAttribute('data-status', 'pass');
+  await form.getByTestId('custom-endpoint-save').click();
+  await expect(form).toHaveCount(0);
+  await expect.poll(() => win.evaluate(() => (window as any).__pendingProviderSettings.length)).toBeGreaterThan(0);
+  await win.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await win.evaluate(() => (window as any).__pendingProviderSettings.splice(0).forEach((deliver: () => void) => deliver()));
+  const row = win.getByTestId('ai-provider-row-custom:delayed-lab');
+  await expect(row.getByRole('button')).toHaveAttribute('aria-current', 'true');
+  await expect(win.getByTestId('ai-provider-caps-custom:delayed-lab').locator('[data-capability="tools"]')).toHaveAttribute('data-ok', 'false');
+  if (process.env.PRAXIS_RACE_EVIDENCE === '1') {
+    const folder = path.resolve(__dirname, '../.praxis/session-artifacts/remaining-races');
+    fs.mkdirSync(folder, { recursive: true });
+    await win.screenshot({ path: path.join(folder, 'provider-capabilities.png') });
+  }
+});

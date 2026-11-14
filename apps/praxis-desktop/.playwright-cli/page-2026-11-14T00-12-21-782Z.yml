@@ -1,0 +1,47 @@
+- generic [active] [ref=f1e1]:
+  - banner [ref=f1e2]:
+    - generic [ref=f1e3]: PRAXIS / AMBIENT STUDIES
+    - navigation [ref=f1e4]:
+      - button "01 Horizon Dock" [ref=f1e5] [cursor=pointer]
+      - button "02 Orbit" [ref=f1e6] [cursor=pointer]
+      - button "03 Tidal Ribbon" [ref=f1e7] [cursor=pointer]
+      - button "04 Quiet Wings" [ref=f1e8] [cursor=pointer]
+      - button "05 Command Island" [ref=f1e9] [cursor=pointer]
+  - main [ref=f1e10]:
+    - generic [ref=f1e11]:
+      - generic [ref=f1e12]:
+        - generic [ref=f1e13]: CONCEPT 05 / AMBIENT
+        - heading "Command Island" [level=1] [ref=f1e14]
+      - paragraph [ref=f1e15]: One small island beneath the draft. Model and context are compact launch points for two floating, contextual menus.
+    - generic [ref=f1e16]:
+      - generic [ref=f1e17]:
+        - text: Design workspace
+        - generic [ref=f1e19]: /
+        - text: Session 24
+        - generic [ref=f1e20]: ⌘ K · ● Local project
+      - generic [ref=f1e21]:
+        - generic [ref=f1e22]: Give this workspace a little more atmosphere.
+        - generic [ref=f1e24]: PRAXIS
+        - paragraph [ref=f1e25]:
+          - strong [ref=f1e26]: Room to think. Nothing in the way.
+          - text: A quiet workspace, with the right tools appearing at the right moment.
+      - generic [ref=f1e31]:
+        - textbox "Draft" [ref=f1e33]: Make the session feel a little more alive.
+        - generic [ref=f1e34]: ⌘ ↵ to send
+        - generic [ref=f1e35]:
+          - button "Choose model" [ref=f1e36] [cursor=pointer]: ✦ Sonnet ⌄
+          - button "Choose context" [ref=f1e38] [cursor=pointer]: ⌁ praxis ⌄
+          - button "Preview sending" [ref=f1e39] [cursor=pointer]: ↑
+    - generic [ref=f1e40]:
+      - generic [ref=f1e41]: Hover the island to reveal its floating menus.
+      - button "◌ Preview working state" [ref=f1e42] [cursor=pointer]
+    - generic [ref=f1e43]:
+      - generic [ref=f1e44]:
+        - strong [ref=f1e45]: CONTROLS
+        - paragraph [ref=f1e46]: Two named anchors instead of a row of chips. Each opens a compact menu directly above its position.
+      - generic [ref=f1e47]:
+        - strong [ref=f1e48]: MOTION
+        - paragraph [ref=f1e49]: Menus float up like small glass islands. The active anchor glows, and selection settles back into a short label.
+      - generic [ref=f1e50]:
+        - strong [ref=f1e51]: WHILE WORKING
+        - paragraph [ref=f1e52]: The menus sink away and the island contracts visually into an activity capsule with Stop.

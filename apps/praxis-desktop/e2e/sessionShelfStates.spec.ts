@@ -158,3 +158,21 @@ test('arrow keys walk the shelf, and done and failed cards lead with their outco
   await expect(card.getByTestId('shelf-try-again')).toBeVisible();
   await expect(card.getByRole('button', { name: 'Next session' })).toBeDisabled();
 });
+
+// Regression: terminal push events were discarded before retaining their error summary.
+// The persisted transcript can lag that push, so it cannot recover the live error for us.
+test('a failed push keeps its error while an older transcript is hydrated', async () => {
+  test.slow();
+  const { page, records } = await launchWithStates();
+  const failed = records[4];
+  await app!.overrideChannel('ai:getSession', () => ({ ...failed, events: [], eventsLoaded: true }));
+  await page.getByTestId('session-shelf-spine').nth(4).focus();
+  const card = page.getByTestId('session-shelf-card');
+  await expect(card.getByRole('heading')).toHaveText('API migration');
+  await expect(card.getByTestId('shelf-failed-error')).toContainText('rate limit reached');
+  if (process.env.PRAXIS_RACE_EVIDENCE === '1') {
+    const folder = path.resolve(__dirname, '../.praxis/session-artifacts/remaining-races');
+    fs.mkdirSync(folder, { recursive: true });
+    await page.screenshot({ path: path.join(folder, 'shelf-error.png') });
+  }
+});
