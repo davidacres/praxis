@@ -1,8 +1,11 @@
 import {
-  createContext, forwardRef, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState,
+  createContext, forwardRef, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type HTMLAttributes, type KeyboardEvent, type MutableRefObject, type ReactNode, type TextareaHTMLAttributes
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useSettings } from '../settings/useSettings';
+import { AmbientComposerHorizon } from './AmbientComposerHorizon';
+import { ComposerSurface } from './ComposerSurface';
 import { Icon } from '../ui/Icon';
 
 /** A phrase in the draft the prompt coach is unsure about, as a range of the input's value. */
@@ -17,6 +20,8 @@ export type PromptKeyHandler = (event: KeyboardEvent<HTMLTextAreaElement>) => bo
 interface PromptInlineControls { visible: boolean; canApply: boolean; key: string; question?: string }
 interface PromptInlineActions { apply: () => void; preview: () => ReactNode }
 interface PromptAnalysisContextValue {
+  composerStyle: 'classic' | 'ambient-canvas' | 'hairline';
+  composerActivity: 'idle' | 'thinking' | 'approval';
   inlineControls: PromptInlineControls;
   setInlineControls: (controls: PromptInlineControls) => void;
   inlineActions: MutableRefObject<PromptInlineActions | undefined>;
@@ -34,6 +39,7 @@ interface PromptAnalysisContextValue {
 
 const noop = () => {};
 const PromptAnalysisContext = createContext<PromptAnalysisContextValue>({
+  composerStyle: 'classic', composerActivity: 'idle',
   inlineControls: { visible: false, canApply: false, key: '' }, setInlineControls: noop, inlineActions: { current: undefined },
   highlights: [], setHighlights: noop, setGhost: noop, setStatus: noop, requestPhrase: noop,
   keyHandler: { current: undefined }, inputRef: { current: null }
@@ -43,7 +49,10 @@ const PromptAnalysisContext = createContext<PromptAnalysisContextValue>({
 export const usePromptAnalysis = () => useContext(PromptAnalysisContext);
 
 /** Shared visual frame for a draft, an active session and an embedded review. */
-export function SessionComposerCard({ className = '', children, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function SessionComposerCard({ className = '', children, activity = 'idle', ...props }: HTMLAttributes<HTMLDivElement> & { activity?: 'idle' | 'thinking' | 'approval' }) {
+  const { settings } = useSettings();
+  const style = settings?.appearance.composerStyle ?? 'classic';
+  const state = activity === 'idle' && className.includes('is-running') ? 'thinking' : activity;
   const inlineActions = useRef<PromptInlineActions | undefined>(undefined);
   const [inlineControls, setInlineControlsState] = useState<PromptInlineControls>({ visible: false, canApply: false, key: '' });
   const setInlineControls = useCallback((next: PromptInlineControls) => setInlineControlsState(previous =>
@@ -61,10 +70,10 @@ export function SessionComposerCard({ className = '', children, ...props }: HTML
     setGhostState(previous => previous?.text === next?.text && previous?.hint === next?.hint ? previous : next);
   }, []);
   const requestPhrase = useCallback((id: string) => setRequested(previous => ({ id, nonce: (previous?.nonce ?? 0) + 1 })), []);
-  const value = useMemo(() => ({ inlineActions, inlineControls, setInlineControls, highlights, setHighlights, ghost, setGhost, setStatus, requested, requestPhrase, keyHandler, inputRef }),
-    [inlineControls, setInlineControls, highlights, setHighlights, ghost, setGhost, requested, requestPhrase]);
+  const value = useMemo(() => ({ composerStyle: style, composerActivity: state, inlineActions, inlineControls, setInlineControls, highlights, setHighlights, ghost, setGhost, setStatus, requested, requestPhrase, keyHandler, inputRef }),
+    [style, state, inlineControls, setInlineControls, highlights, setHighlights, ghost, setGhost, requested, requestPhrase]);
   return <PromptAnalysisContext.Provider value={value}>
-    <div {...props} data-prompt-analysis={status} className={`composer session-follow-up-composer ${className}`.trim()}>{children}</div>
+    <ComposerSurface {...props} part="frame" data-composer-style={style} data-composer-state={state} data-prompt-analysis={status} className={`composer session-follow-up-composer ${className}`.trim()}>{children}</ComposerSurface>
   </PromptAnalysisContext.Provider>;
 }
 
@@ -74,7 +83,22 @@ function sameHighlights(a: readonly PromptHighlight[], b: readonly PromptHighlig
 }
 
 export function SessionComposerHeader(props: HTMLAttributes<HTMLDivElement>) {
-  return <div {...props} className={`session-mode-panel ${props.className ?? ''}`.trim()} />;
+  return <div {...props} data-composer-part="header" data-composer-slot="header" className={`session-mode-panel ${props.className ?? ''}`.trim()} />;
+}
+
+/** Retain expanded feedback long enough for a style's closing animation. */
+export function SessionComposerPanel({ open, children }: { open: boolean; children: ReactNode }) {
+  const { composerStyle } = usePromptAnalysis();
+  const [present, setPresent] = useState(open);
+  useEffect(() => {
+    if (open) { setPresent(true); return; }
+    const duration = composerStyle !== 'classic' && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 420 : 0;
+    const timer = window.setTimeout(() => setPresent(false), duration);
+    return () => window.clearTimeout(timer);
+  }, [open, composerStyle]);
+  if (composerStyle === 'classic') return open ? children : null;
+  return open || present ? <div className="composer-panel-transition" data-open={open}
+    aria-hidden={!open} ref={node => { if (node) node.inert = !open; }}>{children}</div> : null;
 }
 
 /** Text metrics the highlight layer must share with the textarea for its marks to line up. */
@@ -86,10 +110,11 @@ const MIRRORED_STYLES = [
 
 /** One-line input that grows and shrinks with its content on every surface. */
 export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & { collapsed?: boolean; leading?: ReactNode }>(
-  function SessionComposerInput({ collapsed = false, leading, className = '', value, onClick, onScroll, onKeyDown, onSelect, ...props }, forwardedRef) {
+  function SessionComposerInput({ collapsed: requestedCollapsed = false, leading, className = '', value, onClick, onScroll, onKeyDown, onSelect, ...props }, forwardedRef) {
     const input = useRef<HTMLTextAreaElement | null>(null);
     const backdrop = useRef<HTMLDivElement | null>(null);
-    const { highlights, ghost, requestPhrase, keyHandler, inputRef, inlineControls, inlineActions } = usePromptAnalysis();
+    const { composerStyle, composerActivity, highlights, ghost, requestPhrase, keyHandler, inputRef, inlineControls, inlineActions } = usePromptAnalysis();
+    const collapsed = composerStyle !== 'classic' ? false : requestedCollapsed;
     const [caret, setCaret] = useState(0);
     const [position, setPosition] = useState({ left: 0, top: 0 });
     const [previewOpen, setPreviewOpen] = useState(false);
@@ -135,12 +160,17 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
         // A scrollbar narrows the textarea's text box; the layer has none, so match the width
         layer.style.right = `${field.offsetWidth - field.clientWidth - parseFloat(computed.borderLeftWidth) - parseFloat(computed.borderRightWidth)}px`;
       }
+      if (composerStyle !== 'classic') {
+        field.style.height = 'var(--composer-input-height)';
+        if (layer) layer.scrollTop = field.scrollTop;
+        return;
+      }
       field.style.height = collapsed ? '0px' : 'auto';
       if (collapsed) return;
       // Ghost text can run past the draft's last line: grow the box so it is not clipped
       field.style.height = `${Math.max(field.scrollHeight, layer?.scrollHeight ?? 0)}px`;
       if (layer) layer.scrollTop = field.scrollTop;
-    }, [value, collapsed, shownGhost?.text, marks.length]);
+    }, [value, collapsed, shownGhost?.text, marks.length, composerStyle]);
     // The textarea sits above the marks, so a click lands on it: map the caret back to a phrase
     const selectPhraseAtCaret = () => {
       const field = input.current;
@@ -171,7 +201,7 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
         pieces.push('\u200b');
       }
     }
-    return <div className={`composer-input-shell${leading ? ' has-leading' : ''}${inlineControls.visible && !collapsed ? ' has-inline-actions' : ''}${marks.length ? ' has-highlights' : ''}${shownGhost ? ' has-ghost' : ''}`}>
+    const field = <div className={`composer-input-shell${leading ? ' has-leading' : ''}${inlineControls.visible && !collapsed ? ' has-inline-actions' : ''}${marks.length ? ' has-highlights' : ''}${shownGhost ? ' has-ghost' : ''}`}>
       {leading && <div className="composer-input-leading">{leading}</div>}
       {pieces && <div ref={backdrop} className="composer-input-highlights" aria-hidden="true">{pieces}</div>}
       <textarea {...props} value={value} rows={1}
@@ -198,17 +228,24 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
           <button type="button" aria-label="Preview prompt changes" title="Preview prompt changes" aria-expanded={previewOpen}
             data-testid="prompt-caret-preview" onClick={() => setPreviewOpen(open => !open)}><Icon name="eye" size={12} /></button>
         </div>}
-        {inlineControls.question && !previewOpen && createPortal(<div className="prompt-caret-clarification" role="note" data-testid="prompt-caret-clarification"
+        {inlineControls.question && !previewOpen && createPortal(<ComposerSurface part="menu" className="prompt-caret-clarification" role="note" data-testid="prompt-caret-clarification"
           style={{ left: Math.max(8, Math.min((input.current?.getBoundingClientRect().left ?? 0) + position.left, window.innerWidth - 304)),
             top: Math.max(8, (input.current?.getBoundingClientRect().top ?? 0) + position.top - 48) }}>
           {inlineControls.question}<small>Edit the highlighted text directly.</small>
-        </div>, document.body)}
-        {previewOpen && createPortal(<div className="prompt-caret-preview" role="region" aria-label="Prompt preview" data-testid="prompt-caret-preview-content"
+        </ComposerSurface>, document.body)}
+        {previewOpen && createPortal(<ComposerSurface part="menu" className="prompt-caret-preview" role="region" aria-label="Prompt preview" data-testid="prompt-caret-preview-content"
           style={{ position: 'fixed', left: Math.max(8, Math.min((input.current?.getBoundingClientRect().left ?? 0) + position.left, window.innerWidth - 336)),
             top: Math.max(8, Math.min((input.current?.getBoundingClientRect().top ?? 0) + position.top + 28, window.innerHeight - 248)) }}
-          onMouseDown={event => event.preventDefault()}>{inlineActions.current?.preview()}</div>, document.body)}
+          onMouseDown={event => event.preventDefault()}>{inlineActions.current?.preview()}</ComposerSurface>, document.body)}
       </div>}
     </div>;
+    return composerStyle !== 'classic'
+      ? <div data-composer-slot="input" className={`ambient-composer-canvas${collapsed ? ' is-collapsed' : ''}`}
+          onClick={event => { if (event.target === event.currentTarget) input.current?.focus(); }}>
+          {composerStyle === 'ambient-canvas' && <AmbientComposerHorizon state={composerActivity} />}
+          {field}
+        </div>
+      : field;
   }
 );
 

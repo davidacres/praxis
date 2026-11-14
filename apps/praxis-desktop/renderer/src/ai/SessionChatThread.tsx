@@ -1,3 +1,6 @@
+import { SessionReview } from './SessionReview';
+import { SessionActivityBlock } from './SessionActivityBlock';
+import { SessionUsageDetails } from './SessionUsageDetails';
 import { displaySessionContext } from './sessionContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Ref } from 'react';
@@ -147,6 +150,7 @@ export interface SessionChatThreadProps {
   shouldRenderResponseFallback?: boolean;
   livePendingConversationMessages?: Array<{ participantId?: string; message: string }>;
   scrollRef?: Ref<HTMLDivElement>;
+  reviewHost?: HTMLElement | null;
   className?: string;
   testId?: string;
   gadgetBlocks?: Record<string, ChatBlock[]>;
@@ -169,6 +173,7 @@ export function SessionChatThread({
   shouldRenderResponseFallback,
   livePendingConversationMessages = [],
   scrollRef,
+  reviewHost,
   className = '',
   testId = 'session-chat-thread',
   gadgetBlocks: propGadgetBlocks,
@@ -354,6 +359,7 @@ export function SessionChatThread({
   };
 
   const isSelectedFailed = session.state === 'failed';
+  const review = <SessionReview key={session.sessionId} session={session} blocks={Object.values(gadgetBlocks).flat()} results={gadgetResults} busyGadgetId={busyGadgetId} onSubmit={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)} />;
 
   return (
     <div
@@ -361,6 +367,7 @@ export function SessionChatThread({
       ref={scrollRef}
       data-testid={testId}
     >
+      {(!subagentId || subagentId === session.issueKey) && (reviewHost ? createPortal(review, reviewHost) : review)}
       {branchError && (
         <div className="agent-activity-error-banner" data-testid="agent-activity-error">
           <Icon name="warning" size={14} />
@@ -441,7 +448,12 @@ export function SessionChatThread({
               return reasoning ? mergeReasoningStep(steps, reasoning) : steps;
             }, [])
           : thoughtRun?.steps ?? [];
-        const thoughtSteps = [...reasoningSteps, ...narration];
+        const messageSegments = messageRun
+          ? messageRun.memberIndices.flatMap(member => conversationEvents[member].messageSegments ?? [])
+          : event.messageSegments ?? [];
+        const commentary = messageSegments.filter(segment => segment.phase === 'commentary');
+        const thoughtSteps = reasoningSteps;
+
         const caption = thoughtRun
           ? thoughtCaption(thoughtRun, conversationEvents, toolCallsAt)
           : captionText(messageRun?.durationMs, messageRun?.toolCalls);
@@ -449,7 +461,7 @@ export function SessionChatThread({
           ? conversationEvents[messageRun.memberIndices[messageRun.memberIndices.length - 1]]
           : event;
         const turnToolCalls = (lastMember && turnTools.get(lastMember)?.calls) ?? [];
-        const hasThought = reasoningSteps.length > 0 || narration.length > 0;
+        const hasThought = reasoningSteps.length > 0;
         const isCodexCli = event.type === 'message' && providerForEvent(session, event) === 'codex-cli';
         const captionShown = hasThought && Boolean(caption);
         const telemetrySource = messageRun ?? event;
@@ -578,14 +590,15 @@ export function SessionChatThread({
               </details>
             )}
 
+            <SessionActivityBlock segments={[...commentary, ...narration.map((text,index)=>({text,timestamp:event.timestamp,messageId:`legacy-${index}`}))]} tools={turnToolCalls} />
             {hasThought && (
               isCodexCli ? (
-                <CodexActivityBlock steps={thoughtSteps} caption={caption} toolCalls={turnToolCalls} testIdPrefix="session" />
+                <CodexActivityBlock steps={thoughtSteps} caption={caption} toolCalls={[]} testIdPrefix="session" />
               ) : (
                 <ThoughtBlock
                   steps={thoughtSteps}
                   caption={caption}
-                  toolCalls={turnToolCalls}
+                  toolCalls={[]}
                   testIdPrefix="session"
                   imageSessionId={session?.issueKey}
                 />
@@ -613,11 +626,15 @@ export function SessionChatThread({
               </div>
             )}
 
-            <Markdown
-              text={runText}
-              testId="session-chat-markdown"
-              imageSessionId={session?.issueKey}
-            />
+            {messageSegments.length > 0 && (!messageRun || messageRun.memberIndices.every(member => conversationEvents[member].messageSegments?.length))
+              ? messageSegments.filter(segment => segment.phase !== 'commentary').map((segment, segmentIndex) => (
+                <section className="session-message-part" key={`${segment.messageId ?? 'anonymous'}-${segmentIndex}`}
+                  data-provider-message-id={segment.messageId ?? undefined} data-message-phase={segment.phase ?? undefined}>
+                  <Markdown text={visibleMessageText(segment.text)} testId="session-chat-markdown" imageSessionId={session?.issueKey} />
+                </section>
+              ))
+              : <Markdown text={runText} testId="session-chat-markdown" imageSessionId={session?.issueKey} />}
+
 
             {event.type === 'user_input_completed' && <TranscriptAttachments attachments={event.attachments} />}
 
@@ -632,6 +649,7 @@ export function SessionChatThread({
               </div>
             )}
 
+            {event.type === 'message' && <SessionUsageDetails usage={telemetrySource.tokenUsage} models={event.reportedModelUsage} />}
             {hasTelemetry && (
               <div className="session-chat-telemetry-bar" data-testid="session-chat-telemetry">
                 {!captionShown && telemetrySource.durationMs !== undefined && (
@@ -643,7 +661,7 @@ export function SessionChatThread({
                 {telemetrySource.tokenUsage && (
                   <span
                     className="session-telemetry-chip"
-                    title={`Input: ${(telemetrySource.tokenUsage.inputTokens ?? 0).toLocaleString()} tokens${telemetrySource.tokenUsage.cachedInputTokens ? ` (${telemetrySource.tokenUsage.cachedInputTokens.toLocaleString()} cached)` : ''} · Output: ${(telemetrySource.tokenUsage.outputTokens ?? 0).toLocaleString()} tokens${telemetrySource.tokenUsage.reasoningTokens ? ` (${telemetrySource.tokenUsage.reasoningTokens.toLocaleString()} reasoning)` : ''}`}
+                    title={`Input: ${(telemetrySource.tokenUsage.inputTokens ?? 0).toLocaleString()} tokens${telemetrySource.tokenUsage.cachedInputTokens ? ` · Cache read: ${telemetrySource.tokenUsage.cachedInputTokens.toLocaleString()}` : ''}${telemetrySource.tokenUsage.cachedWriteTokens !== undefined ? ` · Cache write: ${telemetrySource.tokenUsage.cachedWriteTokens.toLocaleString()}` : ''} · Output: ${(telemetrySource.tokenUsage.outputTokens ?? 0).toLocaleString()} tokens${telemetrySource.tokenUsage.reasoningTokens ? ` (${telemetrySource.tokenUsage.reasoningTokens.toLocaleString()} reasoning)` : ''}`}
                   >
                     <Icon name="sparkles" size={11} />
                     <span>{(telemetrySource.tokenUsage.totalTokens ?? ((telemetrySource.tokenUsage.inputTokens ?? 0) + (telemetrySource.tokenUsage.outputTokens ?? 0))).toLocaleString()} tok</span>
@@ -660,7 +678,7 @@ export function SessionChatThread({
                     <span>{telemetrySource.modelId}</span>
                   </span>
                 )}
-                {!captionShown && toolNames && toolNames.length > 0 && (
+                {!captionShown && turnToolCalls.length === 0 && toolNames && toolNames.length > 0 && (
                   <button
                     type="button"
                     className="session-telemetry-chip is-clickable"
@@ -734,7 +752,7 @@ export function SessionChatThread({
             <div className="session-chat-author">
               {session?.conversation?.state === 'running'
                 ? (() => { const speaker = session.conversation.participants.find(participant => participant.id === session.conversation?.currentSpeakerId); return speaker ? <><ProviderBrandLogo provider={speaker.provider} size={13} decorative />{`${providerLabel(speaker.provider)}${speaker.model ? ` · ${speaker.model}` : ''}`}</> : 'AI agent'; })()
-                : 'AI agent'}
+                : session.model || (session.provider ? providerLabel(session.provider) : 'AI agent')}
             </div>
             <div className="session-chat-header-actions">
               <button
@@ -765,6 +783,7 @@ export function SessionChatThread({
         </div>
       ))}
 
+      {isExecuting && <SessionActivityBlock segments={(session.responseSegments ?? []).filter(part => part.phase === 'commentary')} streaming />}
       {/* In-Progress Active Turn / Streaming Turn Indicator */}
       {isExecuting && (session.reasoningText?.trim() || liveReasoningEmptyReason || session.activeTurnProgress?.activeToolName) && (
         <div

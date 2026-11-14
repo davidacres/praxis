@@ -564,6 +564,8 @@ export function StartRunDialog({
               </div>
             </section>
           )}
+          <details className="wf-runstart-policies" data-testid="workflow-advanced-policies">
+          <summary>Advanced run policies · permissions: {permissionMode} · budget: {providerLimitPolicy}</summary>
           <div className="wf-runstart-policy-grid">
           <fieldset className="wf-runstart-mode" data-testid="wf-runstart-limit">
             <legend>If an AI runs out of budget</legend>
@@ -647,6 +649,7 @@ export function StartRunDialog({
             </p>
           </fieldset>
           </div>
+          </details>
           </div>
           {uncommittedFiles && (
             <UncommittedBaseNotice

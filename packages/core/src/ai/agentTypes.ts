@@ -209,6 +209,7 @@ export interface AgentToolEventData {
   kind?: 'shell' | 'write' | 'read' | 'list' | 'search' | 'tracker' | 'other';
   /** One-line digest of the arguments, for the `tool_start` summary row. */
   argsSummary?: string;
+  locations?: Array<{ path: string; line?: number }>;
   /** Raw arguments (`tool_start`). */
   args?: Record<string, unknown>;
   ok?: boolean;
@@ -218,6 +219,22 @@ export interface AgentToolEventData {
   /** Terminal-style stdout/stderr for a shell command. */
   output?: string;
   exitCode?: number;
+}
+
+/** Provider message boundaries. Unknown phases stay unset rather than being inferred from text. */
+export interface AgentMessageSegment {
+  messageId?: string | null;
+  phase?: string | null;
+  text: string;
+  timestamp: string;
+}
+
+export interface ReportedModelUsage {
+  model: string;
+  /** Main usage attribution or an additional reported model; not proof of authorship.
+   * ACP quota attribution currently selects the largest reported token total. */
+  role: 'reply' | 'additional';
+  tokenUsage: TokenUsage;
 }
 
 /** Compact event record for display and persistence (not the raw SDK event). */
@@ -256,6 +273,8 @@ export interface AgentEventSummary {
    * with no type error to catch it.
    */
   reasoning?: string;
+  messageSegments?: AgentMessageSegment[];
+  reportedModelUsage?: ReportedModelUsage[];
   /** Duration of the turn execution in milliseconds. */
   durationMs?: number;
   /** Token usage for this specific turn (input, output, reasoning/cache). */
@@ -604,6 +623,10 @@ export interface AgentSessionRecord {
    */
   reasoningAvailability?: ReasoningAvailability;
   responseText?: string;
+  responseSegments?: AgentMessageSegment[];
+  /** Last model identified in provider usage, distinct from the requested model/alias. */
+  reportedModelId?: string;
+  reportedModelUsage?: ReportedModelUsage[];
   /** Conversation history for vercel-gateway resume (excludes system prompt). */
   conversationHistory?: AgentConversationMessage[];
   stepCount: number;
@@ -617,13 +640,8 @@ export interface AgentSessionRecord {
   /** A restart stopped this session; execution requires an explicit recovery choice. */
   interruptedByRestart?: boolean;
   /**
-   * Tokens this session has consumed, summed across its turns — present only
-   * for the API providers whose usage the gateway wire parser reads. ACP
-   * defines a `usage_update` (`used` / `size`, i.e. exactly `contextTokens` /
-   * `contextLimit` below, plus an optional cost) that could give CLI-hosted
-   * agents (Claude Code, Codex) the same figure, but `AcpAgentHost` does not
-   * read it yet — so those sessions carry no usage rather than a misleading
-   * zero, not because the protocol has nothing to offer.
+   * Primary session usage summed across turns. ACP turn usage is independent of context
+   * occupancy; additional model usage is retained separately in reportedModelUsage.
    */
   tokenUsage?: TokenUsage;
   /**

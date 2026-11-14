@@ -271,6 +271,8 @@ async function findFreePort(): Promise<number> {
  * only, letting `closeTestApp` clean the profile up after the final launch.
  */
 export interface LaunchOptions {
+  /** Show Chromium for interactive capture/replay verification. */
+  headed?: boolean;
   /**
    * Leave the startup splash on screen. Only for the handful of tests that
    * assert on the splash itself — every other test wants it out of the way.
@@ -406,6 +408,7 @@ export async function launchTestApp(
   });
 
   const context = await chromium.launchPersistentContext(path.join(userDataDir, 'chromium-profile'), {
+    headless: !options?.headed,
     viewport: { width: 1440, height: 900 },
     // The specs were written against a day-first locale ("15 Jan"); Electron took it from the OS.
     locale: 'en-GB',

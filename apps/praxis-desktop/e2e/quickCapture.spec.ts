@@ -280,7 +280,11 @@ test('the capture dialog fits and stays readable across themes, surface packs an
   app = await launchTestApp();
   const page = app.window;
   // 150% whole-window zoom: the tightest layout the app ships.
-  for (let step = 0; step < 5; step++) await page.getByTestId('titlebar-zoom-in').click();
+  for (let step = 0; step < 5; step++) {
+    await page.getByTestId('titlebar-zoom-in').click();
+    // Zoom is host-owned and asynchronous: wait for the previous step before clicking again.
+    await expect(page.getByTestId('titlebar-zoom-reset')).toHaveText(`${110 + step * 10}%`);
+  }
   await expect(page.getByTestId('titlebar-zoom-reset')).toHaveText('150%');
   await page.keyboard.press('Control+Shift+C');
   await chooseFirstDestination();

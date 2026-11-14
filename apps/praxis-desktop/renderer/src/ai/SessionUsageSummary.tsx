@@ -1,3 +1,4 @@
+import { SessionUsageDetails } from './SessionUsageDetails';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord, AiProvider, AiUsageEvent, ProviderUsageSnapshot, ProviderUsageWindow } from '@praxis/core';
 import { Icon } from '../ui/Icon';
@@ -213,13 +214,13 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
   const notStarted = usageContributions ? usageContributions.length === 0 : records.length === 0;
   const tokens = (value: { tokens?: number; partial: boolean }) => value.tokens === undefined ? (notStarted ? '0 tok' : '–') : `${formatTokenCompact(value.tokens)}${value.partial ? '+' : ''} tok`;
   const tokenTitle = (value: { tokens?: number; partial: boolean }) => value.tokens === undefined ? (notStarted ? 'No tokens used in this session yet' : 'Token count not available from this provider')
-    : `${Math.round(value.tokens).toLocaleString()} session tokens${value.partial ? ' reported; some runtime usage is unavailable' : ''}`;
+    : `${Math.round(value.tokens).toLocaleString()} primary session tokens${value.partial ? ' reported; some runtime usage is unavailable' : ''}`;
   const costs = (value: { costs: NonNullable<AgentSessionRecord['cost']>[] }) => value.costs.map(formatCost).join(' + ');
   const account = (provider: AiProvider) => snapshots.find(item => item.provider === provider);
   const spendRatio = spendLimit > 0 ? sessions.reduce((sum, item) => sum + (item.cost?.amount ?? 0), 0) / spendLimit : 0;
   const limitNotice = session && (session.providerLimitReached || sessionLimitNotice(session));
 
-  return <details className="session-usage-summary composer-usage-compact" ref={detailsRef} open={open} onToggle={event => setOpen(event.currentTarget.open)} data-testid="session-usage-summary">
+  return <details data-composer-part="usage" className="session-usage-summary composer-usage-compact" ref={detailsRef} open={open} onToggle={event => setOpen(event.currentTarget.open)} data-testid="session-usage-summary">
     <summary title="Expand or collapse session usage" onClick={event => { event.preventDefault(); setOpen(value => !value); }}>
       <span className="composer-usage-current" title={`${selectedProvider ? providerLabel(selectedProvider) : 'AI'} · ${selectedModel ?? 'Default model'}`}>
         {selectedProvider ? <ProviderBrandLogo provider={selectedProvider} size={18} decorative /> : <Icon name="graph" size={16} />}
@@ -249,6 +250,7 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
     </summary>
     {open && <div className="composer-usage-expanded" data-testid="session-usage-expanded">
       {(activityLabel || records.length === 0) && <small className="composer-usage-muted">{activityLabel ?? 'No usage recorded for this session yet'}</small>}
+      <SessionUsageDetails usage={session?.tokenUsage} models={session?.reportedModelUsage} label="Primary session tokens and reported models" />
       <div className="composer-usage-provider-list" role="group" aria-label="Provider account limits across all sessions">
         {data.providers.map(item => {
           const snapshot = account(item.provider);

@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "status": "complete",
+  "startedAt": "2026-11-14T15:13:45.283Z",
+  "provider": "codex-cli",
+  "model": "gpt-6.1-sol",
+  "effort": "medium",
+  "toolMode": "read-only",
+  "permissionMode": "manual",
+  "versions": {
+    "node": "v26.0.0",
+    "adapter": "@agentclientprotocol/codex-acp 2.6.0",
+    "codex": "codex-cli 0.166.0",
+    "codexOnPath": "0.2.3",
+    "codexVerification": "Adapter CLI probe after capture; same installed adapter"
+  },
+  "revision": "6774103910578c28532ffc6af176e868315de13c",
+  "dirty": true,
+  "scenario": "read-and-follow-up-v1",
+  "updates": 149,
+  "frames": 171,
+  "capabilities": {
+    "tools": "observed",
+    "modelSelection": "acknowledged",
+    "reportedModel": "observed",
+    "usage": "observed",
+    "continuation": [
+      "session/load"
+    ],
+    "advertised": [
+      {
+        "auth": {
+          "logout": {}
+        },
+        "providers": {},
+        "loadSession": true,
+        "promptCapabilities": {
+          "embeddedContext": true,
+          "image": true
+        },
+        "sessionCapabilities": {
+          "resume": {},
+          "list": {},
+          "close": {},
+          "delete": {},
+          "fork": {},
+          "title": {},
+          "additionalDirectories": {},
+          "subagents": {},
+          "systemPrompt": {}
+        },
+        "mcpCapabilities": {
+          "acp": false,
+          "http": true,
+          "sse": false
+        },
+        "_meta": {
+          "authStatus": {}
+        }
+      },
+      {
+        "auth": {
+          "logout": {}
+        },
+        "providers": {},
+        "loadSession": true,
+        "promptCapabilities": {
+          "embeddedContext": true,
+          "image": true
+        },
+        "sessionCapabilities": {
+          "resume": {},
+          "list": {},
+          "close": {},
+          "delete": {},
+          "fork": {},
+          "title": {},
+          "additionalDirectories": {},
+          "subagents": {},
+          "systemPrompt": {}
+        },
+        "mcpCapabilities": {
+          "acp": false,
+          "http": true,
+          "sse": false
+        },
+        "_meta": {
+          "authStatus": {}
+        }
+      },
+      {
+        "auth": {
+          "logout": {}
+        },
+        "providers": {},
+        "loadSession": true,
+        "promptCapabilities": {
+          "embeddedContext": true,
+          "image": true
+        },
+        "sessionCapabilities": {
+          "resume": {},
+          "list": {},
+          "close": {},
+          "delete": {},
+          "fork": {},
+          "title": {},
+          "additionalDirectories": {},
+          "subagents": {},
+          "systemPrompt": {}
+        },
+        "mcpCapabilities": {
+          "acp": false,
+          "http": true,
+          "sse": false
+        },
+        "_meta": {
+          "authStatus": {}
+        }
+      },
+      {
+        "auth": {
+          "logout": {}
+        },
+        "providers": {},
+        "loadSession": true,
+        "promptCapabilities": {
+          "embeddedContext": true,
+          "image": true
+        },
+        "sessionCapabilities": {
+          "resume": {},
+          "list": {},
+          "close": {},
+          "delete": {},
+          "fork": {},
+          "title": {},
+          "additionalDirectories": {},
+          "subagents": {},
+          "systemPrompt": {}
+        },
+        "mcpCapabilities": {
+          "acp": false,
+          "http": true,
+          "sse": false
+        },
+        "_meta": {
+          "authStatus": {}
+        }
+      }
+    ],
+    "cancellation": {
+      "status": "not-tested",
+      "reason": "The baseline scenario completes both turns"
+    },
+    "permissions": {
+      "status": "not-tested",
+      "reason": "The baseline scenario does not request a privileged operation"
+    }
+  },
+  "modelEvidence": {
+    "requested": "gpt-6.1-sol",
+    "selections": [
+      {
+        "requested": "gpt-6.1-sol",
+        "accepted": true,
+        "selected": "gpt-6.1-sol"
+      },
+      {
+        "requested": "gpt-6.1-sol",
+        "accepted": true,
+        "selected": "gpt-6.1-sol"
+      }
+    ],
+    "accepted": true,
+    "reported": [
+      "gpt-6.1-sol"
+    ]
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "responseText": "I’ll read `fixture.txt` and summarise its retry policy without changing any files.\nProject **ORBIT-742** retries transient failures before reporting failure.\n\n- Retry only transient failures.\n- Allow two retries after the initial attempt.\n- If both retries fail, report the failure.\n\n```text\nInitial attempt → transient failure\nRetry 1         → transient failure\nRetry 2         → transient failure\nResult          → report failure\n```\n\nVerified by reading `fixture.txt`. No files were modified."
+    },
+    {
+      "turn": 2,
+      "responseText": "ORBIT-742 — Retry transient failures twice, then report the failure if both retries fail."
+    }
+  ],
+  "sha256": "ed6f67c552fe2fa17221e8b87b47a64ba322866708a6d1833bbc5ab01661ef03"
+}

@@ -22,6 +22,7 @@ import { setCustomProviderCatalog } from './ai/modelProviders';
 import type { AppSettings } from '@praxis/core';
 import './theme.css';
 import './surfaces.css';
+import './ai/composerPresentation.css';
 
 document.documentElement.setAttribute('data-accent', localStorage.getItem('tm-theme-accent') ?? 'violet');
 const applyDisplayMode = (mode: unknown): void => {

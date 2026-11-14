@@ -11,8 +11,8 @@ import { startMockGatewayServer, type MockGatewayServer } from './mockGatewaySer
  * A single agent turn that calls several tools, narrating between each call —
  * the shape that used to render as one chat card per model round trip. Proves
  * the transcript now shows one assistant card per turn, that the narration
- * between tool calls lands in the thought block rather than the transcript, and
- * that the thought block counts and lists every call.
+ * between tool calls lands in Activity rather than the answer, and that
+ * Activity counts and lists every call independently of reasoning.
  */
 
 const NO_GATEWAY_ENV = {
@@ -83,28 +83,28 @@ test('a turn that narrates between tool calls renders as one assistant card', as
 
   const card = cards.first();
   await expect(card).toContainText(FINAL_REPLY);
-  // Narration belongs to the thought block, not the transcript.
-    const thought = card.locator('[data-testid="session-thought-disclosure"]');
-  await expect(thought).toHaveCount(1);
-  await expect(thought).not.toHaveAttribute('open', '');
+  const activity = card.getByTestId('session-work-activity');
+  await expect(activity).toHaveCount(1);
+  await expect(activity).not.toHaveAttribute('open', '');
+  await expect(card.getByTestId('session-thought-disclosure')).toHaveCount(0);
 
   // The caption counts calls, not distinct tool names: four `read_file` calls
   // are four calls.
-  await expect(thought.locator('[data-testid="session-thought-summary"]')).toContainText('4 tool calls');
+  await expect(activity.locator('summary').first()).toContainText('4 tools');
 
-  await thought.locator('[data-testid="session-thought-summary"]').click();
-  const toolRows = thought.locator('[data-testid="session-thought-tools"] li');
+  await activity.locator('summary').first().click();
+  const toolRows = activity.getByTestId('session-work-tool');
   await expect(toolRows).toHaveCount(4);
   await expect(toolRows.first()).toContainText('read_file');
-  for (const line of NARRATION) await expect(thought).toContainText(line);
+  for (const line of NARRATION) await expect(activity).toContainText(line);
 
-  // The caption already carries duration and tool calls, so the telemetry bar
-  // does not repeat them.
+  // Activity counts the calls, so telemetry does not repeat that count.
   await expect(card.locator('.session-chat-telemetry-bar')).not.toContainText('tool call');
 
   // Exactly one telemetry bar for the turn, not one per round trip.
   await expect(card.locator('.session-chat-telemetry-bar')).toHaveCount(1);
   await expect(card.locator('.session-chat-telemetry-bar')).toContainText('tok');
+  await expect(card.locator('.session-telemetry-chip[title^="Turn duration:"]')).toHaveCount(1);
   // Only local tools ran, so there is no code intelligence badge.
   await expect(card.getByTestId('session-chat-code-intel-badge')).toHaveCount(0);
 
@@ -200,6 +200,9 @@ for (const reportsUsage of [true, false]) {
 
     const chip = win.locator('[data-testid="session-chat-assistant"] .session-telemetry-chip', { hasText: 'tok' });
     await expect(chip).toHaveText(`${session.total!.toLocaleString()} tok`);
+    const details = win.getByTestId('session-chat-assistant').getByTestId('session-reported-usage');
+    await details.locator('summary').click();
+    await expect(details.locator('dl > div').filter({ hasText: 'Primary total' }).locator('dd')).toHaveText(session.total!.toLocaleString());
   });
 }
 

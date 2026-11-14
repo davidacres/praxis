@@ -1,3 +1,5 @@
+import { SessionRuntimeFacts } from './SessionRuntimeFacts';
+import { ComposerSurface } from './ComposerSurface';
 import { SessionBackgroundTasks } from './SessionBackgroundTasks';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, DragEvent, MouseEvent } from 'react';
@@ -267,7 +269,7 @@ function WorkflowManagedRuntimeChip({
         <span className="session-runtime-chip-label">Workflow managed</span>
       </button>
       {position && createPortal(
-        <div
+        <ComposerSurface part="menu"
           className="composer-provider-menu session-runtime-popover session-workflow-runtime-popover"
           role="dialog"
           aria-label="Workflow-managed runtime"
@@ -283,7 +285,7 @@ function WorkflowManagedRuntimeChip({
           <p className="session-workflow-runtime-note">
             Provider and model are fixed by the workflow stage. Open its stage session for full runtime provenance.
           </p>
-        </div>,
+        </ComposerSurface>,
         document.body
       )}
     </>
@@ -396,7 +398,7 @@ function SessionWorkflowControl({
         {activeRun && <span className="session-runtime-chip-label">{activeRun.workflowName}</span>}
       </button>
       {menuOpen && menuPosition && createPortal(
-        <div
+        <ComposerSurface part="menu"
           className="composer-provider-menu session-workflow-picker"
           role="dialog"
           aria-label="Select workflow"
@@ -480,7 +482,7 @@ function SessionWorkflowControl({
             </section>
           )}
           </>}
-        </div>
+        </ComposerSurface>
       , document.body)}
     </div>
   );
@@ -987,7 +989,7 @@ export function SessionsPage({
   // A single-agent turn is in flight (not in a multi-AI conversation).
   const isSingleAgentRunning = !!selected && !isTerminalAgentState(selected.state) && !conversationRunning;
   // Kept minimized by default while running unless the user explicitly expanded it via "Ask".
-  const followUpCollapsed = isSingleAgentRunning && !inflightComposerExpanded;
+  const followUpCollapsed = (settings?.appearance.composerStyle ?? 'classic') === 'classic' && isSingleAgentRunning && !inflightComposerExpanded;
   const activeQueuedMessage = selected ? queuedFollowUpsBySession[selected.issueKey] : undefined;
 
   useEffect(() => {
@@ -1593,7 +1595,7 @@ export function SessionsPage({
               </div>
             )}
 
-            <div className="session-chat-composer">
+            <ComposerSurface part="scope" className="session-chat-composer">
               {composerOnly && followUpError && <div className="error-banner" role="alert" data-testid="session-follow-up-error">{followUpError}</div>}
               {(!usageHidden || usageClosing) && (
                 <div
@@ -1635,6 +1637,7 @@ export function SessionsPage({
                 </div>
               )}
               <SessionComposerCard
+                activity={pendingPermission ? 'approval' : isTurnActive ? 'thinking' : 'idle'}
                 data-testid={composerOptions.testId ? `${composerOptions.testId}-composer` : undefined}
                 className={`${composerDragOver ? ' is-drag-over' : ''}${followUpCollapsed ? ' is-collapsed' : ''}${isTurnActive ? ' is-running' : ''}`}
                 onPaste={handleComposerPaste}
@@ -1926,7 +1929,7 @@ export function SessionsPage({
                       {acpModeMenuPos &&
                         selected.acpAvailableModes &&
                         createPortal(
-                          <div
+                          <ComposerSurface part="menu"
                             ref={acpModeMenuRef}
                             className="composer-provider-menu"
                             role="listbox"
@@ -1947,7 +1950,7 @@ export function SessionsPage({
                                 {mode.name}
                               </button>
                             ))}
-                          </div>,
+                          </ComposerSurface>,
                           document.body
                         )}
                       <span className="spacer" />
@@ -2167,7 +2170,7 @@ export function SessionsPage({
                     {acpCommandMenuPos &&
                       selected.acpAvailableCommands &&
                       createPortal(
-                        <div
+                        <ComposerSurface part="menu"
                           ref={acpCommandMenuRef}
                           className="composer-provider-menu"
                           role="listbox"
@@ -2187,7 +2190,7 @@ export function SessionsPage({
                               /{command.name}
                             </button>
                           ))}
-                        </div>,
+                        </ComposerSurface>,
                         document.body
                       )}
                     {composerOptions.showWorkflowControl !== false && <SessionWorkflowControl
@@ -2318,7 +2321,7 @@ export function SessionsPage({
                 </div>
               )}
               {context && contextPopoverPosition && createPortal(
-                <div
+                <ComposerSurface part="menu"
                   ref={contextPopoverRef}
                   id="session-context-popover"
                   className={`composer-provider-menu session-context-popover is-${context.level}`}
@@ -2366,10 +2369,10 @@ export function SessionsPage({
                         ? 'This conversation is filling the model’s window. Long tool output is the usual cause.'
                         : 'There is plenty of room for the next turn in this model’s context window.'}
                   </p>
-                </div>,
+                </ComposerSurface>,
                 document.body
               )}
-            </div>
+            </ComposerSurface>
     </>
   ) : null;
   const composerDialogs = (
@@ -2636,6 +2639,7 @@ export function SessionsPage({
               onSubmitGadgetAction={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
             />
 
+            <SessionRuntimeFacts session={selected} />
             {activeComposer}
             {((browserOpen && selected) || (artifactDockOpen && selected)) && (
               <div

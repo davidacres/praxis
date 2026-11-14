@@ -1,3 +1,4 @@
+import { WorkHub } from './WorkHub';
 import { sessionLastActivityAt } from './sessionRecency';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
@@ -150,6 +151,7 @@ function WindowCloseGuard() {
  */
 interface Route {
   scheduleTicketKeys?: string[];
+  scheduleSelectedId?: string;
   /** Durable selection of the empty New Session surface (never its draft text). */
   newSession?: boolean;
   /** Durable selection of the empty New Conversation composer (FX-BE-142). */
@@ -557,6 +559,7 @@ export function App() {
   const [splashBrief] = useState(() => { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return false; } });
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [workHubMode, setWorkHubMode] = useState<'attention' | 'search'>();
   const [codeSearchOpen, setCodeSearchOpen] = useState(false);
   const [codeSearchInitialDirectory, setCodeSearchInitialDirectory] = useState<string>();
   const [codeSearchInitialQuery, setCodeSearchInitialQuery] = useState<string>();
@@ -1496,10 +1499,12 @@ export function App() {
    * unreachable Jira site) never blocks the others.
    */
   const searchIssues = useCallback(
-    async (query: string): Promise<CommandEntry[]> => {
-      const perBoardLimit = 6;
+    async (query: string, projectId?: string, onPartial?: (message: string) => void): Promise<CommandEntry[]> => {
+      const perBoardLimit = onPartial ? 30 : 6;
+      const project = workspaceProjects.find(item => item.id === projectId);
+      const searchBoards = project ? workspaceBoards.filter(board => board.id === project.defaultBoardId || project.linkedBoards.some(ref => ref.boardId === board.id && ref.connectionId === board.connectionId)) : workspaceBoards;
       const results = await Promise.allSettled(
-        workspaceBoards.map(async board => {
+        searchBoards.map(async board => {
           const filters: IssueFilters = {
             projectKeys: board.projectKey ? [board.projectKey] : [],
             statuses: [],
@@ -1513,6 +1518,9 @@ export function App() {
           return { board, issues: page.issues };
         })
       );
+      const failures = results.filter(result => result.status === 'rejected').length;
+      if (failures) onPartial?.(`${failures} boards could not be searched. Board results are incomplete.`);
+      if (results.some(result => result.status === 'fulfilled' && result.value.issues.length >= perBoardLimit)) onPartial?.(`Board results are limited to ${perBoardLimit} matches per board. Refine the query for more specific results.`);
       const entries: CommandEntry[] = [];
       results.forEach(result => {
         if (result.status !== 'fulfilled') return;
@@ -1529,9 +1537,9 @@ export function App() {
           });
         });
       });
-      return entries.slice(0, 25);
+      return onPartial ? entries : entries.slice(0, 25);
     },
-    [workspaceBoards, navigate]
+    [workspaceBoards, workspaceProjects, navigate]
   );
 
   /** One flat index for ⌘K — see CommandPalette. Rebuilt when the underlying
@@ -1575,6 +1583,8 @@ export function App() {
     entries.push({ id: 'action:open-folder', label: 'Open folder', group: 'Go to', icon: 'folder', keywords: 'open folder directory existing project easy mode', run: () => void openExistingFolder() });
     entries.push({ id: 'action:take-tour', label: 'Take a tour', group: 'Go to', icon: 'lightbulb', keywords: 'walkthrough guide help onboarding', run: () => setWalkthroughOpen(true) });
     entries.push({ id: 'action:whats-new', label: "What's new", group: 'Go to', icon: 'sparkles', keywords: 'release notes changelog version history', run: () => setWhatsNewOpen(true) });
+    entries.push({ id: 'action:attention', label: 'Needs your attention', group: 'Go to', icon: 'warning', keywords: 'approvals blocked failed questions recovery inbox', run: () => setWorkHubMode('attention') });
+    entries.push({ id: 'action:search-work', label: 'Search your work', group: 'Actions', icon: 'search', keywords: 'conversations transcripts plans tickets notes results', run: () => setWorkHubMode('search') });
     entries.push({ id: 'action:search-code', label: 'Search code & symbols', hint: '⌘⇧F', group: 'Actions', icon: 'search', keywords: 'code symbol find usages search callers callees index semantic', run: () => setCodeSearchOpen(true) });
     if (inSession) {
       entries.push({ id: 'action:toggle-focus-mode', label: 'Toggle focus mode', group: 'Go to', icon: 'layout-focus', keywords: 'zen hide panels sidebars focus', run: toggleFocusMode });
@@ -2394,7 +2404,7 @@ export function App() {
           </div>
         );
       }
-      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} initialTicketKeys={route.scheduleTicketKeys} sidebarHost={scheduleSidebarHost} onBack={() => navigate({ feature: 'overview', projectId: selectedProject.id })} onOpenWorkflowRun={workflowRunId => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId })} onOpenSession={sessionKey => navigate({ projectId: selectedProject.id, feature: 'sessions', sessionKey })} />;
+      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} initialTicketKeys={route.scheduleTicketKeys} initialRunId={route.scheduleSelectedId} sidebarHost={scheduleSidebarHost} onBack={() => navigate({ feature: 'overview', projectId: selectedProject.id })} onOpenWorkflowRun={workflowRunId => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId })} onOpenSession={sessionKey => navigate({ projectId: selectedProject.id, feature: 'sessions', sessionKey })} />;
     }
     if (route.feature) {
       return (
@@ -2586,6 +2596,8 @@ export function App() {
     <div className="window-root">
       <WindowCloseGuard />
       <TitleBar
+        onOpenAttention={() => setWorkHubMode('attention')}
+        onSearchWork={() => setWorkHubMode('search')}
         onOpenOverview={() => navigate({ feature: 'overview', ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
         appVersion={appVersion}
         codeIntelFolder={composerProject?.workspaceFolder ?? selectedProject?.workspaceFolder}
@@ -3260,6 +3272,14 @@ export function App() {
         <SemanticSearchNotification onOpenSettings={() => setSettingsDialogCategory('code-intelligence')} />
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}
+      {workHubMode && !aiSetupNeeded && <WorkHub
+        mode={workHubMode} projects={workspaceProjects} sessions={agentSessions}
+        searchIssues={searchIssues}
+        onClose={() => setWorkHubMode(undefined)}
+        onOpenSession={key => { const session = agentSessions.find(item => item.issueKey === key); navigate({ feature: session && isConversationSession(session) ? 'conversations' : 'sessions', sessionKey: key, ...(session?.projectId ? { projectId: session.projectId } : {}) }); }}
+        onOpenRun={(projectId, workflowRunId) => navigate({ projectId, feature: 'workflows', workflowView: 'runs', workflowRunId })}
+        onOpenSchedule={(projectId, scheduleSelectedId) => navigate({ projectId: projectId ?? selectedProject?.id ?? workspaceProjects[0]?.id, feature: 'schedules', scheduleSelectedId })}
+      />}
       {paletteOpen && !aiSetupNeeded && (
         <CommandPalette entries={paletteEntries} onSearch={searchIssues} onClose={() => setPaletteOpen(false)} />
       )}

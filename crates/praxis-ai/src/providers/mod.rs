@@ -16,4 +16,5 @@ pub mod provider_preflight;
 pub mod provider_probe;
 pub mod reasoning_support;
 pub mod registry;
+pub mod stream_disconnect;
 pub mod wire;

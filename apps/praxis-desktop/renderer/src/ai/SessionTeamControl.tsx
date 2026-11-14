@@ -1,3 +1,4 @@
+import { ComposerSurface } from './ComposerSurface';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AgentSessionRecord } from '@praxis/core';
@@ -106,7 +107,7 @@ export function SessionTeamControl({ session, disabled = false, onDraftAsk }: Se
           {count > 0 && <span className="composer-chip-meta" data-testid="session-team-count">{count}</span>}
         </button>
       {open && createPortal(
-        <div
+        <ComposerSurface part="menu"
           ref={menuRef}
           className="composer-provider-menu chip-select-menu session-team-menu"
           role="listbox"
@@ -141,7 +142,7 @@ export function SessionTeamControl({ session, disabled = false, onDraftAsk }: Se
               </button>
             );
           })}
-        </div>,
+        </ComposerSurface>,
         document.body
       )}
     </>

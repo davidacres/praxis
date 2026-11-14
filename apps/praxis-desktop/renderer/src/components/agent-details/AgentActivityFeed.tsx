@@ -17,6 +17,7 @@ export interface AgentActivityFeedProps {
   viewMode?: 'conversation' | 'all';
   onSelectSession?: (sessionKey: string) => void;
   isExecuting?: boolean;
+  reviewHost?: HTMLElement | null;
 }
 
 interface PairedToolItem {
@@ -94,7 +95,8 @@ export function AgentActivityFeed({
   subagentId,
   viewMode = 'conversation',
   onSelectSession,
-  isExecuting: isExecutingProp
+  isExecuting: isExecutingProp,
+  reviewHost
 }: AgentActivityFeedProps) {
   const isExecuting = isExecutingProp ?? !isTerminalAgentState(session.state);
   const { confirm } = useDialogs();
@@ -310,6 +312,7 @@ export function AgentActivityFeed({
         )}
         <SessionChatThread
           session={session}
+          reviewHost={reviewHost}
           subagentId={subagentId}
           isExecuting={isExecuting}
           onSelectSession={onSelectSession}

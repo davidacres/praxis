@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ComposerPresentationContext, composerPresentationAttributes } from './composerPresentation';
 import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './Icon';
 
@@ -90,6 +91,7 @@ export function ChipSelect({
   id,
   'aria-describedby': describedBy
 }: ChipSelectProps) {
+  const composerStyle = useContext(ComposerPresentationContext);
   const chipRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -271,6 +273,7 @@ export function ChipSelect({
             ref={menuRef}
             id={listboxId}
             className="composer-provider-menu chip-select-menu"
+            {...composerPresentationAttributes(composerStyle)} data-composer-part="menu"
             role="listbox"
             aria-label={`${ariaLabel} options`}
             tabIndex={-1}

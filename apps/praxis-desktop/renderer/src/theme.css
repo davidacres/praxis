@@ -26499,3 +26499,41 @@ button.feedback-score-pill {
 .note-send-dialog__notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--text); }
 .note-send-dialog__notes pre { margin: 2px 0 0; white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 12px; color: var(--text-secondary); }
 .note-send-dialog__instruction { resize: vertical; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+
+/* Composer styles compose with the active colour palette and surface. */
+.composer-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; }
+.composer-style-preview { display: flex; flex-direction: column; justify-content: flex-end; position: relative; height: 160px; padding: 22px; background: var(--bg); color: var(--text); overflow: hidden; }
+.composer-preview-input { position: relative; padding: 14px; color: var(--text-muted); text-align: left; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--bg-input); }
+.composer-preview-tools { display: flex; justify-content: space-between; padding: 10px 4px 0; font-size: 11px; color: var(--text-muted); }
+.preview-ambient-canvas .composer-preview-input { border: 0; background: transparent; padding: 14px 0; font-size: 17px; font-weight: 300; }
+.composer-style-copy { display: flex; flex-direction: column; gap: 6px; padding: 16px; text-align: left; }
+.composer-style-copy > span { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.ambient-horizon { position: relative; height: 80px; flex: none; pointer-events: none; color: var(--accent); }
+.ambient-horizon canvas { width: 100%; height: 100%; overflow: visible; }
+
+.ambient-horizon[data-state="thinking"] { color: var(--info, var(--accent)); }
+
+.ambient-horizon[data-state="approval"] { color: var(--warning); }
+
+.ambient-horizon.is-preview { position: absolute; top: 12px; left: 0; right: 0; }
+.session-follow-up-composer:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]),
+.session-follow-up-composer:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]):focus-within { border: 1px solid transparent; border-radius: 0; background: transparent; box-shadow: none; animation: none; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .session-composer-activity-orbit { display: none; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .session-follow-up-input { font-size: calc(22px * var(--ui-scale)); font-weight: 300; line-height: 1.4; background: transparent; }
+@media (max-width: 650px) { .composer-gallery { grid-template-columns: 1fr; } }
+
+/* Ambient Canvas owns the writing surface, with the reference's horizon at
+   y=96 and text at y=120. No toolbar separates the light from the draft. */
+.session-follow-up-composer:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) { display: flex; flex-direction: column; overflow: visible; }
+.ambient-composer-canvas { position: relative; min-height: 230px; padding: 120px 48px 32px; cursor: text; order: 1; }
+.ambient-composer-canvas > .ambient-horizon { position: absolute; inset: 0; height: 100%; }
+.ambient-composer-canvas > .composer-input-shell { width: 100%; max-width: 640px; margin: 0 auto; }
+.ambient-composer-canvas .composer-input.session-follow-up-input { padding: 0; min-height: 62px; font-size: calc(22px * var(--ui-scale)); font-weight: 300; line-height: 1.4; letter-spacing: .01em; border: 0; border-radius: 0; caret-color: var(--accent); }
+.ambient-composer-canvas .composer-input-leading { left: calc(-36px * var(--ui-scale)); top: 0; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) > .session-mode-panel { order: 2; border: 0; background: transparent; padding: 0 24px; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) > .composer-controls { order: 3; border: 0; background: transparent; padding: 8px 24px 14px; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) > .session-prompt-score-wrapper { order: 0; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .composer-input-shell { background: none; }
+.ambient-composer-canvas.is-collapsed { min-height: 100px; padding-top: 96px; padding-bottom: 0; }
+.ambient-composer-canvas.is-collapsed .composer-input.is-collapsed { min-height: 0; }
+.preview-ambient-canvas .ambient-horizon { height: 160px; top: 0; }

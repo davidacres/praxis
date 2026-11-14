@@ -163,6 +163,8 @@ test('Add-ons panel holds only the central config and points at the per-kind pan
   );
   // No catalogue or install controls live here any more.
   await expect(window.locator('[data-testid="marketplace-browse"]')).toHaveCount(0);
+  // The Settings rail scrolls when Add-ons is selected; make that position deterministic.
+  await window.getByRole('navigation', { name: 'Settings categories' }).evaluate(element => element.scrollTo({ top: element.scrollHeight, behavior: 'instant' }));
   await expect(window).toHaveScreenshot('addons-config.png');
 });
 

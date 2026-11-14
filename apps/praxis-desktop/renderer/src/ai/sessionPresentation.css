@@ -1,0 +1,23 @@
+.session-work-history { margin: 8px 0; padding-left: 20px; }
+.session-work-history > li { padding: 4px 0; }
+.session-work-tool > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.session-work-tool > summary small { color: var(--muted); margin-left: auto; }
+.session-work-tool pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.session-work-location { overflow-wrap: anywhere; font-family: var(--font-mono, monospace); }
+.session-work-tool dl, .session-runtime-facts dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; }
+.session-work-tool dd, .session-runtime-facts dd, .session-reported-usage dd { margin: 0; overflow-wrap: anywhere; }
+.session-reported-usage, .session-runtime-facts { color: var(--text); font-size: 12px; }
+.session-reported-usage { margin: 8px 0; width: 100%; }
+.composer-usage-expanded > .session-reported-usage { margin: 4px 0; }
+.session-reported-usage > summary, .session-runtime-facts > summary { cursor: pointer; }
+.session-reported-usage dl { margin: 8px 0; }
+.session-reported-usage dl > div { display: flex; justify-content: space-between; gap: 16px; }
+.session-reported-usage ul { padding-left: 18px; }
+.session-runtime-facts { margin: 6px 10px; }
+.session-message-part + .session-message-part { margin-top: 12px; }
+/* Chat cards preserve plain event text. Nested Markdown and disclosures use normal flow. */
+.session-message-part, .session-chat-message .session-chat-activity,
+.session-reported-usage, .session-runtime-facts { white-space: normal; }
+.session-message-part > .markdown-body { min-width: 0; white-space: normal; }
+.session-message-part > .markdown-body > :first-child { margin-top: 0; }
+.session-message-part > .markdown-body > :last-child { margin-bottom: 0; }

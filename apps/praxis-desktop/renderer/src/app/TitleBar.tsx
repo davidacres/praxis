@@ -64,6 +64,8 @@ export interface TitleBarProps {
   boardFilter?: TitleBarBoardFilter;
   /** Opens the command palette (search issues, projects, sessions, navigation). */
   onOpenPalette?: () => void;
+  onOpenAttention?: () => void;
+  onSearchWork?: () => void;
   settingsOpen: boolean;
   onOpenSettings: () => void;
   onOpenAiSettings: () => void;
@@ -121,6 +123,8 @@ export function TitleBar({
   onForward,
   boardFilter,
   onOpenPalette,
+  onOpenAttention,
+  onSearchWork,
   settingsOpen,
   onOpenSettings,
   onOpenAiSettings,
@@ -530,6 +534,8 @@ export function TitleBar({
         </div>
         </div>
         <div data-tauri-drag-region className="titlebar-group titlebar-utilities" role="group" aria-label="Utilities">
+                {onOpenAttention && <button type="button" className="icon-btn icon-btn-sm" aria-label="Needs your attention" data-testid="titlebar-attention" onClick={onOpenAttention}><Icon name="warning" size={13} /></button>}
+                {onSearchWork && <button type="button" className="icon-btn icon-btn-sm" aria-label="Search your work" data-testid="titlebar-search-work" onClick={onSearchWork}><Icon name="search" size={13} /></button>}
                 <CodeIntelTitlebarChip folder={codeIntelFolder} />
 
                 <button

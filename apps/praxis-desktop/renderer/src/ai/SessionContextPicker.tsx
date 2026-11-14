@@ -1,3 +1,4 @@
+import { ComposerSurface } from './ComposerSurface';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AgentSessionRecord, IssueSummary } from '@praxis/core';
@@ -88,7 +89,7 @@ export function SessionContextPicker({ session, sessions, references, onChange, 
   return <>
     <button type="button" ref={trigger} className="icon-btn session-context-add" aria-label="Add context" aria-haspopup="dialog" aria-expanded={Boolean(view)}
       data-testid="session-add-context" disabled={disabled} onClick={() => { setError(''); setQuery(''); setView(current => current ? undefined : 'menu'); }}><Icon name="plus" size={16} /></button>
-    {view && createPortal(<div ref={menu} className="composer-provider-menu session-context-picker" role="dialog" aria-label="Add context" style={{ position: 'fixed', ...position }}>
+    {view && createPortal(<ComposerSurface part="menu" ref={menu} className="composer-provider-menu session-context-picker" role="dialog" aria-label="Add context" style={{ position: 'fixed', ...position }}>
       <div className="session-context-picker-heading"><strong>{view === 'menu' ? 'Add context' : view === 'session' ? 'Add a session' : 'Add a ticket'}</strong><button type="button" className="icon-btn" aria-label="Close context menu" onClick={() => setView(undefined)}><Icon name="close" size={13} /></button></div>
       {view === 'menu' ? <>
         <button type="button" className="composer-provider-option" data-testid="context-folder" disabled={folderDisabled || busy} onClick={changeFolder}><Icon name="folder" size={15} /><span>{session.workingDirectory ? 'Change working folder' : 'Add working folder'}<small>Sets where this session works</small></span></button>
@@ -117,6 +118,6 @@ export function SessionContextPicker({ session, sessions, references, onChange, 
         </div>
       </>}
       {busy && <p role="status">Adding context…</p>}{error && <p role="alert" className="error-text">{error}</p>}
-    </div>, document.body)}
+    </ComposerSurface>, document.body)}
   </>;
 }

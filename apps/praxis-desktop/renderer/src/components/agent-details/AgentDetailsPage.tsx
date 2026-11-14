@@ -86,6 +86,7 @@ export function AgentDetailsPage({
     }
   });
   const bodyRef = useRef<HTMLDivElement>(null);
+  const [reviewHost, setReviewHost] = useState<HTMLDivElement | null>(null);
   const followRef = useRef(true);
 
   const handleToggleWidth = () => {
@@ -441,6 +442,7 @@ export function AgentDetailsPage({
       )}
 
       {/* Main Content Area */}
+      <div className="agent-details-review" ref={setReviewHost} />
       <div className="agent-details-body" data-testid="agent-details-body" ref={bodyRef}>
         {/* Ticket Details Card */}
         <SessionTicketCard session={targetSession} />
@@ -448,6 +450,7 @@ export function AgentDetailsPage({
         {/* Feed Content */}
         <AgentActivityFeed
           session={targetSession}
+          reviewHost={reviewHost}
           subagentId={isPrimary ? undefined : (agentId || undefined)}
           viewMode="conversation"
           onSelectSession={onSelectSession}

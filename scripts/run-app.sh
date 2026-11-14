@@ -121,7 +121,8 @@ else
 
   if [[ "$DEV" -eq 0 ]]; then
     step 'Building apps/praxis-desktop/renderer'
-    invoke_npm "$FRONTEND" build
+    # Preserve unchanged asset timestamps so Cargo can reuse the native build.
+    node "$REPO_ROOT/scripts/build-run-renderer.mjs"
     ok 'frontend -> dist/'
   fi
 

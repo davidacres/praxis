@@ -1912,6 +1912,7 @@ pub fn continue_api_task(
     );
     task.mutate(true, |record| {
         record["responseText"] = json!("");
+        record["responseSegments"] = json!([]);
         record["reasoningText"] = json!("");
     });
     let mut event = if internal {

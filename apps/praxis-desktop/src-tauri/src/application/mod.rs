@@ -1,5 +1,6 @@
 //! Rust desktop application adapters: ownership, stores and portable workspaces.
 mod acp_host;
+mod acp_presentation;
 mod acp_one_shot;
 mod activity;
 mod agent_runtime;

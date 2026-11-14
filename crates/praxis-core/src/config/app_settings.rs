@@ -399,6 +399,7 @@ pub struct AppearanceLook {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppearanceSettings {
+    pub composer_style: String,
     pub display_mode: String,
     pub show_brand_artwork: bool,
     pub priority_colors: BTreeMap<String, String>,
@@ -671,6 +672,7 @@ pub fn default_app_settings() -> AppSettings {
             enable_deployments: false,
         },
         appearance: AppearanceSettings {
+            composer_style: "classic".to_string(),
             display_mode: "compact".to_string(),
             show_brand_artwork: true,
             priority_colors: default_priority_colors(),
@@ -1897,6 +1899,7 @@ pub fn sanitize_app_settings(raw: &Value) -> AppSettings {
                 defaults.appearance.show_brand_artwork,
             ),
             priority_colors: read_priority_colors(app_obj.get("priorityColors")),
+            composer_style: match app_obj.get("composerStyle").and_then(Value::as_str) { Some("hairline") => "hairline", Some("ambient-canvas") => "ambient-canvas", _ => "classic" }.to_string(),
             theme_id: read_string(app_obj.get("themeId"), &defaults.appearance.theme_id),
             theme_mode: read_theme_mode(app_obj.get("themeMode"), &defaults.appearance.theme_mode),
             accent_color: read_accent_color(app_obj.get("accentColor")),

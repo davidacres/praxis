@@ -20,6 +20,7 @@ use praxis_ai::providers::provider_limit_error::{
     extract_provider_limit_message, is_limit_notice_reply, is_provider_limit_error,
 };
 use praxis_ai::providers::registry::resolve_executable;
+use praxis_ai::providers::stream_disconnect::{STREAM_DISCONNECT_NOTICE, split_stream_disconnect};
 use praxis_core::unified_diff::create_unified_diff;
 use praxis_host::HostContext;
 use serde_json::{Value, json};
@@ -84,6 +85,7 @@ pub struct Task {
     pub(super) auto_allow_safe: bool,
     pending: Mutex<VecDeque<Pending>>,
     pub(super) message: Mutex<String>,
+    message_segments: Mutex<Vec<Value>>,
     pub(super) reasoning: Mutex<String>,
     pub(super) steps: AtomicU32,
     pub(super) started: Instant,
@@ -575,22 +577,27 @@ impl Task {
     fn handle_update(&self, update: &Value) {
         match update["sessionUpdate"].as_str().unwrap_or_default() {
             "agent_message_chunk" => {
-                let Some(text) = update["content"]["text"]
+                let Some(_text) = update["content"]["text"]
                     .as_str()
                     .filter(|t| !t.is_empty() && update["content"]["type"] == "text")
                 else {
                     return;
                 };
-                let buffer = {
-                    let mut buffer = self
-                        .message
+                let (buffer, segments) = {
+                    let mut parts = self
+                        .message_segments
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    buffer.push_str(text);
-                    buffer.clone()
+                    let reply = super::acp_presentation::push_segment(&mut parts, update, &now());
+                    (reply, parts.clone())
                 };
+                *self
+                    .message
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = buffer.clone();
                 self.mutate(false, move |record| {
                     record["responseText"] = json!(buffer);
+                    record["responseSegments"] = json!(segments);
                     if record["state"] == "planning" {
                         record["planText"] = json!(buffer);
                     }
@@ -650,12 +657,21 @@ impl Task {
                     *tool = Some((id.clone(), name.clone()));
                 }
                 self.progress();
+                if let Ok(mut tools) = self.tool_inputs.lock() {
+                    super::acp_presentation::merge_tool(
+                        tools.entry(id.clone()).or_insert_with(|| json!({})),
+                        update,
+                    );
+                }
                 let mut data = json!({ "callId": id, "toolName": name, "kind": map_tool_kind(update["kind"].as_str()) });
                 if let Some(title) = update["title"].as_str() {
                     data["argsSummary"] = json!(title);
                 }
                 if update["rawInput"].is_object() {
                     data["args"] = update["rawInput"].clone();
+                }
+                if update["locations"].is_array() {
+                    data["locations"] = update["locations"].clone();
                 }
                 self.append(
                     evt(
@@ -685,18 +701,37 @@ impl Task {
     fn tool_update(&self, update: &Value) {
         let status = update["status"].as_str().unwrap_or_default();
         let id = update["toolCallId"].as_str().unwrap_or_default().to_owned();
+        let merged = {
+            let mut tools = self
+                .tool_inputs
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let tool = tools.entry(id.clone()).or_insert_with(|| json!({}));
+            super::acp_presentation::merge_tool(tool, update);
+            tool.clone()
+        };
+        let update = &merged;
         if status != "completed" && status != "failed" {
-            // A refinement resends only what changed, so merge it over what this call already had.
-            if let Some(input) = update["rawInput"].as_object() {
-                let mut inputs = self
-                    .tool_inputs
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                let merged = inputs.entry(id).or_insert_with(|| json!({}));
-                for (k, v) in input {
-                    merged[k] = v.clone();
+            let id = id.clone();
+            let merged = merged.clone();
+            self.mutate(true, move |record| {
+                if let Some(events) = record["events"].as_array_mut() {
+                    for event in events
+                        .iter_mut()
+                        .filter(|e| e["type"] == "tool_start" && e["data"]["callId"] == id)
+                    {
+                        if let Some(title) = merged["title"].as_str() {
+                            event["data"]["argsSummary"] = json!(title);
+                        }
+                        if merged["locations"].is_array() {
+                            event["data"]["locations"] = merged["locations"].clone();
+                        }
+                        if merged["rawInput"].is_object() {
+                            event["data"]["args"] = merged["rawInput"].clone();
+                        }
+                    }
                 }
-            }
+            });
             return;
         }
         self.steps.fetch_add(1, Ordering::SeqCst);
@@ -725,26 +760,12 @@ impl Task {
         let detail = Some(diff_text.trim().to_owned())
             .filter(|d| !d.is_empty())
             .or_else(|| Some(raw_output.clone()).filter(|r| !r.is_empty()));
-        let streamed = self
-            .tool_inputs
-            .lock()
-            .ok()
-            .and_then(|mut inputs| inputs.remove(&id));
-        let final_input = update["rawInput"]
+        if let Ok(mut tools) = self.tool_inputs.lock() {
+            tools.remove(&id);
+        }
+        let args = update["rawInput"]
             .as_object()
-            .map(|o| Value::Object(o.clone()));
-        let args = match (streamed, final_input) {
-            (None, None) => None,
-            (a, b) => {
-                let mut merged = a.unwrap_or_else(|| json!({}));
-                if let Some(Value::Object(b)) = b {
-                    for (k, v) in b {
-                        merged[k] = v;
-                    }
-                }
-                Some(merged)
-            }
-        };
+            .map(|_| update["rawInput"].clone());
         let name = ["name", "title"]
             .iter()
             .find_map(|k| update[*k].as_str())
@@ -757,6 +778,12 @@ impl Task {
         });
         if let Some(name) = update["name"].as_str().or_else(|| update["title"].as_str()) {
             data["toolName"] = json!(name);
+        }
+        if let Some(title) = update["title"].as_str() {
+            data["argsSummary"] = json!(title);
+        }
+        if update["locations"].is_array() {
+            data["locations"] = update["locations"].clone();
         }
         if let Some(args) = args {
             data["args"] = args;
@@ -1311,6 +1338,7 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
         auto_allow_safe: request.permission_mode.as_deref() == Some("auto"),
         pending: Mutex::default(),
         message: Mutex::default(),
+        message_segments: Mutex::default(),
         reasoning: Mutex::default(),
         steps: AtomicU32::new(0),
         started: Instant::now(),
@@ -1543,6 +1571,7 @@ async fn drive(
         };
         if let Some(Ok(response)) = attempt {
             resumed = true;
+            session = response.clone();
             agent_session = resume_id.clone();
             options = response["configOptions"]
                 .as_array()
@@ -1639,7 +1668,7 @@ async fn drive(
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .map(|m| json!({ "id": m["id"], "name": m["name"], "description": m["description"] }))
+            .map(|m| json!({ "id": m["id"], "name": m["name"], "description": m["description"], "kind": m["_meta"]["jetbrains"]["air"]["kind"] }))
             .collect();
         task.mutate(true, move |record| {
             record["acpCurrentModeId"] = current;
@@ -1751,6 +1780,20 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
         return;
     }
     let buffer = task.message.lock().map(|m| m.clone()).unwrap_or_default();
+    let segments = task
+        .message_segments
+        .lock()
+        .map(|parts| parts.clone())
+        .unwrap_or_default();
+    let raw_text = if segments.is_empty() {
+        buffer.clone()
+    } else {
+        segments
+            .iter()
+            .filter_map(|part| part["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     let reasoning = task
         .reasoning
         .lock()
@@ -1766,8 +1809,8 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
         .to_owned();
     // A turn that ended on a provider limit (or replied with a limit notice) fails; the notice is
     // not shown as an assistant bubble.
-    let limit_text = if is_limit_notice_reply(&buffer) {
-        Some(buffer.as_str())
+    let limit_text = if is_limit_notice_reply(&raw_text) {
+        Some(raw_text.as_str())
     } else if is_provider_limit_error(&stop) {
         Some(stop.as_str())
     } else {
@@ -1779,6 +1822,22 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
         task.append(evt("error", notice, None, None), 0);
         return;
     }
+    // Codex reports a dropped model stream as reply text and still ends the turn normally. Keep
+    // the partial reply, drop the raw transport error from it, and fail the turn so it reads as
+    // unfinished rather than "completed".
+    let disconnect = split_stream_disconnect(&raw_text);
+    let buffer = match &disconnect {
+        Some(_) => {
+            let text = split_stream_disconnect(&buffer)
+                .map(|split| split.reply)
+                .unwrap_or_else(|| buffer.clone());
+            task.mutate(true, move |record| record["responseText"] = json!(text));
+            split_stream_disconnect(&buffer)
+                .map(|split| split.reply)
+                .unwrap_or(buffer)
+        }
+        None => buffer,
+    };
     let mut telemetry = json!({ "durationMs": task.started.elapsed().as_millis() as u64 });
     if let Some(model) = quota_model(response).or_else(|| fallback_model.map(str::to_owned)) {
         telemetry["modelId"] = json!(model);
@@ -1786,6 +1845,47 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
     if let Some(usage) = token_usage(&response["usage"]) {
         telemetry["tokenUsage"] = usage.clone();
         task.mutate(true, move |record| add_tokens(record, &usage));
+    }
+    let reported_model = quota_model(response);
+    let models = super::acp_presentation::model_usage(response, reported_model.as_deref());
+    if !models.is_empty() {
+        telemetry["reportedModelUsage"] = json!(models);
+        let reported_model = reported_model.clone();
+        task.mutate(true, move |record| {
+            if let Some(model) = reported_model {
+                record["reportedModelId"] = json!(model);
+            }
+            let mut totals = record["reportedModelUsage"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            for row in models {
+                if let Some(existing) = totals
+                    .iter_mut()
+                    .find(|entry| entry["model"] == row["model"])
+                {
+                    for field in [
+                        "inputTokens",
+                        "outputTokens",
+                        "totalTokens",
+                        "cachedInputTokens",
+                        "cachedWriteTokens",
+                        "reasoningTokens",
+                    ] {
+                        if let Some(count) = row["tokenUsage"][field].as_u64() {
+                            existing["tokenUsage"][field] =
+                                json!(existing["tokenUsage"][field].as_u64().unwrap_or(0) + count);
+                        }
+                    }
+                    if row["role"] == "reply" {
+                        existing["role"] = json!("reply");
+                    }
+                } else {
+                    totals.push(row);
+                }
+            }
+            record["reportedModelUsage"] = json!(totals);
+        });
     }
     let after = task
         .store
@@ -1808,8 +1908,11 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
             telemetry["cost"] = json!({ "currency": after["currency"], "amount": turn });
         }
     }
-    if !buffer.is_empty() {
+    if !buffer.is_empty() || !segments.is_empty() {
         let mut message = evt("message", "Assistant", Some(buffer), None);
+        if !segments.is_empty() && disconnect.is_none() {
+            message["messageSegments"] = json!(segments);
+        }
         if !reasoning.is_empty() {
             message["reasoning"] = json!(reasoning);
         }
@@ -1817,6 +1920,16 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
             object.extend(extra.clone());
         }
         task.append(message, 0);
+    }
+    if let Some(split) = disconnect {
+        if stop != "cancelled" {
+            task.set_state("failed", Some(STREAM_DISCONNECT_NOTICE));
+            task.append(
+                evt("error", STREAM_DISCONNECT_NOTICE, Some(split.detail), None),
+                0,
+            );
+        }
+        return;
     }
     match stop.as_str() {
         "end_turn" | "max_turn_requests" => {
@@ -1846,22 +1959,7 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
 }
 
 fn token_usage(usage: &Value) -> Option<Value> {
-    let input = usage["inputTokens"].as_u64();
-    let output = usage["outputTokens"].as_u64();
-    if input.is_none() && output.is_none() {
-        return None;
-    }
-    let total = usage["totalTokens"]
-        .as_u64()
-        .unwrap_or(input.unwrap_or(0) + output.unwrap_or(0));
-    let mut value = json!({ "inputTokens": input.unwrap_or(0), "outputTokens": output.unwrap_or(0), "totalTokens": total });
-    if let Some(thought) = usage["thoughtTokens"].as_u64() {
-        value["reasoningTokens"] = json!(thought);
-    }
-    if let Some(cached) = usage["cachedReadTokens"].as_u64() {
-        value["cachedInputTokens"] = json!(cached);
-    }
-    Some(value)
+    super::acp_presentation::usage(usage)
 }
 
 fn add_tokens(record: &mut Value, usage: &Value) {
@@ -1875,6 +1973,7 @@ fn add_tokens(record: &mut Value, usage: &Value) {
         "totalTokens",
         "reasoningTokens",
         "cachedInputTokens",
+        "cachedWriteTokens",
     ] {
         if let Some(add) = usage[field].as_u64() {
             total[field] = json!(total[field].as_u64().unwrap_or(0) + add);
@@ -2180,6 +2279,7 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
         auto_allow_safe: permission_mode.as_deref() == Some("auto"),
         pending: Mutex::default(),
         message: Mutex::default(),
+        message_segments: Mutex::default(),
         reasoning: Mutex::default(),
         steps: AtomicU32::new(0),
         started: Instant::now(),
@@ -2200,7 +2300,11 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
     }
     // The previous turn recorded its own reply when it ended; clear the live buffer so the old answer
     // cannot briefly render after the new user message.
-    task.mutate(true, |record| record["responseText"] = json!(""));
+    task.mutate(true, |record| {
+        record["responseText"] = json!("");
+        record["responseSegments"] = json!([]);
+        record["reasoningText"] = json!("");
+    });
     let mut event = if request.internal {
         evt("conversation_turn", "Conversation turn started", None, None)
     } else {
@@ -2272,6 +2376,7 @@ pub(super) fn register_api_task(
         auto_allow_safe,
         pending: Mutex::default(),
         message: Mutex::default(),
+        message_segments: Mutex::default(),
         reasoning: Mutex::default(),
         steps: AtomicU32::new(0),
         started: Instant::now(),

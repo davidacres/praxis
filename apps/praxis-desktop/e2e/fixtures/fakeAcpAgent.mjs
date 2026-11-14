@@ -219,6 +219,21 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     });
   }
 
+  if (promptText.includes('STREAM_DISCONNECT')) {
+    // What Codex does when its model stream drops: the transport error arrives as reply text,
+    // glued onto the last chunk, and the turn still ends with `end_turn`. Verbatim tail.
+    for (const text of [
+      'I will start with the layout.',
+      'Warning: Falling back from WebSockets to HTTPS transport. stream disconnected before completion: IO error: peer closed connection without sending TLS close_notify: https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof\n\nstream disconnected before completion: Transport error: network error: error decoding response body\n\n'
+    ]) {
+      await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+        sessionId: ctx.params.sessionId,
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } }
+      });
+    }
+    return { stopReason: 'end_turn' };
+  }
+
   if (promptText.includes('LIMIT_NOTICE')) {
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
       sessionId: ctx.params.sessionId,

@@ -1,0 +1,13 @@
+.modal-card.work-hub { width: min(960px, 94vw); max-width: min(960px, 94vw); max-height: 88vh; display: flex; flex-direction: column; padding: var(--space-4); gap: var(--space-3); color: var(--text); }
+.work-hub header, .work-hub-toolbar { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.work-hub header h2 { margin: 0; flex: 1; }
+.work-hub-query { width: 100%; box-sizing: border-box; padding: var(--space-3); }
+.work-hub-results, .work-hub-preview { overflow: auto; min-height: 0; }
+.work-hub-result { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); width: 100%; text-align: left; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); margin-bottom: var(--space-2); font: inherit; overflow-wrap: anywhere; }
+button.work-hub-result { cursor: pointer; }
+button.work-hub-result:hover { border-color: var(--accent); }
+.work-hub-result h3, .work-hub-result p { margin: 0; }
+.work-hub-result small, .work-hub-result span { color: var(--muted); }
+.work-hub-result > .btn { align-self: flex-start; }
+.work-hub-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.work-hub mark { background: var(--accent); color: var(--bg); }

@@ -8,7 +8,7 @@ import type {
   SessionMode
 } from '@praxis/core';
 import { PromptCoachDetails, promptPhraseMarkers } from './PromptCoachDetails';
-import { usePromptAnalysis, type PromptHighlight } from './SessionComposerFrame';
+import { SessionComposerPanel, usePromptAnalysis, type PromptHighlight } from './SessionComposerFrame';
 import { useFindingReviews } from './FindingReviewControls';
 import { Icon } from '../ui/Icon';
 import { renderInlineCode } from './inlineCode';
@@ -396,7 +396,7 @@ export function SessionPromptScoreBar({
   );
 
   if (checked && activeReport.findings.length > 0 && activeReport.findings.every(f => reviews.isMuted(f)) && !manageMuted) {
-    return <div className="session-prompt-score-wrapper is-docked-cap" data-testid="session-prompt-score-wrapper" data-state="open" data-input-digest={(sourceReport ?? activeReport).inputDigest}>
+    return <div className="session-prompt-score-wrapper is-docked-cap" data-composer-part="analysis" data-testid="session-prompt-score-wrapper" data-state="open" data-input-digest={(sourceReport ?? activeReport).inputDigest}>
       <div className="session-prompt-score-summary"><span>{activeReport.findings.length} checks muted · score evidence retained</span>
         <button type="button" className="btn btn-compact" onMouseDown={event => event.preventDefault()} onClick={() => { setManageMuted(true); setDetailsOpen(true); }}>Review muted checks</button></div>
     </div>;
@@ -408,7 +408,7 @@ export function SessionPromptScoreBar({
   return (
     <div
       className={`session-prompt-score-wrapper is-docked-cap${closing ? ' is-closing' : ''}${readyCelebration ? ' is-ready' : ''}`}
-      data-testid="session-prompt-score-wrapper"
+      data-composer-part="analysis" data-testid="session-prompt-score-wrapper"
       data-input-digest={(sourceReport ?? activeReport).inputDigest}
       data-state={wrapperState}
     >
@@ -514,9 +514,9 @@ export function SessionPromptScoreBar({
                 </button>
               </div>
             )}
-            {detailsOpen && (
+            <SessionComposerPanel open={detailsOpen}>
               <PromptCoachDetails initialPreview={manualReview} manageMuted={manageMuted} report={sourceReport ?? activeReport} reviews={reviews} intent={intentPill} />
-            )}
+            </SessionComposerPanel>
           </>
         )}
       </div>

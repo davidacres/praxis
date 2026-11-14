@@ -4,7 +4,7 @@ import type { AgentEventSummary } from '@praxis/core';
  * Per-turn tool activity for the chat.
  *
  * `tool_start` / `tool_complete` events stay out of the transcript, but the
- * thought block lists what the turn actually did, and its caption counts calls
+ * Activity lists what the turn actually did, and its caption counts calls
  * rather than distinct tool names (four `read_file` calls are four calls). So
  * walk the full event list once and attach, to every assistant message, the
  * calls made in its turn up to that point.
@@ -17,6 +17,11 @@ export interface ToolCallRow {
   detail?: string;
   /** Undefined while the call is still running. */
   ok?: boolean;
+  timestamp?: string;
+  locations?: Array<{ path: string; line?: number }>;
+  output?: string;
+  args?: Record<string, unknown>;
+  kind?: string;
 }
 
 export interface TurnTools {
@@ -44,7 +49,12 @@ export function collectTurnTools(
       calls.push({
         name: event.data?.toolName ?? event.summary?.replace(/^Running tool:\s*/, '') ?? 'tool',
         callId: event.data?.callId,
-        detail: event.data?.argsSummary
+        detail: event.data?.argsSummary,
+        timestamp: event.timestamp,
+        locations: event.data?.locations,
+        output: event.data?.output,
+        args: event.data?.args,
+        kind: event.data?.kind
       });
     } else if (event.type === 'tool_complete') {
       // Match by call id when the host supplies one, otherwise settle the
@@ -54,7 +64,14 @@ export function collectTurnTools(
         call.ok === undefined &&
         (event.data?.callId ? call.callId === event.data.callId : call.name === name)
       );
-      if (open) open.ok = event.data?.ok !== false;
+      if (open) {
+        open.ok = event.data?.ok !== false;
+        open.detail = event.data?.argsSummary ?? open.detail;
+        open.locations = event.data?.locations ?? open.locations;
+        open.output = event.data?.output ?? open.output;
+        open.args = event.data?.args ?? open.args;
+        open.kind = event.data?.kind ?? open.kind;
+      }
       else {
         // Some ACP adapters report a tool as already completed on its first
         // notification. There is no preceding `tool_start` in that case, but
@@ -64,6 +81,11 @@ export function collectTurnTools(
           name,
           callId: event.data?.callId,
           detail: event.data?.argsSummary,
+          timestamp: event.timestamp,
+          locations: event.data?.locations,
+          output: event.data?.output,
+          args: event.data?.args,
+          kind: event.data?.kind,
           ok: event.data?.ok !== false
         });
       }

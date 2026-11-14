@@ -1,3 +1,4 @@
+import { ComposerSurface } from './ComposerSurface';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AgentPermissionMode } from '@praxis/core';
@@ -64,7 +65,7 @@ export function SessionPermissionModeControl({ value = 'manual', onChange, testI
         <Icon name="chevron-down" size={12} />
       </button>
       {menuPosition && createPortal(
-        <div
+        <ComposerSurface part="menu"
           ref={menuRef}
           className="composer-provider-menu session-permission-menu"
           role="listbox"
@@ -93,7 +94,7 @@ export function SessionPermissionModeControl({ value = 'manual', onChange, testI
               {value === option.value && <Icon name="check" size={15} />}
             </button>
           ))}
-        </div>,
+        </ComposerSurface>,
         document.body
       )}
     </>

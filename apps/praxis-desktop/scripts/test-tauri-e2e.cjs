@@ -40,12 +40,14 @@ async function runTauriE2e() {
     const report = JSON.parse(auditRes.stdout);
     assert.equal(report.shell, 'tauri');
     assert.equal(report.transport, 'in-process');
-    assert.equal(report.methodCount, 407);
-    assert.equal(report.registeredCount, 407);
+    const contract = JSON.parse(fs.readFileSync(path.join(desktopRoot, 'src-tauri', 'desktop-contract.json'), 'utf8'));
+    assert.ok(Array.isArray(contract.methods) && contract.methods.length > 0, 'Expected a nonempty generated contract');
+    assert.equal(report.methodCount, contract.methods.length);
+    assert.equal(report.registeredCount, contract.methods.length);
     assert.equal(report.missingCount, 0);
     assert.equal(report.verifiedCount, 0);
     assert.equal(report.parityVerified, false);
-    console.log(`      ✓ 407/407 channels registered; behavioral parity remains unverified`);
+    console.log(`      ✓ ${report.registeredCount}/${contract.methods.length} channels registered; behavioral parity remains unverified`);
 
     // 2. Headless App Lifecycle and File Creation Check
     console.log('[2/4] Verifying profile bootstrapping and persistent file creation...');

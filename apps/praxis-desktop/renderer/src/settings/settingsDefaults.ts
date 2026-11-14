@@ -148,6 +148,7 @@ export const DEFAULT_APP_SETTINGS = {
     enableDeployments: false
   },
   appearance: {
+    composerStyle: 'classic' as 'classic' | 'ambient-canvas' | 'hairline',
     displayMode: 'compact' as 'compact' | 'large',
     zoomFactor: 1,
     showBrandArtwork: true,

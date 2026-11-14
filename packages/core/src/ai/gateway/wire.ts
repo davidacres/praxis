@@ -66,6 +66,8 @@ export interface TokenUsage {
   totalTokens?: number;
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  /** Cache creation, when reported separately from cache reads. */
+  cachedWriteTokens?: number;
 }
 
 /** Fills in a total when the provider reported only the parts. */

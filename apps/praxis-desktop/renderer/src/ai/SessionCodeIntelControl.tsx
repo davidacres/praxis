@@ -1,3 +1,4 @@
+import { ComposerSurface } from './ComposerSurface';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { CodeIntelligenceResponse } from '@praxis/core';
@@ -396,7 +397,7 @@ export function SessionCodeIntelControl({
   }
 
   const panel = (
-    <div
+    <ComposerSurface part="menu"
       ref={panelRef}
       className="session-code-intel-panel"
       role="dialog"
@@ -659,7 +660,7 @@ export function SessionCodeIntelControl({
           Connect a folder or select a board to use code intelligence.
         </p>
       )}
-    </div>
+    </ComposerSurface>
   );
 
   return (

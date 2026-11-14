@@ -35,6 +35,7 @@ import { Icon, type IconName } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
 import { AiUsageStatsSection } from './AiUsageStatsSection';
 import { CodeIntelligencePanel } from './CodeIntelligencePanel';
+import { ComposerGallery } from './ComposerGallery';
 import { useSettings } from './useSettings';
 import { DebouncedTextArea, DebouncedTextField, FieldRow, Toggle } from './settingsFields';
 import { AiProvidersSection } from './aiProviders/AiProvidersSection';
@@ -70,6 +71,7 @@ export type SettingsCategory =
   | 'delivery'
   | 'mcp'
   | 'preview'
+  | 'appearance-composers'
   | 'appearance-themes'
   | 'appearance-looks'
   | 'appearance-surfaces'
@@ -101,7 +103,7 @@ const APPEARANCE_GROUP: NavGroupDef = {
   id: 'appearance-group',
   label: 'Appearance',
   icon: 'theme',
-  children: ['appearance-themes', 'appearance-surfaces', 'appearance-looks']
+  children: ['appearance-composers', 'appearance-themes', 'appearance-surfaces', 'appearance-looks']
 };
 
 const WORKSPACE_GROUP: NavGroupDef = {
@@ -153,6 +155,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Updates',
     icon: 'refresh',
     description: 'Praxis checks GitHub Releases for new versions, downloads them in the background, and installs them when you restart.'
+  },
+  {
+    id: 'appearance-composers',
+    label: 'Composers',
+    icon: 'sparkles',
+    description: 'Choose the composer style used across all sessions.'
   },
   {
     id: 'appearance-themes',
@@ -316,6 +324,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
     applySurfacePack(appearance.surfacePackId, appearance.surface);
     await update({
       appearance: {
+        composerStyle: appearance.composerStyle,
         displayMode: appearance.displayMode,
         showBrandArtwork: appearance.showBrandArtwork,
         themeId: appearance.themeId,
@@ -428,6 +437,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'delivery' && <DeliverySection settings={settings} update={update} />}
         {active === 'mcp' && <McpSection settings={settings} update={update} />}
         {active === 'preview' && <PreviewSection settings={settings} update={update} />}
+        {active === 'appearance-composers' && <ComposerGallery settings={settings} update={update} />}
         {active === 'appearance-themes' && <ThemesGallerySection settings={settings} update={update} />}
         {active === 'appearance-looks' && <LooksSection settings={settings} update={update} />}
         {active === 'appearance-surfaces' && <SurfacesSection settings={settings} update={update} />}
@@ -2315,6 +2325,9 @@ function DeliverySection({
           placeholder="e.g. dist\\*.msi"
         />
       </FieldRow>
+      <details className="settings-advanced-delivery" data-testid="delivery-advanced-settings">
+        <summary>Advanced delivery defaults · auto-merge sub tasks: {settings.delivery.autoMergeSubTasks ? 'on' : 'off'}</summary>
+        <p className="hint">Run confirmation, base branch, provider allowance and automatic sub-task merging.</p>
       <FieldRow
         label="Confirm large workflow runs"
         description="A run that could start more than this many agent sessions at worst — every loop spent, every retry used — asks before it starts."
@@ -2356,6 +2369,7 @@ function DeliverySection({
         checked={settings.delivery.autoMergeSubTasks}
         onChange={next => void update({ delivery: { autoMergeSubTasks: next } })}
       />
+      </details>
     </>
   );
 }

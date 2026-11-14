@@ -1,0 +1,348 @@
+/* Presentation contract: built-in and future styles define tokens here. The
+   shared slot rules below apply to the whole composer and its portal surfaces.
+   Classic emits no data-composer-custom attribute, preserving existing CSS. */
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) {
+  --composer-control-bg: transparent;
+  --composer-control-hover: color-mix(in srgb, var(--accent) 8%, transparent);
+  --composer-control-active: color-mix(in srgb, var(--accent) 12%, transparent);
+  --composer-control-ink: var(--text-secondary);
+  --composer-control-radius: 999px;
+  --composer-control-size: calc(30px * var(--ui-scale));
+  --composer-control-font: var(--text-xs);
+  --composer-control-border: color-mix(in srgb, var(--accent) 18%, transparent);
+  --composer-detail-bg: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  --composer-detail-border: color-mix(in srgb, var(--accent) 16%, var(--border));
+  --composer-detail-radius: 16px;
+  --composer-detail-shadow: 0 12px 32px color-mix(in srgb, var(--bg) 30%, transparent);
+  --composer-content-width: 640px;
+  --composer-analysis-bg: transparent;
+  --composer-analysis-radius: 0px;
+}
+
+/* Selector and command affordances share one quiet, rounded vocabulary. */
+[data-composer-custom] :is(.composer-chip, .session-mode-toggle button, .composer-input-leading .icon-btn) {
+  height: var(--composer-control-size);
+  min-height: 0;
+  border: 1px solid transparent;
+  border-radius: var(--composer-control-radius);
+  background: var(--composer-control-bg);
+  color: var(--composer-control-ink);
+  font-size: var(--composer-control-font);
+  font-weight: 400;
+  box-shadow: none;
+}
+[data-composer-custom] :is(.composer-chip, .session-mode-toggle button, .composer-input-leading .icon-btn):hover:not(:disabled) {
+  background: var(--composer-control-hover);
+  color: var(--text);
+}
+[data-composer-custom] :is(.composer-chip.active, .session-mode-toggle button.active) {
+  border-color: var(--composer-control-border);
+  background: var(--composer-control-active);
+  color: var(--text);
+  box-shadow: none;
+}
+[data-composer-custom] .session-mode-toggle { border: 0; background: transparent; padding: 0; gap: 2px; }
+[data-composer-custom] :is([data-composer-part="header"], [data-composer-part="controls"], .session-composer-footer) {
+  width: calc(100% - 96px);
+  max-width: var(--composer-content-width);
+  margin-inline: auto;
+  padding-inline: 0;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+}
+[data-composer-custom] [data-composer-part="controls"] { padding-block: 6px 12px; flex-wrap: wrap; }
+[data-composer-custom] .session-composer-footer { padding-block: 4px 12px; }
+[data-composer-custom] .composer-send {
+  width: var(--composer-control-size);
+  height: var(--composer-control-size);
+  border: 1px solid var(--composer-control-border);
+  border-radius: var(--composer-control-radius);
+  color: var(--accent);
+  background: var(--composer-control-active);
+  box-shadow: none;
+}
+[data-composer-custom] .composer-send:hover:not(:disabled) { color: var(--text); background: var(--composer-control-hover); }
+[data-composer-custom] .composer-send:disabled { color: var(--text-tertiary); background: transparent; border-color: var(--border); }
+[data-composer-custom] .composer-send-cancel { color: var(--danger); border-color: var(--danger); }
+
+/* Usage reads as metadata; expansion still exposes every account and token. */
+[data-composer-custom] .session-usage-wrapper { margin-inline: auto; width: calc(100% - 96px); max-width: var(--composer-content-width); }
+[data-composer-custom] [data-composer-part="usage"] { border: 0; border-radius: 0; background: transparent; }
+[data-composer-custom] [data-composer-part="usage"] > summary { padding: 8px 0; font-size: var(--composer-control-font); }
+[data-composer-custom] .composer-usage-current strong { font-weight: 400; font-size: var(--composer-control-font); }
+[data-composer-custom] :is(.composer-usage-expanded, .session-prompt-score-panel) {
+  padding: 12px 16px;
+  border: 1px solid var(--composer-detail-border);
+  border-radius: var(--composer-detail-radius);
+  background: var(--composer-detail-bg);
+  box-shadow: none;
+}
+[data-composer-custom] [data-composer-part="analysis"] {
+  width: calc(100% - 96px);
+  max-width: var(--composer-content-width);
+  margin: 8px auto 0;
+}
+[data-composer-custom] :is(.prompt-strip-actions .btn, .prompt-strip-details, .session-prompt-snooze-btn) {
+  border-radius: var(--composer-control-radius);
+  border-color: var(--composer-control-border);
+  font-size: var(--composer-control-font);
+  box-shadow: none;
+}
+[data-composer-custom] .feedback-score-pill { border-radius: var(--composer-control-radius); background: var(--composer-control-active); box-shadow: none; }
+
+/* Portals receive the same style id as the composer that opened them. */
+[data-composer-custom][data-composer-part="menu"] {
+  border: 1px solid var(--composer-detail-border);
+  border-radius: var(--composer-detail-radius);
+  background: var(--composer-detail-bg);
+  box-shadow: var(--composer-detail-shadow);
+  backdrop-filter: blur(18px);
+}
+[data-composer-custom][data-composer-part="menu"] :is(.composer-provider-option, .chip-select-option) { border-radius: 10px; font-size: var(--composer-control-font); }
+[data-composer-custom][data-composer-part="menu"] :is(.composer-provider-option.active, .composer-provider-option:hover) { background: var(--composer-control-active); }
+@media (max-width: 650px) {
+  [data-composer-custom] :is([data-composer-part="header"], [data-composer-part="controls"], [data-composer-part="analysis"], .session-composer-footer, .session-usage-wrapper) { width: calc(100% - 48px); }
+}
+
+/* Analysis belongs to the canvas rather than becoming a second input card. */
+[data-composer-custom][data-composer-part="frame"].composer { border-color: transparent; }
+[data-composer-custom] .session-prompt-score-panel {
+  background: var(--composer-analysis-bg);
+  border: 0;
+  border-inline-start: 2px solid var(--composer-control-border);
+  border-radius: var(--composer-analysis-radius);
+  padding: 8px 12px;
+}
+[data-composer-custom] .session-prompt-strip .btn-primary {
+  color: var(--accent);
+  background: var(--composer-control-active);
+  border: 1px solid var(--composer-control-border);
+}
+[data-composer-custom] .prompt-strip-cycle { border-radius: var(--composer-control-radius); border-color: transparent; background: transparent; }
+[data-composer-custom] .composer-usage-limit-track { background: var(--composer-control-border); }
+[data-composer-custom][data-composer-part="menu"] :is(input, .input) { border-radius: 10px; font-size: var(--composer-control-font); }
+
+[data-composer-custom] .prompt-caret-actions { transform: translateY(calc(-100% - 8px)); }
+[data-composer-custom] .prompt-caret-toolbar {
+  padding: 3px;
+  border: 1px solid var(--composer-control-border);
+  border-radius: var(--composer-control-radius);
+  background: var(--composer-detail-bg);
+}
+[data-composer-custom] .prompt-caret-toolbar button { border-radius: var(--composer-control-radius); }
+[data-composer-custom] .session-code-intel-chip .composer-chip-meta { background: transparent; font-family: inherit; border-radius: var(--composer-control-radius); }
+
+/* Layout slots are independent of control appearance, so styles can rearrange
+   the writing surface and toolbar rows without changing composer behavior. */
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) {
+  --composer-content-width: none;
+  --composer-input-height: calc(84px * var(--ui-scale));
+  --composer-layout-areas: "input" "header" "toolbar";
+  --composer-layout-columns: minmax(0, 1fr);
+  --composer-toolbar-columns: none;
+  --composer-toolbar-display: flex;
+}
+[data-composer-custom][data-composer-part="frame"] {
+  position: relative;
+  display: grid;
+  grid-template-areas: var(--composer-layout-areas);
+  grid-template-columns: var(--composer-layout-columns);
+}
+[data-composer-custom] [data-composer-slot="input"] { grid-area: input; }
+[data-composer-custom] [data-composer-slot="header"] { grid-area: header; }
+[data-composer-custom] [data-composer-slot="toolbar"] {
+  grid-area: toolbar;
+  display: var(--composer-toolbar-display, flex);
+  min-height: calc(48px * var(--ui-scale));
+  grid-template-columns: var(--composer-toolbar-columns);
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .ambient-composer-canvas {
+  min-height: 0;
+  padding: 104px 16px 8px;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .ambient-composer-canvas > .composer-input-shell {
+  max-width: none;
+  margin: 0;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .ambient-composer-canvas .composer-input.session-follow-up-input {
+  height: var(--composer-input-height);
+  min-height: var(--composer-input-height);
+  max-height: var(--composer-input-height);
+  overflow-y: auto;
+  resize: none;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  padding-left: calc(36px * var(--ui-scale));
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .ambient-composer-canvas .composer-input-leading { left: 0; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) :is([data-composer-part="header"], [data-composer-part="controls"], .session-composer-footer, .session-usage-wrapper) {
+  width: calc(100% - 32px);
+  max-width: none;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) [data-composer-part="header"] { min-height: calc(34px * var(--ui-scale)); }
+/* Feedback expands above the frame without moving the writing area. */
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) [data-composer-part="analysis"] {
+  position: absolute;
+  top: 0;
+  bottom: auto;
+  inset-inline: 16px;
+  width: auto;
+  max-width: none;
+  max-height: min(50vh, 360px);
+  overflow-y: auto;
+  z-index: 10;
+  background: var(--bg-elevated);
+  border-radius: var(--composer-detail-radius);
+  box-shadow: var(--composer-detail-shadow);
+}
+
+/* Ambient controls float on the canvas rather than reading as filled pills.
+   Keep their footprints while busy so the writing surface never jumps. */
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) {
+  --composer-motion-duration: 420ms;
+  --composer-motion-ease: cubic-bezier(.22, 1, .36, 1);
+  --composer-control-active: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) :is(.composer-chip, .session-mode-toggle button, .composer-input-leading, .session-context-reference) {
+  transition: opacity var(--composer-motion-duration) ease,
+    translate var(--composer-motion-duration) var(--composer-motion-ease),
+    filter var(--composer-motion-duration) ease,
+    background-color 240ms ease, color 240ms ease, border-color 240ms ease,
+    box-shadow 300ms ease, visibility var(--composer-motion-duration);
+  animation: ambient-control-arrive 520ms var(--composer-motion-ease) backwards;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) :is(.composer-chip, .session-mode-toggle button) {
+  border-color: transparent;
+  background: transparent;
+  letter-spacing: .015em;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) :is(.composer-chip, .session-mode-toggle button):hover:not(:disabled) {
+  translate: 0 -2px;
+  background: var(--composer-control-hover);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) :is(.composer-chip.active, .session-mode-toggle button.active) {
+  border-color: transparent;
+  background: var(--composer-control-active);
+  box-shadow: inset 0 -1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .composer-chip:nth-child(2) { animation-delay: 45ms; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .composer-chip:nth-child(3) { animation-delay: 90ms; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .composer-chip:nth-child(4) { animation-delay: 135ms; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) :is(.composer-input-shell, .session-composer-footer) {
+  transition: opacity var(--composer-motion-duration) ease,
+    translate var(--composer-motion-duration) var(--composer-motion-ease),
+    filter var(--composer-motion-duration) ease, visibility var(--composer-motion-duration);
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .composer-input-shell {
+  animation: ambient-input-arrive 650ms var(--composer-motion-ease) backwards;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .composer-input-shell:focus-within { translate: 0 -2px; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"])[data-composer-part="scope"]:has([data-composer-part="frame"][data-composer-state]:not([data-composer-state="idle"]))
+  :is(.composer-chip, .session-mode-toggle, .composer-input-leading, .session-context-reference, .session-composer-footer, [data-composer-part="analysis"], .prompt-caret-actions) {
+  opacity: 0;
+  translate: 0 8px;
+  filter: blur(3px);
+  visibility: hidden;
+  pointer-events: none;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"])[data-composer-part="frame"]:not([data-composer-state="idle"]) .composer-input-shell {
+  opacity: .65;
+  translate: 0 3px;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"])[data-composer-part="frame"]:not([data-composer-state="idle"]) .composer-input-shell:focus-within { opacity: 1; translate: 0 -2px; }
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) :is(.prompt-coach-details, .composer-usage-expanded, .prompt-rehearsal),
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"])[data-composer-part="menu"] {
+  transform-origin: top center;
+  animation: ambient-panel-arrive 420ms var(--composer-motion-ease) backwards;
+}
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) [data-composer-part="analysis"] {
+  transition: opacity 300ms ease, translate 420ms var(--composer-motion-ease),
+    filter 300ms ease, visibility 420ms, max-height 420ms var(--composer-motion-ease);
+}
+/* Native details can animate both opening and closing in supporting browsers. */
+@supports (interpolate-size: allow-keywords) {
+  :is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) details::details-content {
+    interpolate-size: allow-keywords;
+    block-size: 0;
+    opacity: 0;
+    overflow: clip;
+    transition: block-size 420ms var(--composer-motion-ease), opacity 300ms ease,
+      content-visibility 420ms allow-discrete;
+  }
+  :is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) details[open]::details-content { block-size: auto; opacity: 1; }
+}
+@keyframes ambient-control-arrive {
+  from { opacity: 0; translate: 0 7px; filter: blur(3px); }
+  to { opacity: 1; translate: 0 0; filter: blur(0); }
+}
+@keyframes ambient-input-arrive {
+  from { opacity: 0; translate: 0 10px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@keyframes ambient-panel-arrive {
+  from { opacity: 0; transform: translateY(-8px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]),
+  :is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) *,
+  :is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) details::details-content {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .composer-panel-transition[data-open="false"] {
+  pointer-events: none;
+  animation: ambient-panel-depart 420ms var(--composer-motion-ease) forwards;
+}
+@keyframes ambient-panel-depart {
+  to { opacity: 0; transform: translateY(-8px) scale(.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .composer-panel-transition[data-open="false"] { animation: none; }
+}
+
+:is([data-composer-style="ambient-canvas"], [data-composer-style="hairline"]) .session-context-reference {
+  border-radius: var(--composer-control-radius);
+  border-color: var(--composer-control-border);
+  background: transparent;
+  color: var(--composer-control-ink);
+}
+
+/* Hairline keeps Ambient's layout and motion, with only one illuminated rule. */
+.composer[data-composer-style="hairline"][data-composer-part="frame"] {
+  margin-inline: calc(20px * var(--ui-scale));
+  padding-top: calc(8px * var(--ui-scale));
+  border-top: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  --composer-input-height: calc(56px * var(--ui-scale));
+  --composer-control-radius: 4px;
+  --composer-control-size: calc(28px * var(--ui-scale));
+}
+[data-composer-style="hairline"][data-composer-part="frame"]::before {
+  content: '';
+  position: absolute;
+  inset-block-start: -1px;
+  inset-inline-start: 0;
+  width: 12%;
+  height: 1px;
+  background: var(--accent);
+  pointer-events: none;
+  animation: hairline-drift 7s ease-in-out infinite alternate;
+}
+[data-composer-style="hairline"] .ambient-composer-canvas { padding: 4px 0 0; }
+[data-composer-style="hairline"] :is([data-composer-part="header"], [data-composer-part="controls"], .session-composer-footer, .session-usage-wrapper) { width: 100%; }
+[data-composer-style="hairline"] [data-composer-slot="toolbar"] { min-height: calc(36px * var(--ui-scale)); padding-block: 2px 6px; }
+[data-composer-style="hairline"] :is(.composer-chip, .session-mode-toggle button) { padding-inline: 6px; background: transparent; box-shadow: none; }
+[data-composer-style="hairline"] :is(.composer-chip, .session-mode-toggle button):hover:not(:disabled) { background: transparent; box-shadow: none; color: var(--text); }
+[data-composer-style="hairline"] :is(.composer-chip.active, .session-mode-toggle button.active) { background: transparent; box-shadow: inset 0 -1px color-mix(in srgb, var(--accent) 45%, transparent); }
+[data-composer-style="hairline"] [data-composer-part="analysis"] { top: auto; bottom: calc(100% + 12px); inset-inline: 0; }
+[data-composer-style="hairline"] .composer-send { border-radius: 50%; }
+.preview-hairline { border-top: 1px solid var(--accent); border-radius: 0; }
+.preview-hairline .composer-preview-input { background: transparent; border: 0; font-size: var(--text-sm); }
+@keyframes hairline-drift { to { inset-inline-start: 85%; opacity: .3; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-composer-style="hairline"][data-composer-part="frame"]::before { animation: none; }
+}

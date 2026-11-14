@@ -313,6 +313,9 @@ test('run setup keeps its shell fixed across workflows, tabs and viewport sizes'
     expect(await dialog.boundingBox()).toEqual(initial);
   }
   await dialog.getByRole('tab', { name: 'AI & permissions' }).click();
+  const advanced = dialog.getByTestId('workflow-advanced-policies');
+  await expect(dialog.getByTestId('wf-runstart-mode')).toBeHidden();
+  await advanced.locator(':scope > summary').click();
   await expect(dialog.getByTestId('wf-runstart-mode')).toBeVisible();
   expect(await dialog.boundingBox()).toEqual(initial);
   await dialog.getByRole('tab', { name: 'AI & permissions' }).press('ArrowLeft');

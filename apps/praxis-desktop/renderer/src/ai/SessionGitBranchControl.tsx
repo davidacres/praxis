@@ -1,3 +1,4 @@
+import { ComposerSurface } from './ComposerSurface';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { AgentSessionRecord } from '@praxis/core';
@@ -231,7 +232,7 @@ export function SessionGitBranchControl({
       </button>
 
       {menuPosition && isGitRepo && createPortal(
-        <div
+        <ComposerSurface part="menu"
           ref={menuRef}
           className="composer-provider-menu session-git-branch-menu"
           role="dialog"
@@ -362,7 +363,7 @@ export function SessionGitBranchControl({
               })
             )}
           </div>
-        </div>,
+        </ComposerSurface>,
         document.body
       )}
     </>

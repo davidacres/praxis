@@ -136,7 +136,7 @@ export function collectMessageRuns(
     if (text) {
       // A message the agent followed with tool calls is an aside however it
       // is worded; otherwise only the plainly self-addressed opener counts.
-      const aside = hooks.isIntermediate?.(event) ? canFoldIntoThought(text) : isNarration(text);
+      const aside = !event.messageSegments?.length && (hooks.isIntermediate?.(event) ? canFoldIntoThought(text) : isNarration(text));
       if (aside) current.narration.push(text);
       else current.parts.push(text);
     }

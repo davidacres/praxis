@@ -328,6 +328,7 @@ export interface MarketplaceSettings {
 }
 
 export interface AppearanceSettings {
+  composerStyle: 'classic' | 'ambient-canvas' | 'hairline';
   /** UI density preference; compact is the default, large improves readability and touch targets. */
   displayMode: 'compact' | 'large';
   /**
@@ -685,6 +686,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     enableDeployments: false
   },
   appearance: {
+    composerStyle: 'classic',
     displayMode: 'compact',
     showBrandArtwork: true,
     themeId: 'praxis-light',
@@ -761,6 +763,7 @@ export interface AppSettingsPatch {
     zoomFactor?: number;
     showBrandArtwork?: boolean;
     priorityColors?: Record<string, string>;
+    composerStyle?: 'classic' | 'ambient-canvas' | 'hairline';
     themeId?: string;
     themeMode?: 'light' | 'dark' | 'system';
     accentColor?: string;
@@ -1405,6 +1408,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
           DEFAULT_APP_SETTINGS.appearance.showBrandArtwork
         ),
         priorityColors: readPriorityColors(raw.appearance.priorityColors)
+        ,composerStyle: raw.appearance.composerStyle === 'hairline' ? 'hairline' : raw.appearance.composerStyle === 'ambient-canvas' ? 'ambient-canvas' : 'classic'
         ,themeId: readString(raw.appearance.themeId, DEFAULT_APP_SETTINGS.appearance.themeId)
         ,themeMode: readThemeMode(raw.appearance.themeMode, DEFAULT_APP_SETTINGS.appearance.themeMode)
         ,accentColor: readAccentColor(raw.appearance.accentColor)
@@ -1422,6 +1426,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         displayMode: DEFAULT_APP_SETTINGS.appearance.displayMode,
         showBrandArtwork: DEFAULT_APP_SETTINGS.appearance.showBrandArtwork,
         priorityColors: { ...DEFAULT_APP_SETTINGS.appearance.priorityColors }
+        ,composerStyle: DEFAULT_APP_SETTINGS.appearance.composerStyle
         ,themeId: DEFAULT_APP_SETTINGS.appearance.themeId
         ,themeMode: DEFAULT_APP_SETTINGS.appearance.themeMode
         ,accentColor: DEFAULT_APP_SETTINGS.appearance.accentColor
@@ -1679,6 +1684,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
   const appearance: AppearanceSettings = {
     displayMode: patch.appearance?.displayMode ?? base.appearance.displayMode,
     showBrandArtwork: patch.appearance?.showBrandArtwork ?? base.appearance.showBrandArtwork,
+    composerStyle: patch.appearance?.composerStyle ?? base.appearance.composerStyle,
     themeId: patch.appearance?.themeId ?? base.appearance.themeId,
     themeMode: patch.appearance?.themeMode ?? base.appearance.themeMode,
     accentColor: readAccentColor(patch.appearance?.accentColor ?? base.appearance.accentColor),

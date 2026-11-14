@@ -31,6 +31,7 @@ interface ScheduledRunsPageProps {
   sidebarHost: HTMLElement | null;
   onBack: () => void;
   initialTicketKeys?: string[];
+  initialRunId?: string;
   onOpenWorkflowRun?: (workflowRunId: string) => void;
   /** Opens one stage's agent session (from the run report). */
   onOpenSession?: (sessionKey: string) => void;
@@ -45,7 +46,7 @@ const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
   { key: 'archived', title: 'Archived' }
 ];
 
-export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [], onOpenWorkflowRun, onOpenSession }: ScheduledRunsPageProps) {
+export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [], initialRunId, onOpenWorkflowRun, onOpenSession }: ScheduledRunsPageProps) {
   const { confirm, confirmChoice } = useDialogs();
   const ticketPanel = useResizable({
     storageKey: 'tm-pane-schedule-tickets',
@@ -64,7 +65,8 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
     } else setTicketsCollapsed(value => !value);
   };
   const [composerVersion, setComposerVersion] = useState(0);
-  const [selectedRunId, setSelectedRunId] = useState<string>();
+  const [selectedRunId, setSelectedRunId] = useState<string | undefined>(initialRunId);
+  useEffect(() => { setSelectedRunId(initialRunId); }, [initialRunId]);
   const [detailRunId, setDetailRunId] = useState<string>();
   /** A running schedule whose report the user opened ("Report so far"); the monitor is the default. */
   const [reportFor, setReportFor] = useState<string>();
@@ -88,13 +90,13 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
     try {
       const all = await window.praxis.scheduledRuns.list();
       if (request !== loadRequest.current) return;
-      setViews(all.filter(view => view.run.projectId === project.id));
+      setViews(all.filter(view => view.run.projectId === project.id || (view.run.id === initialRunId && !view.run.projectId)));
       setError('');
     } catch (reason) {
       if (request !== loadRequest.current) return;
       setError(reason instanceof Error ? reason.message : String(reason));
     }
-  }, [project.id]);
+  }, [project.id, initialRunId]);
 
   useEffect(() => {
     void load();

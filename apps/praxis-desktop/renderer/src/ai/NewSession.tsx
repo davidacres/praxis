@@ -1,3 +1,4 @@
+import { ComposerSurface } from './ComposerSurface';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type {
@@ -675,7 +676,7 @@ export function NewSession({
             <Icon name="chevron-down" size={14} />
           </button>{' '}
           {boardMenuPos && createPortal(
-            <div
+            <ComposerSurface part="menu"
               ref={boardMenuRef}
               className="composer-provider-menu heading-selector-menu"
               role="listbox"
@@ -720,7 +721,7 @@ export function NewSession({
                   </span>
                 </button>
               ))}
-            </div>,
+            </ComposerSurface>,
             document.body
           )}
           <button
@@ -738,7 +739,7 @@ export function NewSession({
             <Icon name="chevron-down" size={14} />
           </button>
           {ticketMenuPos && createPortal(
-            <div
+            <ComposerSurface part="menu"
               ref={ticketMenuRef}
               className="composer-provider-menu heading-selector-menu ticket-selector-menu"
               role="listbox"
@@ -782,7 +783,7 @@ export function NewSession({
                   </span>
                 </button>
               ))}
-            </div>,
+            </ComposerSurface>,
             document.body
           )}
         </h1>
@@ -831,6 +832,7 @@ export function NewSession({
           </button>
         </div>
 
+        <ComposerSurface part="scope" className="session-composer-presentation">
         <div className="session-usage-wrapper">
           <SessionUsageSummary
             sessions={sessions}
@@ -839,7 +841,7 @@ export function NewSession({
             spendLimit={liveSettings?.ai.spendLimit ?? 0}
           />
         </div>
-        <SessionComposerCard>
+        <SessionComposerCard activity={submitting ? 'thinking' : 'idle'}>
           <SessionPromptScoreBar
             promptText={goal}
             toolMode={toolMode}
@@ -959,7 +961,7 @@ export function NewSession({
             </button>
             {providerMenuPos &&
               createPortal(
-                <div
+                <ComposerSurface part="menu"
                   ref={providerMenuRef}
                   className="composer-provider-menu"
                   role="listbox"
@@ -997,7 +999,7 @@ export function NewSession({
                       </button>
                     );
                   })}
-                </div>,
+                </ComposerSurface>,
                 document.body
               )}
             {selectedProvider && hasModelCatalog(selectedProvider) && (modelsLoading || modelOptions) && (() => {
@@ -1023,7 +1025,7 @@ export function NewSession({
             {modelMenuPos &&
               modelOptions &&
               createPortal(
-                <div
+                <ComposerSurface part="menu"
                   ref={modelMenuRef}
                   className="composer-provider-menu composer-model-menu"
                   role="listbox"
@@ -1116,7 +1118,7 @@ export function NewSession({
                       </button>
                     );
                   })}
-                </div>,
+                </ComposerSurface>,
                 document.body
               )}
             {supportsReasoningEffort(selectedProvider, selectedModel) && (
@@ -1144,7 +1146,7 @@ export function NewSession({
                   {selectedWorkflow && <span className="session-runtime-chip-label">{selectedWorkflow.name}</span>}
                 </button>
                 {workflowMenuPos && createPortal(
-                  <div
+                  <ComposerSurface part="menu"
                     ref={workflowMenuRef}
                     className="composer-provider-menu session-runtime-popover"
                     role="dialog"
@@ -1194,7 +1196,7 @@ export function NewSession({
                         </span>
                       </button>
                     ))}
-                  </div>,
+                  </ComposerSurface>,
                   document.body
                 )}
               </>
@@ -1236,6 +1238,7 @@ export function NewSession({
             disabled={submitting}
           />
         </div>
+        </ComposerSurface>
 
       </div>
     </div>
