@@ -89,7 +89,11 @@ fn apply(ns_window: &NSWindow, titlebar_height: f64) {
 
     let close_frame = close.frame();
     let space_between = miniaturize.frame().origin.x - close_frame.origin.x;
-    let y = inset_y(titlebar_height, close_frame.size.height);
+    // The button frame is 14pt but the drawn circle is ~12pt, inset ~1pt inside the
+    // frame. Centring the full frame leaves the visible cluster a point high, so
+    // centre the drawn circle instead.
+    let visual_height = close_frame.size.height - 2.0;
+    let y = inset_y(titlebar_height, visual_height);
 
     // Same container adjustment tao's `inset_traffic_lights` makes, so the buttons stay
     // hittable: AppKit clips them to the title bar container's frame.
@@ -131,7 +135,7 @@ mod tests {
 
     #[test]
     fn inset_centres_the_cluster_in_the_bar() {
-        // 40pt bar, 12pt buttons → 14pt inset (the shipped default).
+        // 40pt bar, 12pt drawn circles → 14pt inset for the visible cluster.
         assert_eq!(inset_y(40.0, 12.0), 14.0);
         // Large display size grows the bar; the inset follows.
         assert!((inset_y(46.4, 12.0) - 17.2).abs() < 1e-9);
@@ -151,6 +155,8 @@ mod tests {
 
     /// The configured static inset must agree with the centring math for the default
     /// appearance, so the first paint (before any measurement) is already centred.
+    /// The static inset positions the button *frame* (14pt), so it centres the frame:
+    /// (40 − 14) / 2 = 13. The runtime centring uses the ~12pt drawn circle instead.
     #[test]
     fn configured_inset_matches_the_default_centring() {
         let config: serde_json::Value =
@@ -158,6 +164,6 @@ mod tests {
         let y = config["app"]["windows"][0]["trafficLightPosition"]["y"]
             .as_f64()
             .expect("trafficLightPosition.y");
-        assert_eq!(y, inset_y(fallback_titlebar_height("compact", 1.0), 12.0));
+        assert_eq!(y, inset_y(fallback_titlebar_height("compact", 1.0), 14.0));
     }
 }

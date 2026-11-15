@@ -14,7 +14,7 @@
       "title": "Praxis",
       "titleBarStyle": "Overlay",
       "hiddenTitle": true,
-      "trafficLightPosition": { "x": 12, "y": 14 },
+      "trafficLightPosition": { "x": 12, "y": 13 },
       "width": 1440,
       "height": 960,
       "minWidth": 900,
