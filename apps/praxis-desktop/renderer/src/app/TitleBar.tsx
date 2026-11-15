@@ -194,6 +194,26 @@ export function TitleBar({
     return window.praxis.window.onZoomChange(setZoomFactor);
   }, []);
 
+  // macOS draws the native traffic lights over the page at a fixed inset; the shell
+  // keeps them centred on this bar, so report its measured height whenever display
+  // size, zoom or theme changes it. A no-op on other platforms.
+  useEffect(() => {
+    const element = headerRef.current;
+    if (!element || !isMac) return;
+    let last = 0;
+    const report = () => {
+      const height = element.getBoundingClientRect().height;
+      if (height > 0 && Math.abs(height - last) > 0.25) {
+        last = height;
+        void window.praxis.window.setTitlebarHeight(height);
+      }
+    };
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isMac]);
+
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r') {

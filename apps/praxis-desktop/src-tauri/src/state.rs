@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use praxis_host::{HostCallClient, HostConfig, HostContext, HostServices};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 pub const SHELL_CHANNELS: &[&str] = &[
     "app:getVersion",
@@ -20,6 +20,7 @@ pub const SHELL_CHANNELS: &[&str] = &[
     "window:setSurfaceVibrancy",
     "window:getZoomFactor",
     "window:setZoomFactor",
+    "window:setTitlebarHeight",
     "window:setNotificationView",
     "dialog:pickFolder",
     "shell:openExternal",
@@ -115,12 +116,30 @@ impl DesktopState {
         crate::application::Application::register(&host, env!("CARGO_PKG_VERSION"));
         let contract: Contract = serde_json::from_str(include_str!("../desktop-contract.json"))?;
         let events = contract.events.clone();
+        #[cfg(target_os = "macos")]
+        let settings_for_traffic_lights = host.settings().clone();
         let event_subscription = host.events().on_event(move |envelope| {
             if events.contains(&envelope.channel) {
                 // Never broadcast to untrusted child browser webviews.
                 if let Err(error) = app.emit_to("main", "praxis:event", envelope) {
                     eprintln!("Praxis event delivery failed: {error}");
                 }
+            }
+            // Display size / zoom changes resize the title bar without a window
+            // resize; re-assert the traffic-light centring from the new settings.
+            // The renderer's own measurement follows via `window:setTitlebarHeight`.
+            #[cfg(target_os = "macos")]
+            if envelope.channel == "settings:changed"
+                && let Some(window) = app.get_webview_window("main")
+            {
+                let appearance = settings_for_traffic_lights.read().appearance;
+                crate::macos_traffic_lights::center_and_hold(
+                    &window,
+                    crate::macos_traffic_lights::fallback_titlebar_height(
+                        &appearance.display_mode,
+                        appearance.zoom_factor,
+                    ),
+                );
             }
         });
         Ok(Self {

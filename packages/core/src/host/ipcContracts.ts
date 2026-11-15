@@ -553,6 +553,12 @@ export interface WindowIpc {
   /** Fires when keyboard shortcuts or another window changes the UI zoom. */
   onZoomChange(listener: (factor: number) => void): () => void;
   /**
+   * Reports the title bar's measured height in CSS pixels so the shell can keep
+   * the native macOS traffic lights vertically centred on it as display size
+   * and zoom change. A no-op on other platforms.
+   */
+  setTitlebarHeight(height: number): Promise<void>;
+  /**
    * True when the OS can render a translucent ("vibrancy" / "acrylic") window
    * behind the app — macOS always, Windows 11 22H2+, never Linux. The Surface
    * settings panel shows the Window-blur toggle only when this resolves true.

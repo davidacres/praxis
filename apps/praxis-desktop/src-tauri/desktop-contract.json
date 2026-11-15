@@ -336,12 +336,20 @@
       "preloadLine": 175
     },
     {
+      "method": "window.setTitlebarHeight",
+      "channel": "window:setTitlebarHeight",
+      "arguments": [
+        "height"
+      ],
+      "preloadLine": 181
+    },
+    {
       "method": "detachedChat.open",
       "channel": "detachedChat:open",
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 183
+      "preloadLine": 184
     },
     {
       "method": "detachedChat.close",
@@ -349,19 +357,19 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 184
+      "preloadLine": 185
     },
     {
       "method": "detachedChat.list",
       "channel": "detachedChat:list",
       "arguments": [],
-      "preloadLine": 185
+      "preloadLine": 186
     },
     {
       "method": "settings.get",
       "channel": "settings:get",
       "arguments": [],
-      "preloadLine": 193
+      "preloadLine": 194
     },
     {
       "method": "settings.set",
@@ -369,13 +377,13 @@
       "arguments": [
         "patch"
       ],
-      "preloadLine": 194
+      "preloadLine": 195
     },
     {
       "method": "settings.getMobileHostInfo",
       "channel": "settings:getMobileHostInfo",
       "arguments": [],
-      "preloadLine": 195
+      "preloadLine": 196
     },
     {
       "method": "settings.publishMobileAppearance",
@@ -383,13 +391,13 @@
       "arguments": [
         "appearance"
       ],
-      "preloadLine": 196
+      "preloadLine": 197
     },
     {
       "method": "settings.createMobilePairingInvitation",
       "channel": "settings:createMobilePairingInvitation",
       "arguments": [],
-      "preloadLine": 197
+      "preloadLine": 198
     },
     {
       "method": "settings.confirmMobilePairing",
@@ -398,7 +406,7 @@
         "requestId",
         "grant"
       ],
-      "preloadLine": 198
+      "preloadLine": 199
     },
     {
       "method": "settings.denyMobilePairing",
@@ -406,7 +414,7 @@
       "arguments": [
         "requestId"
       ],
-      "preloadLine": 199
+      "preloadLine": 200
     },
     {
       "method": "settings.revokeMobilePairedDevice",
@@ -414,31 +422,31 @@
       "arguments": [
         "deviceId"
       ],
-      "preloadLine": 200
+      "preloadLine": 201
     },
     {
       "method": "settings.rotateMobileHostKey",
       "channel": "settings:rotateMobileHostKey",
       "arguments": [],
-      "preloadLine": 201
+      "preloadLine": 202
     },
     {
       "method": "settings.clearSessionData",
       "channel": "settings:clearSessionData",
       "arguments": [],
-      "preloadLine": 207
+      "preloadLine": 208
     },
     {
       "method": "settings.clearProjectWorkspaceBoardData",
       "channel": "settings:clearProjectWorkspaceBoardData",
       "arguments": [],
-      "preloadLine": 208
+      "preloadLine": 209
     },
     {
       "method": "log.getRecent",
       "channel": "log:getRecent",
       "arguments": [],
-      "preloadLine": 217
+      "preloadLine": 218
     },
     {
       "method": "dialog.pickFolder",
@@ -446,7 +454,7 @@
       "arguments": [
         "title"
       ],
-      "preloadLine": 226
+      "preloadLine": 227
     },
     {
       "method": "shell.openExternal",
@@ -454,13 +462,13 @@
       "arguments": [
         "url"
       ],
-      "preloadLine": 229
+      "preloadLine": 230
     },
     {
       "method": "browser.attach",
       "channel": "browser:attach",
       "arguments": [],
-      "preloadLine": 232
+      "preloadLine": 233
     },
     {
       "method": "browser.setBounds",
@@ -468,7 +476,7 @@
       "arguments": [
         "bounds"
       ],
-      "preloadLine": 234
+      "preloadLine": 235
     },
     {
       "method": "browser.setVisible",
@@ -476,7 +484,7 @@
       "arguments": [
         "visible"
       ],
-      "preloadLine": 235
+      "preloadLine": 236
     },
     {
       "method": "browser.navigate",
@@ -484,37 +492,37 @@
       "arguments": [
         "url"
       ],
-      "preloadLine": 236
+      "preloadLine": 237
     },
     {
       "method": "browser.back",
       "channel": "browser:back",
       "arguments": [],
-      "preloadLine": 237
+      "preloadLine": 238
     },
     {
       "method": "browser.forward",
       "channel": "browser:forward",
       "arguments": [],
-      "preloadLine": 238
+      "preloadLine": 239
     },
     {
       "method": "browser.reload",
       "channel": "browser:reload",
       "arguments": [],
-      "preloadLine": 239
+      "preloadLine": 240
     },
     {
       "method": "browser.getState",
       "channel": "browser:getState",
       "arguments": [],
-      "preloadLine": 240
+      "preloadLine": 241
     },
     {
       "method": "browser.personInput",
       "channel": "browser:personInput",
       "arguments": [],
-      "preloadLine": 241
+      "preloadLine": 242
     },
     {
       "method": "boardPrefs.get",
@@ -522,7 +530,7 @@
       "arguments": [
         "boardId"
       ],
-      "preloadLine": 249
+      "preloadLine": 250
     },
     {
       "method": "boardPrefs.set",
@@ -531,13 +539,13 @@
         "boardId",
         "prefs"
       ],
-      "preloadLine": 251
+      "preloadLine": 252
     },
     {
       "method": "ai.getStatus",
       "channel": "ai:getStatus",
       "arguments": [],
-      "preloadLine": 254
+      "preloadLine": 255
     },
     {
       "method": "ai.setApiKey",
@@ -545,13 +553,13 @@
       "arguments": [
         "value"
       ],
-      "preloadLine": 255
+      "preloadLine": 256
     },
     {
       "method": "ai.listProviderStatuses",
       "channel": "ai:listProviderStatuses",
       "arguments": [],
-      "preloadLine": 256
+      "preloadLine": 257
     },
     {
       "method": "ai.probeProviderCapability",
@@ -559,7 +567,7 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 257
+      "preloadLine": 258
     },
     {
       "method": "ai.testMcpServer",
@@ -567,7 +575,7 @@
       "arguments": [
         "config"
       ],
-      "preloadLine": 258
+      "preloadLine": 259
     },
     {
       "method": "ai.codeIntelligence",
@@ -575,31 +583,31 @@
       "arguments": [
         "request"
       ],
-      "preloadLine": 259
+      "preloadLine": 260
     },
     {
       "method": "ai.getSemanticModelStatus",
       "channel": "ai:getSemanticModelStatus",
       "arguments": [],
-      "preloadLine": 260
+      "preloadLine": 261
     },
     {
       "method": "ai.downloadSemanticModel",
       "channel": "ai:downloadSemanticModel",
       "arguments": [],
-      "preloadLine": 261
+      "preloadLine": 262
     },
     {
       "method": "ai.deleteSemanticModel",
       "channel": "ai:deleteSemanticModel",
       "arguments": [],
-      "preloadLine": 262
+      "preloadLine": 263
     },
     {
       "method": "ai.resetCodeIntelligence",
       "channel": "ai:resetCodeIntelligence",
       "arguments": [],
-      "preloadLine": 263
+      "preloadLine": 264
     },
     {
       "method": "ai.installCliProvider",
@@ -607,7 +615,7 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 269
+      "preloadLine": 270
     },
     {
       "method": "ai.getLatestCliProviderVersion",
@@ -615,7 +623,7 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 270
+      "preloadLine": 271
     },
     {
       "method": "ai.listCliModelOptions",
@@ -623,7 +631,7 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 271
+      "preloadLine": 272
     },
     {
       "method": "ai.listApiModelOptions",
@@ -632,7 +640,7 @@
         "provider",
         "forceRefresh"
       ],
-      "preloadLine": 273
+      "preloadLine": 274
     },
     {
       "method": "ai.setProviderApiKey",
@@ -641,7 +649,7 @@
         "provider",
         "value"
       ],
-      "preloadLine": 275
+      "preloadLine": 276
     },
     {
       "method": "ai.testProviderApiKey",
@@ -649,25 +657,25 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 277
+      "preloadLine": 278
     },
     {
       "method": "ai.resetProviderApiKeys",
       "channel": "ai:resetProviderApiKeys",
       "arguments": [],
-      "preloadLine": 278
+      "preloadLine": 279
     },
     {
       "method": "ai.listProviderPresets",
       "channel": "ai:listProviderPresets",
       "arguments": [],
-      "preloadLine": 279
+      "preloadLine": 280
     },
     {
       "method": "ai.detectLocalRuntimes",
       "channel": "ai:detectLocalRuntimes",
       "arguments": [],
-      "preloadLine": 280
+      "preloadLine": 281
     },
     {
       "method": "ai.testCustomProvider",
@@ -676,7 +684,7 @@
         "draft",
         "options"
       ],
-      "preloadLine": 282
+      "preloadLine": 283
     },
     {
       "method": "ai.saveCustomProvider",
@@ -684,7 +692,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 283
+      "preloadLine": 284
     },
     {
       "method": "ai.removeCustomProvider",
@@ -692,13 +700,13 @@
       "arguments": [
         "id"
       ],
-      "preloadLine": 284
+      "preloadLine": 285
     },
     {
       "method": "ai.listSessions",
       "channel": "ai:listSessions",
       "arguments": [],
-      "preloadLine": 285
+      "preloadLine": 286
     },
     {
       "method": "ai.getSession",
@@ -706,13 +714,13 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 286
+      "preloadLine": 287
     },
     {
       "method": "ai.listInterruptedSessions",
       "channel": "ai:listInterruptedSessions",
       "arguments": [],
-      "preloadLine": 287
+      "preloadLine": 288
     },
     {
       "method": "ai.resumeInterruptedSession",
@@ -720,7 +728,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 288
+      "preloadLine": 289
     },
     {
       "method": "ai.dismissInterruptedSessions",
@@ -728,7 +736,7 @@
       "arguments": [
         "issueKeys"
       ],
-      "preloadLine": 289
+      "preloadLine": 290
     },
     {
       "method": "ai.loadImagePreview",
@@ -737,7 +745,7 @@
         "issueKey",
         "filePath"
       ],
-      "preloadLine": 291
+      "preloadLine": 292
     },
     {
       "method": "ai.openHtmlArtifactPreview",
@@ -747,7 +755,7 @@
         "filePath",
         "title"
       ],
-      "preloadLine": 293
+      "preloadLine": 294
     },
     {
       "method": "ai.artifactPageThumbnail",
@@ -756,7 +764,7 @@
         "issueKey",
         "filePath"
       ],
-      "preloadLine": 295
+      "preloadLine": 296
     },
     {
       "method": "ai.readArtifactText",
@@ -765,7 +773,7 @@
         "issueKey",
         "filePath"
       ],
-      "preloadLine": 297
+      "preloadLine": 298
     },
     {
       "method": "ai.saveArtifactToWorkspace",
@@ -776,7 +784,7 @@
         "content",
         "details"
       ],
-      "preloadLine": 299
+      "preloadLine": 300
     },
     {
       "method": "ai.renameSession",
@@ -785,7 +793,7 @@
         "issueKey",
         "title"
       ],
-      "preloadLine": 301
+      "preloadLine": 302
     },
     {
       "method": "ai.assignSessionToProject",
@@ -796,7 +804,7 @@
         "ticketKey",
         "workingDirectory"
       ],
-      "preloadLine": 303
+      "preloadLine": 304
     },
     {
       "method": "ai.deleteSession",
@@ -804,7 +812,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 304
+      "preloadLine": 305
     },
     {
       "method": "ai.archiveSession",
@@ -813,7 +821,7 @@
         "issueKey",
         "archived"
       ],
-      "preloadLine": 306
+      "preloadLine": 307
     },
     {
       "method": "ai.delegate",
@@ -821,7 +829,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 307
+      "preloadLine": 308
     },
     {
       "method": "ai.abort",
@@ -829,7 +837,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 308
+      "preloadLine": 309
     },
     {
       "method": "ai.continueSession",
@@ -840,7 +848,7 @@
         "images",
         "options"
       ],
-      "preloadLine": 310
+      "preloadLine": 311
     },
     {
       "method": "ai.updateSessionModel",
@@ -849,7 +857,7 @@
         "issueKey",
         "model"
       ],
-      "preloadLine": 312
+      "preloadLine": 313
     },
     {
       "method": "ai.updateSessionReasoningEffort",
@@ -858,7 +866,7 @@
         "issueKey",
         "reasoningEffort"
       ],
-      "preloadLine": 314
+      "preloadLine": 315
     },
     {
       "method": "ai.updateSessionPermissionMode",
@@ -867,7 +875,7 @@
         "issueKey",
         "permissionMode"
       ],
-      "preloadLine": 316
+      "preloadLine": 317
     },
     {
       "method": "ai.updateSessionToolAccess",
@@ -876,7 +884,7 @@
         "issueKey",
         "options"
       ],
-      "preloadLine": 320
+      "preloadLine": 321
     },
     {
       "method": "ai.handoverSession",
@@ -885,7 +893,7 @@
         "issueKey",
         "input"
       ],
-      "preloadLine": 322
+      "preloadLine": 323
     },
     {
       "method": "ai.startConversation",
@@ -894,7 +902,7 @@
         "issueKey",
         "input"
       ],
-      "preloadLine": 324
+      "preloadLine": 325
     },
     {
       "method": "ai.sendConversationMessage",
@@ -903,7 +911,7 @@
         "issueKey",
         "input"
       ],
-      "preloadLine": 326
+      "preloadLine": 327
     },
     {
       "method": "ai.stopConversation",
@@ -911,7 +919,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 327
+      "preloadLine": 328
     },
     {
       "method": "ai.setConversationToolOwner",
@@ -920,7 +928,7 @@
         "issueKey",
         "participantId"
       ],
-      "preloadLine": 329
+      "preloadLine": 330
     },
     {
       "method": "ai.editHandoverBrief",
@@ -930,7 +938,7 @@
         "expectedRevision",
         "edits"
       ],
-      "preloadLine": 331
+      "preloadLine": 332
     },
     {
       "method": "ai.removeWorktree",
@@ -938,7 +946,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 332
+      "preloadLine": 333
     },
     {
       "method": "ai.setWorktree",
@@ -947,7 +955,7 @@
         "issueKey",
         "options"
       ],
-      "preloadLine": 334
+      "preloadLine": 335
     },
     {
       "method": "ai.switchSessionMode",
@@ -956,7 +964,7 @@
         "issueKey",
         "mode"
       ],
-      "preloadLine": 336
+      "preloadLine": 337
     },
     {
       "method": "ai.setAcpMode",
@@ -965,7 +973,7 @@
         "issueKey",
         "modeId"
       ],
-      "preloadLine": 337
+      "preloadLine": 338
     },
     {
       "method": "ai.respondToPermission",
@@ -974,7 +982,7 @@
         "issueKey",
         "decision"
       ],
-      "preloadLine": 339
+      "preloadLine": 340
     },
     {
       "method": "ai.undoToolFileChange",
@@ -984,13 +992,13 @@
         "eventTimestamp",
         "path"
       ],
-      "preloadLine": 341
+      "preloadLine": 342
     },
     {
       "method": "ai.listWorkflowPacks",
       "channel": "ai:listWorkflowPacks",
       "arguments": [],
-      "preloadLine": 354
+      "preloadLine": 355
     },
     {
       "method": "ai.getWorkflowAssignment",
@@ -998,7 +1006,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 356
+      "preloadLine": 357
     },
     {
       "method": "ai.setWorkflowAssignment",
@@ -1007,7 +1015,7 @@
         "issueKey",
         "workflow"
       ],
-      "preloadLine": 358
+      "preloadLine": 359
     },
     {
       "method": "ai.startTicketReview",
@@ -1015,7 +1023,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 359
+      "preloadLine": 360
     },
     {
       "method": "ai.getTicketReview",
@@ -1023,7 +1031,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 360
+      "preloadLine": 361
     },
     {
       "method": "ai.localPeerReview",
@@ -1034,7 +1042,7 @@
         "provider",
         "model"
       ],
-      "preloadLine": 362
+      "preloadLine": 363
     },
     {
       "method": "ai.localPeerReviewFollowUp",
@@ -1046,7 +1054,7 @@
         "provider",
         "model"
       ],
-      "preloadLine": 364
+      "preloadLine": 365
     },
     {
       "method": "ai.getAnalysis",
@@ -1054,7 +1062,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 365
+      "preloadLine": 366
     },
     {
       "method": "ai.submitAnalysis",
@@ -1066,7 +1074,7 @@
         "provider",
         "model"
       ],
-      "preloadLine": 372
+      "preloadLine": 373
     },
     {
       "method": "ai.cancelAnalysis",
@@ -1074,7 +1082,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 373
+      "preloadLine": 374
     },
     {
       "method": "ai.setAnalysisConfirmed",
@@ -1083,7 +1091,7 @@
         "issueKey",
         "confirmed"
       ],
-      "preloadLine": 375
+      "preloadLine": 376
     },
     {
       "method": "ai.clearAnalysis",
@@ -1091,7 +1099,7 @@
       "arguments": [
         "issueKey"
       ],
-      "preloadLine": 376
+      "preloadLine": 377
     },
     {
       "method": "ai.startDelivery",
@@ -1100,7 +1108,7 @@
         "issueKey",
         "connectionId"
       ],
-      "preloadLine": 384
+      "preloadLine": 385
     },
     {
       "method": "ai.decomposeFeature",
@@ -1109,7 +1117,7 @@
         "issueKey",
         "connectionId"
       ],
-      "preloadLine": 386
+      "preloadLine": 387
     },
     {
       "method": "ai.startSubTaskDelivery",
@@ -1119,7 +1127,7 @@
         "subTaskKey",
         "connectionId"
       ],
-      "preloadLine": 388
+      "preloadLine": 389
     },
     {
       "method": "ai.listMergeRequests",
@@ -1128,7 +1136,7 @@
         "issueKey",
         "connectionId"
       ],
-      "preloadLine": 390
+      "preloadLine": 391
     },
     {
       "method": "ai.createMergeRequest",
@@ -1137,7 +1145,7 @@
         "issueKey",
         "connectionId"
       ],
-      "preloadLine": 392
+      "preloadLine": 393
     },
     {
       "method": "ai.checkMergeRequestFeedback",
@@ -1146,7 +1154,7 @@
         "issueKey",
         "connectionId"
       ],
-      "preloadLine": 394
+      "preloadLine": 395
     },
     {
       "method": "ai.evaluatePrompt",
@@ -1154,7 +1162,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 395
+      "preloadLine": 396
     },
     {
       "method": "ai.getFindingFeedback",
@@ -1162,7 +1170,7 @@
       "arguments": [
         "digest"
       ],
-      "preloadLine": 396
+      "preloadLine": 397
     },
     {
       "method": "ai.reviewFinding",
@@ -1170,7 +1178,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 397
+      "preloadLine": 398
     },
     {
       "method": "ai.evaluateSession",
@@ -1179,7 +1187,7 @@
         "input",
         "turnIndex"
       ],
-      "preloadLine": 398
+      "preloadLine": 399
     },
     {
       "method": "ai.getSessionFeedback",
@@ -1188,7 +1196,7 @@
         "issueKey",
         "turnIndex"
       ],
-      "preloadLine": 400
+      "preloadLine": 401
     },
     {
       "method": "ai.submitSessionFeedback",
@@ -1196,7 +1204,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 401
+      "preloadLine": 402
     },
     {
       "method": "ai.rewritePromptFromFeedback",
@@ -1204,7 +1212,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 402
+      "preloadLine": 403
     },
     {
       "method": "aiUsage.series",
@@ -1215,7 +1223,7 @@
         "provider",
         "model"
       ],
-      "preloadLine": 406
+      "preloadLine": 407
     },
     {
       "method": "aiUsage.compareLatestPeriod",
@@ -1223,19 +1231,19 @@
       "arguments": [
         "granularity"
       ],
-      "preloadLine": 408
+      "preloadLine": 409
     },
     {
       "method": "aiUsage.dashboardSummary",
       "channel": "aiUsage:dashboardSummary",
       "arguments": [],
-      "preloadLine": 409
+      "preloadLine": 410
     },
     {
       "method": "aiUsage.listEvents",
       "channel": "aiUsage:listEvents",
       "arguments": [],
-      "preloadLine": 410
+      "preloadLine": 411
     },
     {
       "method": "aiUsage.providerSnapshot",
@@ -1243,7 +1251,7 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 411
+      "preloadLine": 412
     },
     {
       "method": "aiUsage.providerHistory",
@@ -1251,7 +1259,7 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 412
+      "preloadLine": 413
     },
     {
       "method": "aiUsage.providerSnapshots",
@@ -1259,7 +1267,7 @@
       "arguments": [
         "providers"
       ],
-      "preloadLine": 413
+      "preloadLine": 414
     },
     {
       "method": "aiUsage.setProviderUsageKey",
@@ -1268,7 +1276,7 @@
         "provider",
         "value"
       ],
-      "preloadLine": 414
+      "preloadLine": 415
     },
     {
       "method": "aiUsage.alibabaConsoleStatus",
@@ -1276,7 +1284,7 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 415
+      "preloadLine": 416
     },
     {
       "method": "aiUsage.alibabaConsoleSignIn",
@@ -1284,19 +1292,19 @@
       "arguments": [
         "provider"
       ],
-      "preloadLine": 416
+      "preloadLine": 417
     },
     {
       "method": "aiUsage.alibabaConsoleSignOut",
       "channel": "aiUsage:alibabaConsoleSignOut",
       "arguments": [],
-      "preloadLine": 417
+      "preloadLine": 418
     },
     {
       "method": "coordination.state",
       "channel": "coordination:state",
       "arguments": [],
-      "preloadLine": 420
+      "preloadLine": 421
     },
     {
       "method": "coordination.recover",
@@ -1305,7 +1313,7 @@
         "claimId",
         "note"
       ],
-      "preloadLine": 421
+      "preloadLine": 422
     },
     {
       "method": "coordination.stopService",
@@ -1313,7 +1321,7 @@
       "arguments": [
         "pgid"
       ],
-      "preloadLine": 422
+      "preloadLine": 423
     },
     {
       "method": "taskDesigner.getState",
@@ -1322,7 +1330,7 @@
         "boardId",
         "connectionId"
       ],
-      "preloadLine": 431
+      "preloadLine": 432
     },
     {
       "method": "taskDesigner.setState",
@@ -1332,7 +1340,7 @@
         "connectionId",
         "state"
       ],
-      "preloadLine": 433
+      "preloadLine": 434
     },
     {
       "method": "taskDesigner.resolveIssue",
@@ -1341,7 +1349,7 @@
         "issueKey",
         "connectionId"
       ],
-      "preloadLine": 435
+      "preloadLine": 436
     },
     {
       "method": "taskDesigner.recommendFlow",
@@ -1350,7 +1358,7 @@
         "nodes",
         "connectors"
       ],
-      "preloadLine": 439
+      "preloadLine": 440
     },
     {
       "method": "taskDesigner.recommendBoardFlow",
@@ -1358,7 +1366,7 @@
       "arguments": [
         "board"
       ],
-      "preloadLine": 441
+      "preloadLine": 442
     },
     {
       "method": "taskDesigner.generateMasterPlan",
@@ -1368,7 +1376,7 @@
         "connectionId",
         "state"
       ],
-      "preloadLine": 446
+      "preloadLine": 447
     },
     {
       "method": "activity.list",
@@ -1376,7 +1384,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 448
+      "preloadLine": 449
     },
     {
       "method": "assistant.sessionTurn",
@@ -1384,7 +1392,7 @@
       "arguments": [
         "request"
       ],
-      "preloadLine": 450
+      "preloadLine": 451
     },
     {
       "method": "assistant.control",
@@ -1392,7 +1400,7 @@
       "arguments": [
         "command"
       ],
-      "preloadLine": 451
+      "preloadLine": 452
     },
     {
       "method": "assistant.cancelTurn",
@@ -1400,7 +1408,7 @@
       "arguments": [
         "command"
       ],
-      "preloadLine": 452
+      "preloadLine": 453
     },
     {
       "method": "assistant.retryParticipant",
@@ -1408,7 +1416,7 @@
       "arguments": [
         "command"
       ],
-      "preloadLine": 453
+      "preloadLine": 454
     },
     {
       "method": "assistant.resolveAttempt",
@@ -1416,7 +1424,7 @@
       "arguments": [
         "command"
       ],
-      "preloadLine": 454
+      "preloadLine": 455
     },
     {
       "method": "assistant.stageAttachments",
@@ -1425,7 +1433,7 @@
         "id",
         "images"
       ],
-      "preloadLine": 455
+      "preloadLine": 456
     },
     {
       "method": "assistant.turn",
@@ -1433,7 +1441,7 @@
       "arguments": [
         "request"
       ],
-      "preloadLine": 456
+      "preloadLine": 457
     },
     {
       "method": "assistant.teamReview",
@@ -1441,7 +1449,7 @@
       "arguments": [
         "request"
       ],
-      "preloadLine": 457
+      "preloadLine": 458
     },
     {
       "method": "assistant.listChats",
@@ -1449,7 +1457,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 458
+      "preloadLine": 459
     },
     {
       "method": "assistant.getChat",
@@ -1457,7 +1465,7 @@
       "arguments": [
         "chatId"
       ],
-      "preloadLine": 459
+      "preloadLine": 460
     },
     {
       "method": "assistant.createChat",
@@ -1466,7 +1474,7 @@
         "projectId",
         "issueKey"
       ],
-      "preloadLine": 460
+      "preloadLine": 461
     },
     {
       "method": "assistant.saveChat",
@@ -1475,7 +1483,7 @@
         "chatId",
         "messages"
       ],
-      "preloadLine": 461
+      "preloadLine": 462
     },
     {
       "method": "assistant.renameChat",
@@ -1484,7 +1492,7 @@
         "chatId",
         "title"
       ],
-      "preloadLine": 462
+      "preloadLine": 463
     },
     {
       "method": "assistant.archiveChat",
@@ -1493,7 +1501,7 @@
         "chatId",
         "archived"
       ],
-      "preloadLine": 463
+      "preloadLine": 464
     },
     {
       "method": "assistant.deleteChat",
@@ -1501,7 +1509,7 @@
       "arguments": [
         "chatId"
       ],
-      "preloadLine": 464
+      "preloadLine": 465
     },
     {
       "method": "assistant.submitTurn",
@@ -1509,7 +1517,7 @@
       "arguments": [
         "command"
       ],
-      "preloadLine": 465
+      "preloadLine": 466
     },
     {
       "method": "assistant.getConversation",
@@ -1517,7 +1525,7 @@
       "arguments": [
         "conversationId"
       ],
-      "preloadLine": 466
+      "preloadLine": 467
     },
     {
       "method": "workflows.projectTrust",
@@ -1526,7 +1534,7 @@
         "projectId",
         "workflowId"
       ],
-      "preloadLine": 483
+      "preloadLine": 484
     },
     {
       "method": "workflows.approveProjectTrust",
@@ -1536,7 +1544,7 @@
         "workflowId",
         "fingerprint"
       ],
-      "preloadLine": 484
+      "preloadLine": 485
     },
     {
       "method": "workflows.listTemplates",
@@ -1544,7 +1552,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 485
+      "preloadLine": 486
     },
     {
       "method": "workflows.getRecommendedTemplate",
@@ -1552,7 +1560,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 486
+      "preloadLine": 487
     },
     {
       "method": "workflows.recommendTemplate",
@@ -1560,7 +1568,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 487
+      "preloadLine": 488
     },
     {
       "method": "workflows.recommendModelTiers",
@@ -1569,7 +1577,7 @@
         "projectId",
         "definition"
       ],
-      "preloadLine": 489
+      "preloadLine": 490
     },
     {
       "method": "workflows.templateReadiness",
@@ -1577,7 +1585,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 490
+      "preloadLine": 491
     },
     {
       "method": "workflows.catalog",
@@ -1585,7 +1593,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 491
+      "preloadLine": 492
     },
     {
       "method": "workflows.get",
@@ -1594,7 +1602,7 @@
         "projectId",
         "workflowId"
       ],
-      "preloadLine": 492
+      "preloadLine": 493
     },
     {
       "method": "workflows.instantiate",
@@ -1604,7 +1612,7 @@
         "templateId",
         "name"
       ],
-      "preloadLine": 494
+      "preloadLine": 495
     },
     {
       "method": "workflows.promotePack",
@@ -1614,7 +1622,7 @@
         "packId",
         "binding"
       ],
-      "preloadLine": 496
+      "preloadLine": 497
     },
     {
       "method": "workflows.save",
@@ -1623,7 +1631,7 @@
         "projectId",
         "definition"
       ],
-      "preloadLine": 498
+      "preloadLine": 499
     },
     {
       "method": "workflows.remove",
@@ -1632,7 +1640,7 @@
         "projectId",
         "workflowId"
       ],
-      "preloadLine": 499
+      "preloadLine": 500
     },
     {
       "method": "workflows.validate",
@@ -1641,7 +1649,7 @@
         "projectId",
         "definition"
       ],
-      "preloadLine": 501
+      "preloadLine": 502
     },
     {
       "method": "workflows.assistant",
@@ -1652,7 +1660,7 @@
         "message",
         "history"
       ],
-      "preloadLine": 503
+      "preloadLine": 504
     },
     {
       "method": "workflows.effectivePolicy",
@@ -1660,13 +1668,13 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 504
+      "preloadLine": 505
     },
     {
       "method": "workflows.listPolicies",
       "channel": "workflows:listPolicies",
       "arguments": [],
-      "preloadLine": 505
+      "preloadLine": 506
     },
     {
       "method": "workflows.savePolicy",
@@ -1674,7 +1682,7 @@
       "arguments": [
         "profile"
       ],
-      "preloadLine": 506
+      "preloadLine": 507
     },
     {
       "method": "workflows.removePolicy",
@@ -1682,7 +1690,7 @@
       "arguments": [
         "profileId"
       ],
-      "preloadLine": 507
+      "preloadLine": 508
     },
     {
       "method": "workflows.startRun",
@@ -1696,7 +1704,7 @@
         "planInput",
         "options"
       ],
-      "preloadLine": 509
+      "preloadLine": 510
     },
     {
       "method": "workflows.prepareRun",
@@ -1706,7 +1714,7 @@
         "workflowId",
         "parameters"
       ],
-      "preloadLine": 511
+      "preloadLine": 512
     },
     {
       "method": "workflows.checkRunBase",
@@ -1714,7 +1722,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 512
+      "preloadLine": 513
     },
     {
       "method": "workflows.commitRunBase",
@@ -1723,7 +1731,7 @@
         "projectId",
         "message"
       ],
-      "preloadLine": 513
+      "preloadLine": 514
     },
     {
       "method": "workflows.selectControllerRun",
@@ -1732,7 +1740,7 @@
         "sessionKey",
         "runId"
       ],
-      "preloadLine": 515
+      "preloadLine": 516
     },
     {
       "method": "workflows.removeControllerRun",
@@ -1742,7 +1750,7 @@
         "runId",
         "reason"
       ],
-      "preloadLine": 517
+      "preloadLine": 518
     },
     {
       "method": "workflows.listRuns",
@@ -1750,7 +1758,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 518
+      "preloadLine": 519
     },
     {
       "method": "workflows.getRun",
@@ -1758,7 +1766,7 @@
       "arguments": [
         "runId"
       ],
-      "preloadLine": 519
+      "preloadLine": 520
     },
     {
       "method": "workflows.renameRun",
@@ -1767,7 +1775,7 @@
         "runId",
         "name"
       ],
-      "preloadLine": 520
+      "preloadLine": 521
     },
     {
       "method": "workflows.advanceStage",
@@ -1778,7 +1786,7 @@
         "outcome",
         "detail"
       ],
-      "preloadLine": 526
+      "preloadLine": 527
     },
     {
       "method": "workflows.approveRun",
@@ -1789,7 +1797,7 @@
         "note",
         "nodeId"
       ],
-      "preloadLine": 528
+      "preloadLine": 529
     },
     {
       "method": "workflows.bypassGate",
@@ -1801,7 +1809,7 @@
         "reason",
         "nodeId"
       ],
-      "preloadLine": 530
+      "preloadLine": 531
     },
     {
       "method": "workflows.skipApproval",
@@ -1811,7 +1819,7 @@
         "nodeId",
         "actor"
       ],
-      "preloadLine": 532
+      "preloadLine": 533
     },
     {
       "method": "workflows.decideLoop",
@@ -1824,7 +1832,7 @@
         "reason",
         "extraIterations"
       ],
-      "preloadLine": 535
+      "preloadLine": 536
     },
     {
       "method": "workflows.stageReport",
@@ -1833,7 +1841,7 @@
         "runId",
         "nodeId"
       ],
-      "preloadLine": 536
+      "preloadLine": 537
     },
     {
       "method": "workflows.saveStageReport",
@@ -1842,7 +1850,7 @@
         "runId",
         "nodeId"
       ],
-      "preloadLine": 537
+      "preloadLine": 538
     },
     {
       "method": "workflows.retryStage",
@@ -1851,7 +1859,7 @@
         "runId",
         "nodeId"
       ],
-      "preloadLine": 538
+      "preloadLine": 539
     },
     {
       "method": "workflows.switchStageProvider",
@@ -1862,7 +1870,7 @@
         "provider",
         "model"
       ],
-      "preloadLine": 540
+      "preloadLine": 541
     },
     {
       "method": "workflows.stopForProviderLimit",
@@ -1871,7 +1879,7 @@
         "runId",
         "nodeId"
       ],
-      "preloadLine": 541
+      "preloadLine": 542
     },
     {
       "method": "workflows.reworkStage",
@@ -1880,7 +1888,7 @@
         "runId",
         "nodeId"
       ],
-      "preloadLine": 542
+      "preloadLine": 543
     },
     {
       "method": "workflows.resolveMergeWithAi",
@@ -1889,7 +1897,7 @@
         "runId",
         "nodeId"
       ],
-      "preloadLine": 543
+      "preloadLine": 544
     },
     {
       "method": "workflows.cancelRun",
@@ -1898,7 +1906,7 @@
         "runId",
         "reason"
       ],
-      "preloadLine": 544
+      "preloadLine": 545
     },
     {
       "method": "workflows.inspectRunWork",
@@ -1906,7 +1914,7 @@
       "arguments": [
         "runId"
       ],
-      "preloadLine": 545
+      "preloadLine": 546
     },
     {
       "method": "workflows.deleteRun",
@@ -1915,7 +1923,7 @@
         "runId",
         "options"
       ],
-      "preloadLine": 546
+      "preloadLine": 547
     },
     {
       "method": "workflows.archiveRun",
@@ -1924,7 +1932,7 @@
         "runId",
         "archived"
       ],
-      "preloadLine": 547
+      "preloadLine": 548
     },
     {
       "method": "workflows.getEvidence",
@@ -1934,7 +1942,7 @@
         "nodeId",
         "attempt"
       ],
-      "preloadLine": 554
+      "preloadLine": 555
     },
     {
       "method": "workflows.startDiagnosis",
@@ -1944,7 +1952,7 @@
         "nodeId",
         "attempt"
       ],
-      "preloadLine": 556
+      "preloadLine": 557
     },
     {
       "method": "workflows.getRecommendation",
@@ -1954,7 +1962,7 @@
         "nodeId",
         "input"
       ],
-      "preloadLine": 561
+      "preloadLine": 562
     },
     {
       "method": "workflows.clearRecommendation",
@@ -1963,7 +1971,7 @@
         "workflowId",
         "nodeId"
       ],
-      "preloadLine": 563
+      "preloadLine": 564
     },
     {
       "method": "workflows.recommendAgent",
@@ -1973,13 +1981,13 @@
         "nodeId",
         "input"
       ],
-      "preloadLine": 568
+      "preloadLine": 569
     },
     {
       "method": "projects.list",
       "channel": "projects:list",
       "arguments": [],
-      "preloadLine": 571
+      "preloadLine": 572
     },
     {
       "method": "projects.get",
@@ -1987,7 +1995,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 572
+      "preloadLine": 573
     },
     {
       "method": "projects.create",
@@ -1996,7 +2004,7 @@
         "input",
         "workspaceId"
       ],
-      "preloadLine": 573
+      "preloadLine": 574
     },
     {
       "method": "projects.useExisting",
@@ -2005,7 +2013,7 @@
         "projectId",
         "workspaceId"
       ],
-      "preloadLine": 574
+      "preloadLine": 575
     },
     {
       "method": "projects.remove",
@@ -2013,7 +2021,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 575
+      "preloadLine": 576
     },
     {
       "method": "projects.update",
@@ -2022,7 +2030,7 @@
         "projectId",
         "patch"
       ],
-      "preloadLine": 576
+      "preloadLine": 577
     },
     {
       "method": "projects.inspectFolder",
@@ -2030,7 +2038,7 @@
       "arguments": [
         "folderPath"
       ],
-      "preloadLine": 577
+      "preloadLine": 578
     },
     {
       "method": "projects.attachFolder",
@@ -2039,7 +2047,7 @@
         "projectId",
         "input"
       ],
-      "preloadLine": 578
+      "preloadLine": 579
     },
     {
       "method": "projects.linkBoard",
@@ -2048,7 +2056,7 @@
         "projectId",
         "board"
       ],
-      "preloadLine": 579
+      "preloadLine": 580
     },
     {
       "method": "projects.unlinkBoard",
@@ -2058,7 +2066,7 @@
         "connectionId",
         "boardId"
       ],
-      "preloadLine": 580
+      "preloadLine": 581
     },
     {
       "method": "projects.listDocuments",
@@ -2066,7 +2074,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 581
+      "preloadLine": 582
     },
     {
       "method": "projects.readDocument",
@@ -2075,7 +2083,7 @@
         "projectId",
         "relativePath"
       ],
-      "preloadLine": 582
+      "preloadLine": 583
     },
     {
       "method": "projects.discoverImports",
@@ -2083,7 +2091,7 @@
       "arguments": [
         "folderPath"
       ],
-      "preloadLine": 583
+      "preloadLine": 584
     },
     {
       "method": "projects.validateImports",
@@ -2091,7 +2099,7 @@
       "arguments": [
         "rows"
       ],
-      "preloadLine": 584
+      "preloadLine": 585
     },
     {
       "method": "projects.createFromImports",
@@ -2100,7 +2108,7 @@
         "rows",
         "workspaceId"
       ],
-      "preloadLine": 585
+      "preloadLine": 586
     },
     {
       "method": "projects.getRunProfile",
@@ -2108,7 +2116,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 587
+      "preloadLine": 588
     },
     {
       "method": "projects.saveRunProfile",
@@ -2117,7 +2125,7 @@
         "projectId",
         "profile"
       ],
-      "preloadLine": 588
+      "preloadLine": 589
     },
     {
       "method": "projects.discoverRunServices",
@@ -2125,7 +2133,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 590
+      "preloadLine": 591
     },
     {
       "method": "projects.validateRunProfile",
@@ -2133,13 +2141,13 @@
       "arguments": [
         "profile"
       ],
-      "preloadLine": 592
+      "preloadLine": 593
     },
     {
       "method": "workspaces.list",
       "channel": "workspaces:list",
       "arguments": [],
-      "preloadLine": 595
+      "preloadLine": 596
     },
     {
       "method": "workspaces.get",
@@ -2147,7 +2155,7 @@
       "arguments": [
         "workspaceId"
       ],
-      "preloadLine": 596
+      "preloadLine": 597
     },
     {
       "method": "workspaces.create",
@@ -2155,7 +2163,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 597
+      "preloadLine": 598
     },
     {
       "method": "workspaces.setActive",
@@ -2163,7 +2171,7 @@
       "arguments": [
         "workspaceId"
       ],
-      "preloadLine": 598
+      "preloadLine": 599
     },
     {
       "method": "workspaces.update",
@@ -2172,7 +2180,7 @@
         "workspaceId",
         "patch"
       ],
-      "preloadLine": 599
+      "preloadLine": 600
     },
     {
       "method": "workspaces.remove",
@@ -2180,7 +2188,7 @@
       "arguments": [
         "workspaceId"
       ],
-      "preloadLine": 600
+      "preloadLine": 601
     },
     {
       "method": "workspaces.saveToFile",
@@ -2188,13 +2196,13 @@
       "arguments": [
         "workspaceId"
       ],
-      "preloadLine": 601
+      "preloadLine": 602
     },
     {
       "method": "workspaces.openFromFile",
       "channel": "workspaces:openFromFile",
       "arguments": [],
-      "preloadLine": 602
+      "preloadLine": 603
     },
     {
       "method": "workspaces.openFolder",
@@ -2202,19 +2210,19 @@
       "arguments": [
         "folderPath"
       ],
-      "preloadLine": 603
+      "preloadLine": 604
     },
     {
       "method": "terminal.listProfiles",
       "channel": "terminal:listProfiles",
       "arguments": [],
-      "preloadLine": 606
+      "preloadLine": 607
     },
     {
       "method": "terminal.list",
       "channel": "terminal:list",
       "arguments": [],
-      "preloadLine": 607
+      "preloadLine": 608
     },
     {
       "method": "terminal.create",
@@ -2222,7 +2230,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 608
+      "preloadLine": 609
     },
     {
       "method": "terminal.write",
@@ -2231,7 +2239,7 @@
         "sessionId",
         "data"
       ],
-      "preloadLine": 609
+      "preloadLine": 610
     },
     {
       "method": "terminal.resize",
@@ -2241,7 +2249,7 @@
         "cols",
         "rows"
       ],
-      "preloadLine": 610
+      "preloadLine": 611
     },
     {
       "method": "terminal.kill",
@@ -2249,7 +2257,7 @@
       "arguments": [
         "sessionId"
       ],
-      "preloadLine": 611
+      "preloadLine": 612
     },
     {
       "method": "terminal.getBuffer",
@@ -2257,7 +2265,7 @@
       "arguments": [
         "sessionId"
       ],
-      "preloadLine": 612
+      "preloadLine": 613
     },
     {
       "method": "terminal.getContext",
@@ -2265,7 +2273,7 @@
       "arguments": [
         "sessionId"
       ],
-      "preloadLine": 613
+      "preloadLine": 614
     },
     {
       "method": "terminal.listCommands",
@@ -2273,19 +2281,19 @@
       "arguments": [
         "sessionId"
       ],
-      "preloadLine": 614
+      "preloadLine": 615
     },
     {
       "method": "agentRuntime.list",
       "channel": "agentRuntime:list",
       "arguments": [],
-      "preloadLine": 637
+      "preloadLine": 638
     },
     {
       "method": "agentRuntime.refresh",
       "channel": "agentRuntime:refresh",
       "arguments": [],
-      "preloadLine": 638
+      "preloadLine": 639
     },
     {
       "method": "agentRuntime.start",
@@ -2293,7 +2301,7 @@
       "arguments": [
         "agentId"
       ],
-      "preloadLine": 639
+      "preloadLine": 640
     },
     {
       "method": "agentRuntime.stop",
@@ -2301,7 +2309,7 @@
       "arguments": [
         "agentId"
       ],
-      "preloadLine": 640
+      "preloadLine": 641
     },
     {
       "method": "agentRuntime.restart",
@@ -2309,13 +2317,13 @@
       "arguments": [
         "agentId"
       ],
-      "preloadLine": 641
+      "preloadLine": 642
     },
     {
       "method": "agentRuntime.roots",
       "channel": "agentRuntime:roots",
       "arguments": [],
-      "preloadLine": 642
+      "preloadLine": 643
     },
     {
       "method": "agentRuntime.activateSkill",
@@ -2324,7 +2332,7 @@
         "agentId",
         "skillName"
       ],
-      "preloadLine": 643
+      "preloadLine": 644
     },
     {
       "method": "agentRuntime.createAgent",
@@ -2332,7 +2340,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 644
+      "preloadLine": 645
     },
     {
       "method": "agentRuntime.createProfile",
@@ -2340,7 +2348,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 645
+      "preloadLine": 646
     },
     {
       "method": "agentRuntime.createSkill",
@@ -2348,7 +2356,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 646
+      "preloadLine": 647
     },
     {
       "method": "agentRuntime.previewImport",
@@ -2358,7 +2366,7 @@
         "sourceDir",
         "scope"
       ],
-      "preloadLine": 648
+      "preloadLine": 649
     },
     {
       "method": "agentRuntime.importItem",
@@ -2369,7 +2377,7 @@
         "scope",
         "onDuplicate"
       ],
-      "preloadLine": 650
+      "preloadLine": 651
     },
     {
       "method": "agentRuntime.approveNativeProject",
@@ -2378,7 +2386,7 @@
         "projectRoot",
         "approved"
       ],
-      "preloadLine": 652
+      "preloadLine": 653
     },
     {
       "method": "agentRuntime.revealNative",
@@ -2386,7 +2394,7 @@
       "arguments": [
         "itemPath"
       ],
-      "preloadLine": 653
+      "preloadLine": 654
     },
     {
       "method": "agentRuntime.copyNative",
@@ -2395,7 +2403,7 @@
         "kind",
         "id"
       ],
-      "preloadLine": 654
+      "preloadLine": 655
     },
     {
       "method": "gadgets.getBlocks",
@@ -2403,7 +2411,7 @@
       "arguments": [
         "sessionId"
       ],
-      "preloadLine": 657
+      "preloadLine": 658
     },
     {
       "method": "gadgets.publish",
@@ -2412,7 +2420,7 @@
         "sessionId",
         "blocks"
       ],
-      "preloadLine": 658
+      "preloadLine": 659
     },
     {
       "method": "gadgets.publishFromText",
@@ -2422,7 +2430,7 @@
         "idPrefix",
         "text"
       ],
-      "preloadLine": 660
+      "preloadLine": 661
     },
     {
       "method": "gadgets.submit",
@@ -2430,7 +2438,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 661
+      "preloadLine": 662
     },
     {
       "method": "gadgets.replay",
@@ -2438,7 +2446,7 @@
       "arguments": [
         "afterSequence"
       ],
-      "preloadLine": 662
+      "preloadLine": 663
     },
     {
       "method": "gadgets.revoke",
@@ -2447,7 +2455,7 @@
         "sessionId",
         "gadgetId"
       ],
-      "preloadLine": 663
+      "preloadLine": 664
     },
     {
       "method": "gadgets.clear",
@@ -2455,13 +2463,13 @@
       "arguments": [
         "sessionId"
       ],
-      "preloadLine": 664
+      "preloadLine": 665
     },
     {
       "method": "marketplace.getStatus",
       "channel": "marketplace:getStatus",
       "arguments": [],
-      "preloadLine": 672
+      "preloadLine": 673
     },
     {
       "method": "marketplace.configure",
@@ -2469,7 +2477,7 @@
       "arguments": [
         "patch"
       ],
-      "preloadLine": 673
+      "preloadLine": 674
     },
     {
       "method": "marketplace.setToken",
@@ -2477,25 +2485,25 @@
       "arguments": [
         "token"
       ],
-      "preloadLine": 674
+      "preloadLine": 675
     },
     {
       "method": "marketplace.listCatalog",
       "channel": "marketplace:listCatalog",
       "arguments": [],
-      "preloadLine": 675
+      "preloadLine": 676
     },
     {
       "method": "marketplace.listInstalled",
       "channel": "marketplace:listInstalled",
       "arguments": [],
-      "preloadLine": 676
+      "preloadLine": 677
     },
     {
       "method": "marketplace.listActiveAppearance",
       "channel": "marketplace:listActiveAppearance",
       "arguments": [],
-      "preloadLine": 677
+      "preloadLine": 678
     },
     {
       "method": "marketplace.install",
@@ -2504,7 +2512,7 @@
         "packageName",
         "options"
       ],
-      "preloadLine": 679
+      "preloadLine": 680
     },
     {
       "method": "marketplace.update",
@@ -2513,7 +2521,7 @@
         "kind",
         "id"
       ],
-      "preloadLine": 680
+      "preloadLine": 681
     },
     {
       "method": "marketplace.remove",
@@ -2522,13 +2530,13 @@
         "kind",
         "id"
       ],
-      "preloadLine": 681
+      "preloadLine": 682
     },
     {
       "method": "marketplace.checkForUpdates",
       "channel": "marketplace:checkForUpdates",
       "arguments": [],
-      "preloadLine": 682
+      "preloadLine": 683
     },
     {
       "method": "marketplace.setTrust",
@@ -2538,7 +2546,7 @@
         "id",
         "enabled"
       ],
-      "preloadLine": 684
+      "preloadLine": 685
     },
     {
       "method": "git.preflight",
@@ -2546,7 +2554,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 694
+      "preloadLine": 695
     },
     {
       "method": "git.initialize",
@@ -2554,7 +2562,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 695
+      "preloadLine": 696
     },
     {
       "method": "git.clone",
@@ -2564,7 +2572,7 @@
         "targetParent",
         "targetName"
       ],
-      "preloadLine": 696
+      "preloadLine": 697
     },
     {
       "method": "git.open",
@@ -2572,7 +2580,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 697
+      "preloadLine": 698
     },
     {
       "method": "git.refresh",
@@ -2580,7 +2588,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 698
+      "preloadLine": 699
     },
     {
       "method": "git.status",
@@ -2588,7 +2596,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 699
+      "preloadLine": 700
     },
     {
       "method": "git.getCommit",
@@ -2597,7 +2605,7 @@
         "repositoryPath",
         "hash"
       ],
-      "preloadLine": 700
+      "preloadLine": 701
     },
     {
       "method": "git.getDiff",
@@ -2607,7 +2615,7 @@
         "hash",
         "filePath"
       ],
-      "preloadLine": 701
+      "preloadLine": 702
     },
     {
       "method": "git.getComparison",
@@ -2616,7 +2624,7 @@
         "repositoryPath",
         "request"
       ],
-      "preloadLine": 702
+      "preloadLine": 703
     },
     {
       "method": "git.applyHunk",
@@ -2625,7 +2633,7 @@
         "repositoryPath",
         "request"
       ],
-      "preloadLine": 703
+      "preloadLine": 704
     },
     {
       "method": "git.stage",
@@ -2634,7 +2642,7 @@
         "repositoryPath",
         "paths"
       ],
-      "preloadLine": 704
+      "preloadLine": 705
     },
     {
       "method": "git.unstage",
@@ -2643,7 +2651,7 @@
         "repositoryPath",
         "paths"
       ],
-      "preloadLine": 705
+      "preloadLine": 706
     },
     {
       "method": "git.discard",
@@ -2652,7 +2660,7 @@
         "repositoryPath",
         "paths"
       ],
-      "preloadLine": 706
+      "preloadLine": 707
     },
     {
       "method": "git.commit",
@@ -2661,7 +2669,7 @@
         "repositoryPath",
         "message"
       ],
-      "preloadLine": 707
+      "preloadLine": 708
     },
     {
       "method": "git.createBranch",
@@ -2671,7 +2679,7 @@
         "name",
         "startPoint"
       ],
-      "preloadLine": 708
+      "preloadLine": 709
     },
     {
       "method": "git.checkout",
@@ -2680,7 +2688,7 @@
         "repositoryPath",
         "name"
       ],
-      "preloadLine": 709
+      "preloadLine": 710
     },
     {
       "method": "git.deleteBranch",
@@ -2689,7 +2697,7 @@
         "repositoryPath",
         "name"
       ],
-      "preloadLine": 710
+      "preloadLine": 711
     },
     {
       "method": "git.renameBranch",
@@ -2699,7 +2707,7 @@
         "oldName",
         "newName"
       ],
-      "preloadLine": 711
+      "preloadLine": 712
     },
     {
       "method": "git.merge",
@@ -2708,7 +2716,7 @@
         "repositoryPath",
         "source"
       ],
-      "preloadLine": 712
+      "preloadLine": 713
     },
     {
       "method": "git.rebase",
@@ -2717,7 +2725,7 @@
         "repositoryPath",
         "target"
       ],
-      "preloadLine": 713
+      "preloadLine": 714
     },
     {
       "method": "git.getConflict",
@@ -2726,7 +2734,7 @@
         "repositoryPath",
         "path"
       ],
-      "preloadLine": 714
+      "preloadLine": 715
     },
     {
       "method": "git.resolveConflict",
@@ -2736,7 +2744,7 @@
         "path",
         "resolution"
       ],
-      "preloadLine": 715
+      "preloadLine": 716
     },
     {
       "method": "git.abortConflict",
@@ -2744,7 +2752,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 716
+      "preloadLine": 717
     },
     {
       "method": "git.getFileContent",
@@ -2753,7 +2761,7 @@
         "repositoryPath",
         "path"
       ],
-      "preloadLine": 717
+      "preloadLine": 718
     },
     {
       "method": "git.getFileHistory",
@@ -2763,7 +2771,7 @@
         "path",
         "ref"
       ],
-      "preloadLine": 718
+      "preloadLine": 719
     },
     {
       "method": "git.getBlame",
@@ -2773,7 +2781,7 @@
         "path",
         "ref"
       ],
-      "preloadLine": 719
+      "preloadLine": 720
     },
     {
       "method": "git.cherryPick",
@@ -2782,7 +2790,7 @@
         "repositoryPath",
         "commit"
       ],
-      "preloadLine": 720
+      "preloadLine": 721
     },
     {
       "method": "git.revert",
@@ -2791,7 +2799,7 @@
         "repositoryPath",
         "commit"
       ],
-      "preloadLine": 721
+      "preloadLine": 722
     },
     {
       "method": "git.stash",
@@ -2800,7 +2808,7 @@
         "repositoryPath",
         "message"
       ],
-      "preloadLine": 722
+      "preloadLine": 723
     },
     {
       "method": "git.popStash",
@@ -2808,7 +2816,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 723
+      "preloadLine": 724
     },
     {
       "method": "git.pull",
@@ -2816,7 +2824,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 724
+      "preloadLine": 725
     },
     {
       "method": "git.fetch",
@@ -2824,7 +2832,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 725
+      "preloadLine": 726
     },
     {
       "method": "git.push",
@@ -2832,7 +2840,7 @@
       "arguments": [
         "repositoryPath"
       ],
-      "preloadLine": 726
+      "preloadLine": 727
     },
     {
       "method": "runs.start",
@@ -2840,7 +2848,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 729
+      "preloadLine": 730
     },
     {
       "method": "runs.stop",
@@ -2848,7 +2856,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 730
+      "preloadLine": 731
     },
     {
       "method": "runs.stopService",
@@ -2857,7 +2865,7 @@
         "projectId",
         "serviceId"
       ],
-      "preloadLine": 731
+      "preloadLine": 732
     },
     {
       "method": "runs.startService",
@@ -2866,7 +2874,7 @@
         "projectId",
         "serviceId"
       ],
-      "preloadLine": 732
+      "preloadLine": 733
     },
     {
       "method": "runs.restartService",
@@ -2875,7 +2883,7 @@
         "projectId",
         "serviceId"
       ],
-      "preloadLine": 733
+      "preloadLine": 734
     },
     {
       "method": "runs.status",
@@ -2883,7 +2891,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 734
+      "preloadLine": 735
     },
     {
       "method": "runs.reconcile",
@@ -2891,7 +2899,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 735
+      "preloadLine": 736
     },
     {
       "method": "runs.previewUrl",
@@ -2900,7 +2908,7 @@
         "projectId",
         "serviceId"
       ],
-      "preloadLine": 736
+      "preloadLine": 737
     },
     {
       "method": "runs.runVerification",
@@ -2909,7 +2917,7 @@
         "projectId",
         "check"
       ],
-      "preloadLine": 748
+      "preloadLine": 749
     },
     {
       "method": "runs.diagnoseVerificationFailure",
@@ -2919,13 +2927,13 @@
         "check",
         "outcome"
       ],
-      "preloadLine": 750
+      "preloadLine": 751
     },
     {
       "method": "preview.attach",
       "channel": "preview:attach",
       "arguments": [],
-      "preloadLine": 753
+      "preloadLine": 754
     },
     {
       "method": "preview.setBounds",
@@ -2933,7 +2941,7 @@
       "arguments": [
         "bounds"
       ],
-      "preloadLine": 754
+      "preloadLine": 755
     },
     {
       "method": "preview.setVisible",
@@ -2941,7 +2949,7 @@
       "arguments": [
         "visible"
       ],
-      "preloadLine": 755
+      "preloadLine": 756
     },
     {
       "method": "preview.open",
@@ -2949,13 +2957,13 @@
       "arguments": [
         "url"
       ],
-      "preloadLine": 756
+      "preloadLine": 757
     },
     {
       "method": "preview.captureDiagnostics",
       "channel": "preview:captureDiagnostics",
       "arguments": [],
-      "preloadLine": 757
+      "preloadLine": 758
     },
     {
       "method": "deployments.listProfiles",
@@ -2963,7 +2971,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 760
+      "preloadLine": 761
     },
     {
       "method": "deployments.getProfile",
@@ -2972,7 +2980,7 @@
         "projectId",
         "profileId"
       ],
-      "preloadLine": 762
+      "preloadLine": 763
     },
     {
       "method": "deployments.saveProfile",
@@ -2981,7 +2989,7 @@
         "projectId",
         "profile"
       ],
-      "preloadLine": 767
+      "preloadLine": 768
     },
     {
       "method": "deployments.validateProfile",
@@ -2989,7 +2997,7 @@
       "arguments": [
         "profile"
       ],
-      "preloadLine": 769
+      "preloadLine": 770
     },
     {
       "method": "deployments.preflightCapabilities",
@@ -2997,7 +3005,7 @@
       "arguments": [
         "profile"
       ],
-      "preloadLine": 771
+      "preloadLine": 772
     },
     {
       "method": "deployments.evaluateCredentials",
@@ -3005,7 +3013,7 @@
       "arguments": [
         "profile"
       ],
-      "preloadLine": 773
+      "preloadLine": 774
     },
     {
       "method": "deployments.publishArtifact",
@@ -3016,7 +3024,7 @@
         "rootDir",
         "sourceCommit"
       ],
-      "preloadLine": 778
+      "preloadLine": 779
     },
     {
       "method": "deployments.listArtifacts",
@@ -3024,13 +3032,13 @@
       "arguments": [
         "deploymentProfileId"
       ],
-      "preloadLine": 783
+      "preloadLine": 784
     },
     {
       "method": "deployments.listAllArtifacts",
       "channel": "deployments:listAllArtifacts",
       "arguments": [],
-      "preloadLine": 787
+      "preloadLine": 788
     },
     {
       "method": "deployments.getArtifact",
@@ -3038,7 +3046,7 @@
       "arguments": [
         "artifactId"
       ],
-      "preloadLine": 789
+      "preloadLine": 790
     },
     {
       "method": "deployments.prepare",
@@ -3050,7 +3058,7 @@
         "artifact",
         "context"
       ],
-      "preloadLine": 798
+      "preloadLine": 799
     },
     {
       "method": "deployments.approve",
@@ -3062,7 +3070,7 @@
         "artifact",
         "actor"
       ],
-      "preloadLine": 800
+      "preloadLine": 801
     },
     {
       "method": "deployments.deploy",
@@ -3075,7 +3083,7 @@
         "manifest",
         "options"
       ],
-      "preloadLine": 821
+      "preloadLine": 822
     },
     {
       "method": "deployments.getRun",
@@ -3083,7 +3091,7 @@
       "arguments": [
         "runId"
       ],
-      "preloadLine": 826
+      "preloadLine": 827
     },
     {
       "method": "deployments.listRuns",
@@ -3091,7 +3099,7 @@
       "arguments": [
         "deploymentProfileId"
       ],
-      "preloadLine": 827
+      "preloadLine": 828
     },
     {
       "method": "deployments.health",
@@ -3099,7 +3107,7 @@
       "arguments": [
         "runId"
       ],
-      "preloadLine": 828
+      "preloadLine": 829
     },
     {
       "method": "deployments.rollback",
@@ -3110,13 +3118,13 @@
         "profile",
         "options"
       ],
-      "preloadLine": 835
+      "preloadLine": 836
     },
     {
       "method": "scheduledRuns.list",
       "channel": "scheduledRuns:list",
       "arguments": [],
-      "preloadLine": 842
+      "preloadLine": 843
     },
     {
       "method": "scheduledRuns.get",
@@ -3124,7 +3132,7 @@
       "arguments": [
         "id"
       ],
-      "preloadLine": 843
+      "preloadLine": 844
     },
     {
       "method": "scheduledRuns.save",
@@ -3132,7 +3140,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 844
+      "preloadLine": 845
     },
     {
       "method": "scheduledRuns.preview",
@@ -3140,7 +3148,7 @@
       "arguments": [
         "input"
       ],
-      "preloadLine": 846
+      "preloadLine": 847
     },
     {
       "method": "scheduledRuns.remove",
@@ -3148,7 +3156,7 @@
       "arguments": [
         "id"
       ],
-      "preloadLine": 847
+      "preloadLine": 848
     },
     {
       "method": "scheduledRuns.rename",
@@ -3157,7 +3165,7 @@
         "id",
         "name"
       ],
-      "preloadLine": 848
+      "preloadLine": 849
     },
     {
       "method": "scheduledRuns.archive",
@@ -3166,7 +3174,7 @@
         "id",
         "archived"
       ],
-      "preloadLine": 849
+      "preloadLine": 850
     },
     {
       "method": "scheduledRuns.workflowChoices",
@@ -3174,7 +3182,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 851
+      "preloadLine": 852
     },
     {
       "method": "scheduledRuns.pause",
@@ -3182,7 +3190,7 @@
       "arguments": [
         "id"
       ],
-      "preloadLine": 852
+      "preloadLine": 853
     },
     {
       "method": "scheduledRuns.startNow",
@@ -3190,7 +3198,7 @@
       "arguments": [
         "id"
       ],
-      "preloadLine": 853
+      "preloadLine": 854
     },
     {
       "method": "scheduledRuns.resume",
@@ -3198,7 +3206,7 @@
       "arguments": [
         "id"
       ],
-      "preloadLine": 854
+      "preloadLine": 855
     },
     {
       "method": "scheduledRuns.cancel",
@@ -3206,7 +3214,7 @@
       "arguments": [
         "id"
       ],
-      "preloadLine": 855
+      "preloadLine": 856
     },
     {
       "method": "scheduledRuns.skipEntry",
@@ -3215,7 +3223,7 @@
         "id",
         "entryId"
       ],
-      "preloadLine": 856
+      "preloadLine": 857
     },
     {
       "method": "scheduledRuns.retryEntry",
@@ -3224,7 +3232,7 @@
         "id",
         "entryId"
       ],
-      "preloadLine": 857
+      "preloadLine": 858
     },
     {
       "method": "scheduledRuns.approveGate",
@@ -3233,7 +3241,7 @@
         "id",
         "entryId"
       ],
-      "preloadLine": 858
+      "preloadLine": 859
     },
     {
       "method": "scheduledRuns.setArmed",
@@ -3242,7 +3250,7 @@
         "id",
         "armed"
       ],
-      "preloadLine": 859
+      "preloadLine": 860
     },
     {
       "method": "scheduledRuns.resolveMissed",
@@ -3251,7 +3259,7 @@
         "id",
         "resolution"
       ],
-      "preloadLine": 861
+      "preloadLine": 862
     },
     {
       "method": "notes.list",
@@ -3259,7 +3267,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 870
+      "preloadLine": 871
     },
     {
       "method": "notes.createNote",
@@ -3268,7 +3276,7 @@
         "projectId",
         "input"
       ],
-      "preloadLine": 872
+      "preloadLine": 873
     },
     {
       "method": "notes.updateNote",
@@ -3278,7 +3286,7 @@
         "noteId",
         "input"
       ],
-      "preloadLine": 874
+      "preloadLine": 875
     },
     {
       "method": "notes.deleteNote",
@@ -3287,7 +3295,7 @@
         "projectId",
         "noteId"
       ],
-      "preloadLine": 876
+      "preloadLine": 877
     },
     {
       "method": "notes.createGroup",
@@ -3296,7 +3304,7 @@
         "projectId",
         "input"
       ],
-      "preloadLine": 878
+      "preloadLine": 879
     },
     {
       "method": "notes.updateGroup",
@@ -3306,7 +3314,7 @@
         "groupId",
         "input"
       ],
-      "preloadLine": 880
+      "preloadLine": 881
     },
     {
       "method": "notes.deleteGroup",
@@ -3315,7 +3323,7 @@
         "projectId",
         "groupId"
       ],
-      "preloadLine": 882
+      "preloadLine": 883
     },
     {
       "method": "notes.replaceMemberships",
@@ -3325,7 +3333,7 @@
         "groupId",
         "noteIds"
       ],
-      "preloadLine": 884
+      "preloadLine": 885
     },
     {
       "method": "notes.prepareSnapshot",
@@ -3334,7 +3342,7 @@
         "projectId",
         "source"
       ],
-      "preloadLine": 886
+      "preloadLine": 887
     },
     {
       "method": "artifacts.list",
@@ -3342,7 +3350,7 @@
       "arguments": [
         "projectId"
       ],
-      "preloadLine": 894
+      "preloadLine": 895
     },
     {
       "method": "artifacts.readText",
@@ -3351,7 +3359,7 @@
         "projectId",
         "path"
       ],
-      "preloadLine": 895
+      "preloadLine": 896
     },
     {
       "method": "artifacts.loadImage",
@@ -3360,7 +3368,7 @@
         "projectId",
         "path"
       ],
-      "preloadLine": 897
+      "preloadLine": 898
     },
     {
       "method": "artifacts.pageThumbnail",
@@ -3369,7 +3377,7 @@
         "projectId",
         "path"
       ],
-      "preloadLine": 899
+      "preloadLine": 900
     },
     {
       "method": "artifacts.createGroup",
@@ -3379,7 +3387,7 @@
         "name",
         "paths"
       ],
-      "preloadLine": 901
+      "preloadLine": 902
     },
     {
       "method": "artifacts.updateGroup",
@@ -3389,7 +3397,7 @@
         "groupId",
         "change"
       ],
-      "preloadLine": 903
+      "preloadLine": 904
     },
     {
       "method": "artifacts.deleteGroup",
@@ -3398,7 +3406,7 @@
         "projectId",
         "groupId"
       ],
-      "preloadLine": 905
+      "preloadLine": 906
     },
     {
       "method": "artifacts.delete",
@@ -3407,7 +3415,7 @@
         "projectId",
         "path"
       ],
-      "preloadLine": 906
+      "preloadLine": 907
     },
     {
       "method": "artifacts.reveal",
@@ -3416,7 +3424,7 @@
         "projectId",
         "path"
       ],
-      "preloadLine": 907
+      "preloadLine": 908
     }
   ],
   "events": [

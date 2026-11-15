@@ -185,7 +185,8 @@ export function createPraxisBridge(ipcRenderer: DesktopTransport): PraxisIpc {
       const handler = (_event: unknown, factor: number) => listener(factor);
       ipcRenderer.on('window:zoomChanged', handler);
       return () => ipcRenderer.off('window:zoomChanged', handler);
-    }
+    },
+    setTitlebarHeight: (height: number) => ipcRenderer.invoke('window:setTitlebarHeight', height) as Promise<void>
   },
   detachedChat: {
     open: (issueKey: string) => ipcRenderer.invoke('detachedChat:open', issueKey),

@@ -5,6 +5,8 @@ mod application;
 mod e2e_server;
 #[cfg(target_os = "macos")]
 mod macos_snapshot;
+#[cfg(target_os = "macos")]
+mod macos_traffic_lights;
 mod native_browser;
 mod state;
 pub mod webviews;
@@ -187,6 +189,35 @@ async fn praxis_rpc(
                 )
                 .map_err(shell_error)?;
             Ok(json!(factor))
+        }
+        // The renderer measures its title bar (display size and zoom change its
+        // height); macOS keeps the native traffic lights centred on that height.
+        "window:setTitlebarHeight" => {
+            #[cfg(target_os = "macos")]
+            {
+                let height = args
+                    .first()
+                    .and_then(Value::as_f64)
+                    .filter(|h| h.is_finite() && *h > 0.0)
+                    .ok_or_else(|| {
+                        error(
+                            "INVALID_ARGUMENT",
+                            "Title bar height must be a positive number.",
+                        )
+                    })?;
+                macos_traffic_lights::report_height(height);
+                if let Some(main) = window.app_handle().get_webview_window("main") {
+                    let appearance = state.host.settings().read().appearance;
+                    macos_traffic_lights::center_and_hold(
+                        &main,
+                        macos_traffic_lights::fallback_titlebar_height(
+                            &appearance.display_mode,
+                            appearance.zoom_factor,
+                        ),
+                    );
+                }
+            }
+            Ok(Value::Null)
         }
         "window:setNotificationView" => {
             application::task_notifications::set_view(
@@ -475,7 +506,18 @@ fn main() {
             eprintln!("[Tauri] RESOLVED USER DATA DIR: {:?}", default_dir);
             let state = DesktopState::new(default_dir, app.handle().clone())?;
             if let Some(window) = app.get_webview_window("main") {
-                window.set_zoom(state.host.settings().read().appearance.zoom_factor)?;
+                let appearance = state.host.settings().read().appearance;
+                window.set_zoom(appearance.zoom_factor)?;
+                // Keep the native traffic lights centred on the renderer's title bar,
+                // which grows with display size and zoom (see macos_traffic_lights).
+                #[cfg(target_os = "macos")]
+                macos_traffic_lights::center_and_hold(
+                    &window,
+                    macos_traffic_lights::fallback_titlebar_height(
+                        &appearance.display_mode,
+                        appearance.zoom_factor,
+                    ),
+                );
             }
             let shown = ShownNotices::default();
             let center = application::task_notifications::install(
@@ -590,6 +632,23 @@ fn main() {
                 let _ = window.emit("praxis:event", json!({
                     "channel": "window:maximizeChanged", "payload": window.is_maximized().unwrap_or(false)
                 }));
+            }
+            // AppKit resets the traffic lights on resize and fullscreen transitions;
+            // re-assert the centring on the main window afterwards.
+            #[cfg(target_os = "macos")]
+            if window.label() == "main"
+                && matches!(event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(true))
+                && let Some(state) = window.try_state::<DesktopState>()
+                && let Some(main) = window.app_handle().get_webview_window("main")
+            {
+                let appearance = state.host.settings().read().appearance;
+                macos_traffic_lights::center_and_hold(
+                    &main,
+                    macos_traffic_lights::fallback_titlebar_height(
+                        &appearance.display_mode,
+                        appearance.zoom_factor,
+                    ),
+                );
             }
         })
         .build(tauri::generate_context!())

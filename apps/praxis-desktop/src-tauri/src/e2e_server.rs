@@ -400,6 +400,8 @@ fn rpc(shared: &Shared, channel: String, args: Vec<Value>) -> Value {
     match channel.as_str() {
         "app:getVersion" => ok(json!(env!("CARGO_PKG_VERSION"))),
         "window:isMaximized" | "window:supportsVibrancy" => ok(json!(false)),
+        // The headless server has no native title bar; accept the measurement.
+        "window:setTitlebarHeight" => ok(Value::Null),
         "window:getZoomFactor" => ok(json!(*shared.zoom.lock().expect("zoom"))),
         "window:setZoomFactor" => match args
             .first()
