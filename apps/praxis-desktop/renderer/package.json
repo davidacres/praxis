@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm run check-tauri-bridge && npm run check-core-imports && tsc --noEmit -p . && vite build",
     "check-types": "npm run check-tauri-bridge && npm run check-core-imports && tsc --noEmit -p .",
-    "test": "node --import ./test/register.mjs --test test/notesSession.test.ts test/notesTree.test.ts test/noteSendReference.test.ts test/noteSendStore.test.ts test/scheduleSpotlight.test.ts test/reportModel.test.ts test/scheduleFlow.test.ts test/conversationSubscription.test.ts test/turnControlModel.test.ts test/assistantErrorState.test.ts test/assistantPendingSubmissions.test.ts test/assistantOwnership.test.ts test/assistantPageContextCompatibility.test.ts test/assistantShellMode.test.ts test/assistantSubmitCommand.test.ts test/tauriTransport.test.ts test/sessionPresentation.test.ts test/workHub.test.ts",
+    "test": "node --import ./test/register.mjs --test test/notesSession.test.ts test/notesTree.test.ts test/noteSendReference.test.ts test/noteSendStore.test.ts test/scheduleSpotlight.test.ts test/reportModel.test.ts test/scheduleFlow.test.ts test/conversationSubscription.test.ts test/turnControlModel.test.ts test/assistantErrorState.test.ts test/assistantPendingSubmissions.test.ts test/assistantOwnership.test.ts test/assistantPageContextCompatibility.test.ts test/assistantShellMode.test.ts test/assistantSubmitCommand.test.ts test/tauriTransport.test.ts test/commandStrip.test.ts test/sessionPresentation.test.ts test/workHub.test.ts",
     "check-core-imports": "node scripts/checkCoreImports.cjs",
     "check-tauri-bridge": "node ../scripts/generate-tauri-bridge.cjs --check",
     "tauri:dev": "node ../scripts/run-tauri.cjs dev",

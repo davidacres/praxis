@@ -312,7 +312,105 @@
   color: var(--composer-control-ink);
 }
 
-/* Hairline keeps Ambient's layout and motion, with only one illuminated rule. */
+/* Ambient is a bottom dock: one writing line and one metadata row. Secondary
+   controls share the row if they fit, otherwise reveal above it on hover/focus. */
+.composer[data-composer-style="ambient-canvas"][data-composer-part="frame"] {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+  --composer-input-height: calc(40px * var(--ui-scale));
+  --composer-control-size: calc(26px * var(--ui-scale));
+}
+[data-composer-style="ambient-canvas"][data-composer-part="scope"] { position: relative; }
+.session-view:has(.session-composer-presentation[data-composer-style="ambient-canvas"]) { height: 100%; padding-bottom: 6px; }
+.session-inner:has(> .session-composer-presentation[data-composer-style="ambient-canvas"]) { max-width: none; height: 100%; display: flex; flex-direction: column; }
+.session-composer-presentation[data-composer-style="ambient-canvas"] { margin-top: auto; }
+.session-chat-composer[data-composer-style="ambient-canvas"] { padding-block: 0 6px; }
+[data-composer-style="ambient-canvas"] [data-composer-part="analysis"] { top: auto; bottom: calc(100% + 12px); }
+[data-composer-style="ambient-canvas"] .ambient-composer-canvas {
+  flex: none;
+  width: calc(100% + 32px);
+  margin-inline: -16px;
+  padding: 32px 16px 0;
+}
+[data-composer-style="ambient-canvas"] .ambient-composer-canvas .composer-input.session-follow-up-input { padding-top: 0; }
+[data-composer-style="ambient-canvas"] .ambient-composer-canvas .composer-input-leading { top: 0; }
+[data-composer-style="ambient-canvas"][data-composer-part="frame"] > .ambient-toolbar {
+  position: relative;
+  width: 100%;
+  height: calc(34px * var(--ui-scale));
+  min-height: calc(34px * var(--ui-scale));
+  margin: 0;
+  padding: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.ambient-runtime-controls, .ambient-send-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.ambient-runtime-controls { margin-left: auto; flex: 0 1 auto; order: 1; }
+.ambient-more-controls { order: 2; }
+.ambient-send-controls { flex: none; order: 3; }
+[data-composer-style="ambient-canvas"] .ambient-toolbar-extras {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-width: 0;
+}
+[data-composer-style="ambient-canvas"] .ambient-toolbar-extras :is([data-composer-slot="header"], .session-mode-panel-meta, .session-composer-footer, .session-context-references) { display: contents; }
+[data-composer-style="ambient-canvas"] .ambient-toolbar[data-overflow="true"] .ambient-toolbar-extras {
+  position: absolute;
+  bottom: calc(100% + var(--ambient-menu-offset, 80px));
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid var(--composer-detail-border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: var(--composer-detail-shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 140ms ease, visibility 140ms;
+}
+[data-composer-style="ambient-canvas"] .ambient-toolbar[data-expanded="true"] .ambient-toolbar-extras {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.ambient-toolbar-extras::after { content: ''; position: absolute; inset: 100% 0 -10px; }
+.ambient-more-controls[hidden] { display: none; }
+[data-composer-style="ambient-canvas"][data-composer-custom] :is(.composer-chip, .session-mode-toggle button) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  padding-inline: 5px;
+}
+[data-composer-style="ambient-canvas"][data-composer-custom] :is(.composer-chip, .session-mode-toggle button):hover:not(:disabled) {
+  background: var(--composer-control-hover);
+  box-shadow: none;
+}
+[data-composer-style="ambient-canvas"] :is(.session-provider-chip, .session-model-chip) {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 220px;
+}
+[data-composer-style="ambient-canvas"] .session-provider-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-composer-style="ambient-canvas"] .ambient-toolbar-extras .session-context-reference { flex: none; }
+[data-composer-style="ambient-canvas"] .ambient-toolbar-extras .composer-reasoning-slider { width: calc(104px * var(--ui-scale)); flex: 0 0 calc(104px * var(--ui-scale)); background: transparent; }
+[data-composer-style="ambient-canvas"] .ambient-toolbar-extras .composer-reasoning-slider input { width: calc(64px * var(--ui-scale)); opacity: 1; }
+[data-composer-style="ambient-canvas"] .ambient-toolbar-extras .composer-reasoning-dots { display: none; }
+
+/* Hairline keeps its layout and motion, with only one illuminated rule. */
 .composer[data-composer-style="hairline"][data-composer-part="frame"] {
   margin-inline: calc(20px * var(--ui-scale));
   padding-top: calc(8px * var(--ui-scale));
@@ -346,3 +444,136 @@
 @media (prefers-reduced-motion: reduce) {
   [data-composer-style="hairline"][data-composer-part="frame"]::before { animation: none; }
 }
+
+/* ── Command Strip (concept 1) ─────────────────────────────────────────────
+   One quiet line at rest. The draft grows the line, reveals the tools row,
+   and a bare /word opens the agent's own command palette above the strip. */
+[data-composer-style="command-strip"] {
+  --composer-control-bg: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg));
+  --composer-control-hover: color-mix(in srgb, var(--accent) 10%, transparent);
+  --composer-control-active: color-mix(in srgb, var(--accent) 14%, transparent);
+  --composer-control-ink: var(--text-secondary);
+  --composer-control-radius: 999px;
+  --composer-control-size: calc(26px * var(--ui-scale));
+  --composer-control-font: var(--text-xs);
+  --composer-control-border: color-mix(in srgb, var(--accent) 20%, transparent);
+  --composer-detail-bg: var(--bg-elevated);
+  --composer-detail-border: var(--border);
+  --composer-detail-radius: 12px;
+  --composer-detail-shadow: 0 16px 40px color-mix(in srgb, var(--bg) 55%, transparent);
+  --composer-content-width: none;
+  --composer-analysis-bg: transparent;
+  --composer-analysis-radius: 0px;
+  --composer-strip-spring: cubic-bezier(.34, 1.56, .64, 1);
+}
+.composer[data-composer-style="command-strip"][data-composer-part="frame"] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* The palette lives above the strip, so the card must not clip it. */
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+  transition: border-color .2s ease, box-shadow .25s ease;
+}
+.composer[data-composer-style="command-strip"][data-composer-part="frame"]:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* While a turn runs the strip keeps its own quiet border, not the classic glow. */
+.composer[data-composer-style="command-strip"][data-composer-part="frame"].is-running {
+  animation: none;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+[data-composer-style="command-strip"] .composer-input-shell { padding: 10px 12px 6px calc(36px * var(--ui-scale)); margin: 0; max-width: none; }
+[data-composer-style="command-strip"] .composer-input.session-follow-up-input {
+  min-height: calc(22px * var(--ui-scale));
+  max-height: calc(180px * var(--ui-scale));
+  overflow-y: auto;
+  padding: 0;
+  font-size: var(--text-sm);
+  line-height: 22px;
+  background: transparent;
+  border: 0;
+  resize: none;
+}
+[data-composer-style="command-strip"] .composer-input-leading {
+  left: 10px; top: 10px;
+  color: var(--text-tertiary);
+  transition: color .2s ease, transform .3s var(--composer-strip-spring);
+}
+[data-composer-style="command-strip"]:focus-within .composer-input-leading { color: var(--accent); transform: rotate(-12deg); }
+
+/* Tools row: closed at rest, springs open with a real draft or a live turn. */
+[data-composer-style="command-strip"] [data-composer-part="controls"] {
+  min-height: 0; max-height: 0; opacity: 0; overflow: hidden;
+  padding: 0 12px; border-top: 1px solid transparent;
+  flex-wrap: wrap; gap: 8px; align-items: center;
+  transition: max-height .35s var(--composer-strip-spring), opacity .25s ease, padding .3s ease, border-color .2s ease;
+}
+[data-composer-style="command-strip"].strip-expanded [data-composer-part="controls"] {
+  min-height: calc(42px * var(--ui-scale)); max-height: 160px; opacity: 1; padding-block: 8px; border-top-color: var(--border);
+}
+[data-composer-style="command-strip"] .composer-chip { animation: strip-chip-arrive .3s var(--composer-strip-spring) backwards; }
+[data-composer-style="command-strip"].strip-expanded .composer-chip:nth-child(2) { animation-delay: 30ms; }
+[data-composer-style="command-strip"].strip-expanded .composer-chip:nth-child(3) { animation-delay: 60ms; }
+[data-composer-style="command-strip"].strip-expanded .composer-chip:nth-child(4) { animation-delay: 90ms; }
+@keyframes strip-chip-arrive { from { opacity: 0; transform: translateY(8px); } }
+[data-composer-style="command-strip"] .strip-token-chip { margin-left: auto; font-variant-numeric: tabular-nums; pointer-events: none; }
+
+/* Send: dim until there is something to send; accent when live. */
+[data-composer-style="command-strip"] .composer-send {
+  opacity: .35; border: 0; border-radius: 8px;
+  width: calc(34px * var(--ui-scale)); height: calc(26px * var(--ui-scale));
+  color: var(--bg); background: var(--accent);
+  transition: transform .15s ease, opacity .2s ease;
+}
+[data-composer-style="command-strip"].strip-has-text .composer-send,
+[data-composer-style="command-strip"] .composer-send-cancel { opacity: 1; }
+[data-composer-style="command-strip"] .composer-send:active:not(:disabled) { transform: scale(.88); }
+[data-composer-style="command-strip"] .composer-send:disabled { background: var(--composer-control-bg); color: var(--text-tertiary); }
+
+/* Header/footer/usage stay quiet metadata under the strip. */
+[data-composer-style="command-strip"] :is([data-composer-part="header"], .session-composer-footer, .session-usage-wrapper) {
+  width: 100%; max-width: none; border: 0; background: transparent; padding-inline: 4px;
+}
+[data-composer-style="command-strip"] [data-composer-part="analysis"] { margin: 4px 0; width: 100%; max-width: none; }
+
+/* Palette above the strip. */
+[data-composer-style="command-strip"] .strip-palette {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 10px); z-index: 30;
+  padding: 6px; transform-origin: bottom center;
+  animation: strip-palette-arrive .3s var(--composer-strip-spring) backwards;
+}
+@keyframes strip-palette-arrive { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.strip-palette .strip-command {
+  display: flex; gap: 10px; width: 100%; text-align: left;
+  padding: 7px 10px; border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+  animation: strip-command-drop .28s var(--composer-strip-spring, cubic-bezier(.34, 1.56, .64, 1)) backwards;
+  animation-delay: calc(var(--i) * 35ms);
+}
+@keyframes strip-command-drop { from { opacity: 0; transform: translateY(-4px); } }
+.strip-palette .strip-command b { color: var(--accent); font-weight: 500; min-width: 90px; }
+.strip-palette .strip-command span { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.strip-palette .strip-command.active { background: var(--composer-control-active, color-mix(in srgb, var(--accent) 14%, transparent)); }
+
+/* The send flyer. */
+.strip-flyer {
+  position: fixed; z-index: 90; padding: 8px 14px; border-radius: 999px;
+  background: var(--accent); color: var(--bg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 320px; pointer-events: none;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--bg) 60%, transparent);
+}
+[data-composer-style="command-strip"] .composer-panel-transition[data-open="false"] {
+  pointer-events: none; animation: ambient-panel-depart 420ms cubic-bezier(.22, 1, .36, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-composer-style="command-strip"], [data-composer-style="command-strip"] * { animation: none !important; transition: none !important; }
+}
+
+/* Gallery preview. */
+.preview-command-strip { border-radius: 12px; }
+.preview-command-strip .composer-preview-input::before { content: '⌘ '; color: var(--accent); }

@@ -7,6 +7,7 @@ import { useSettings } from '../settings/useSettings';
 import { AmbientComposerHorizon } from './AmbientComposerHorizon';
 import { ComposerSurface } from './ComposerSurface';
 import { Icon } from '../ui/Icon';
+import { ComposerAuxiliary } from './AmbientComposerControls';
 
 /** A phrase in the draft the prompt coach is unsure about, as a range of the input's value. */
 export interface PromptHighlight { id: string; start: number; end: number; question: string; active?: boolean }
@@ -20,7 +21,7 @@ export type PromptKeyHandler = (event: KeyboardEvent<HTMLTextAreaElement>) => bo
 interface PromptInlineControls { visible: boolean; canApply: boolean; key: string; question?: string }
 interface PromptInlineActions { apply: () => void; preview: () => ReactNode }
 interface PromptAnalysisContextValue {
-  composerStyle: 'classic' | 'ambient-canvas' | 'hairline';
+  composerStyle: 'classic' | 'ambient-canvas' | 'hairline' | 'command-strip';
   composerActivity: 'idle' | 'thinking' | 'approval';
   inlineControls: PromptInlineControls;
   setInlineControls: (controls: PromptInlineControls) => void;
@@ -83,7 +84,7 @@ function sameHighlights(a: readonly PromptHighlight[], b: readonly PromptHighlig
 }
 
 export function SessionComposerHeader(props: HTMLAttributes<HTMLDivElement>) {
-  return <div {...props} data-composer-part="header" data-composer-slot="header" className={`session-mode-panel ${props.className ?? ''}`.trim()} />;
+  return <ComposerAuxiliary {...props} data-composer-part="header" data-composer-slot="header" className={`session-mode-panel ${props.className ?? ''}`.trim()} />;
 }
 
 /** Retain expanded feedback long enough for a style's closing animation. */
@@ -114,7 +115,9 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
     const input = useRef<HTMLTextAreaElement | null>(null);
     const backdrop = useRef<HTMLDivElement | null>(null);
     const { composerStyle, composerActivity, highlights, ghost, requestPhrase, keyHandler, inputRef, inlineControls, inlineActions } = usePromptAnalysis();
-    const collapsed = composerStyle !== 'classic' ? false : requestedCollapsed;
+    // Command Strip grows with its draft like Classic; only the canvas styles fix the input height.
+    const ambientLike = composerStyle === 'ambient-canvas' || composerStyle === 'hairline';
+    const collapsed = ambientLike ? false : requestedCollapsed;
     const [caret, setCaret] = useState(0);
     const [position, setPosition] = useState({ left: 0, top: 0 });
     const [previewOpen, setPreviewOpen] = useState(false);
@@ -160,7 +163,7 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
         // A scrollbar narrows the textarea's text box; the layer has none, so match the width
         layer.style.right = `${field.offsetWidth - field.clientWidth - parseFloat(computed.borderLeftWidth) - parseFloat(computed.borderRightWidth)}px`;
       }
-      if (composerStyle !== 'classic') {
+      if (ambientLike) {
         field.style.height = 'var(--composer-input-height)';
         if (layer) layer.scrollTop = field.scrollTop;
         return;
@@ -170,7 +173,7 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
       // Ghost text can run past the draft's last line: grow the box so it is not clipped
       field.style.height = `${Math.max(field.scrollHeight, layer?.scrollHeight ?? 0)}px`;
       if (layer) layer.scrollTop = field.scrollTop;
-    }, [value, collapsed, shownGhost?.text, marks.length, composerStyle]);
+    }, [value, collapsed, shownGhost?.text, marks.length, ambientLike]);
     // The textarea sits above the marks, so a click lands on it: map the caret back to a phrase
     const selectPhraseAtCaret = () => {
       const field = input.current;
@@ -239,7 +242,7 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
           onMouseDown={event => event.preventDefault()}>{inlineActions.current?.preview()}</ComposerSurface>, document.body)}
       </div>}
     </div>;
-    return composerStyle !== 'classic'
+    return ambientLike
       ? <div data-composer-slot="input" className={`ambient-composer-canvas${collapsed ? ' is-collapsed' : ''}`}
           onClick={event => { if (event.target === event.currentTarget) input.current?.focus(); }}>
           {composerStyle === 'ambient-canvas' && <AmbientComposerHorizon state={composerActivity} />}

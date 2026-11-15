@@ -328,7 +328,7 @@ export interface MarketplaceSettings {
 }
 
 export interface AppearanceSettings {
-  composerStyle: 'classic' | 'ambient-canvas' | 'hairline';
+  composerStyle: 'classic' | 'ambient-canvas' | 'hairline' | 'command-strip';
   /** UI density preference; compact is the default, large improves readability and touch targets. */
   displayMode: 'compact' | 'large';
   /**
@@ -763,7 +763,7 @@ export interface AppSettingsPatch {
     zoomFactor?: number;
     showBrandArtwork?: boolean;
     priorityColors?: Record<string, string>;
-    composerStyle?: 'classic' | 'ambient-canvas' | 'hairline';
+    composerStyle?: 'classic' | 'ambient-canvas' | 'hairline' | 'command-strip';
     themeId?: string;
     themeMode?: 'light' | 'dark' | 'system';
     accentColor?: string;
@@ -1408,7 +1408,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
           DEFAULT_APP_SETTINGS.appearance.showBrandArtwork
         ),
         priorityColors: readPriorityColors(raw.appearance.priorityColors)
-        ,composerStyle: raw.appearance.composerStyle === 'hairline' ? 'hairline' : raw.appearance.composerStyle === 'ambient-canvas' ? 'ambient-canvas' : 'classic'
+        ,composerStyle: raw.appearance.composerStyle === 'hairline' ? 'hairline' : raw.appearance.composerStyle === 'ambient-canvas' ? 'ambient-canvas' : raw.appearance.composerStyle === 'command-strip' ? 'command-strip' : 'classic'
         ,themeId: readString(raw.appearance.themeId, DEFAULT_APP_SETTINGS.appearance.themeId)
         ,themeMode: readThemeMode(raw.appearance.themeMode, DEFAULT_APP_SETTINGS.appearance.themeMode)
         ,accentColor: readAccentColor(raw.appearance.accentColor)

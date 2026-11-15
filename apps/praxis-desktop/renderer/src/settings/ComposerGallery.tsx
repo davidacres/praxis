@@ -2,6 +2,7 @@ import type { AppSettings, AppSettingsPatch } from '@praxis/core';
 import { AmbientComposerHorizon } from '../ai/AmbientComposerHorizon';
 
 const STYLES = [
+  { id: 'command-strip', name: 'Command Strip', description: 'Concept 1. One quiet line that grows as you type — start with “/” for the agent’s own commands.' },
   { id: 'hairline', name: 'Hairline', description: 'A single illuminated horizon, an open writing surface and quiet text controls.' },
   { id: 'classic', name: 'Classic', description: 'The original composer. A familiar framed input with all your session tools.' },
   { id: 'ambient-canvas', name: 'Ambient Canvas', description: 'Concept 5. An open canvas with a glowing horizon that follows the agent’s state.' }

@@ -1,8 +1,11 @@
+import { ComposerAuxiliary } from './AmbientComposerControls';
+import { stripCommandQuery, filterStripCommands, applyStripCommand, estimateStripTokens, stripToolsExpanded } from './commandStrip';
+import { launchStripFlyer } from './commandStripFlyer';
 import { SessionRuntimeFacts } from './SessionRuntimeFacts';
 import { ComposerSurface } from './ComposerSurface';
 import { SessionBackgroundTasks } from './SessionBackgroundTasks';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ClipboardEvent, DragEvent, MouseEvent } from 'react';
+import type { ClipboardEvent, CSSProperties, DragEvent, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type {
   AgentEventSummary,
@@ -646,6 +649,10 @@ export function SessionsPage({
   };
 
   const { settings } = useSettings();
+  const composerStyle = settings?.appearance.composerStyle ?? 'classic';
+  /** Command Strip palette: keyboard highlight and an Escape dismissal that survives the same query. */
+  const [stripPaletteIndex, setStripPaletteIndex] = useState(0);
+  const [stripPaletteDismissed, setStripPaletteDismissed] = useState(false);
   const eventsRef = useRef<HTMLDivElement>(null);
   const followChatRef = useRef(true);
 
@@ -702,6 +709,18 @@ export function SessionsPage({
   const selected = sessions.find(session => session.issueKey === selectedKey) ?? sessions[0];
   useEffect(() => { setContextReferences([]); }, [selected?.issueKey]);
   const selectedSubagents = useMemo(() => (selected ? extractSubagents(selected, sessions) : []), [selected, sessions]);
+  // Concept 1: a bare `/word` draft opens the agent's own command palette above the strip.
+  const stripQuery = composerStyle === 'command-strip' && selected && isTerminalAgentState(selected.state)
+    ? stripCommandQuery(followUp) : undefined;
+  const stripMatches = stripQuery !== undefined
+    ? filterStripCommands(selected?.acpAvailableCommands ?? [], stripQuery) : [];
+  const stripPaletteOpen = stripQuery !== undefined && !stripPaletteDismissed && stripMatches.length > 0;
+  useEffect(() => { setStripPaletteIndex(0); setStripPaletteDismissed(false); }, [stripQuery, selected?.issueKey]);
+  const pickStripCommand = (name: string) => {
+    setFollowUp(applyStripCommand(name));
+    setStripPaletteDismissed(false);
+    followUpTextareaRef.current?.focus();
+  };
   const selectedWorkflowRuns = useSessionWorkflowRuns(selected);
   const activeWorkflowRun = selectedWorkflowRuns.find(run => run.runId === selected?.workflowRunId);
   const workflowOwnsRuntime = selected?.workflowRole === 'controller'
@@ -1224,6 +1243,9 @@ export function SessionsPage({
 
   const sendFollowUp = async (override?: { text: string; references: SessionContextReference[] }) => {
     const text = override?.text ?? followUp;
+    if (composerStyle === 'command-strip' && !composerOnly) {
+      launchStripFlyer(text, followUpTextareaRef.current, eventsRef.current);
+    }
     const references = override?.references ?? contextReferences;
     if (!selected || sendingFollowUp) return;
     if (!text.trim() && followUpImages.length === 0) return;
@@ -1639,7 +1661,7 @@ export function SessionsPage({
               <SessionComposerCard
                 activity={pendingPermission ? 'approval' : isTurnActive ? 'thinking' : 'idle'}
                 data-testid={composerOptions.testId ? `${composerOptions.testId}-composer` : undefined}
-                className={`${composerDragOver ? ' is-drag-over' : ''}${followUpCollapsed ? ' is-collapsed' : ''}${isTurnActive ? ' is-running' : ''}`}
+                className={`${composerDragOver ? ' is-drag-over' : ''}${followUpCollapsed ? ' is-collapsed' : ''}${isTurnActive ? ' is-running' : ''}${composerStyle === 'command-strip' ? `${followUp.trim() || followUpImages.length ? ' strip-has-text' : ''}${stripToolsExpanded(followUp) || isTurnActive ? ' strip-expanded' : ''}` : ''}`}
                 onPaste={handleComposerPaste}
                 onDragOver={event => {
                   if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return;
@@ -1652,6 +1674,22 @@ export function SessionsPage({
                 }}
                 onDrop={handleComposerDrop}
               >
+                {stripPaletteOpen && (
+                  <ComposerSurface part="menu" className="composer-provider-menu strip-palette" role="listbox"
+                    aria-label="Agent commands" data-testid="strip-command-palette">
+                    {stripMatches.map((command, index) => (
+                      <button key={command.name} type="button" role="option" aria-selected={index === stripPaletteIndex}
+                        className={`strip-command${index === stripPaletteIndex ? ' active' : ''}`}
+                        style={{ '--i': index } as CSSProperties}
+                        data-testid={`strip-command-${command.name.replace(/^\/+/, '')}`}
+                        title={command.inputHint ? `${command.description} (${command.inputHint})` : command.description}
+                        onMouseDown={event => { event.preventDefault(); pickStripCommand(command.name); }}>
+                        <b>/{command.name.replace(/^\/+/, '')}</b>
+                        <span>{command.description}</span>
+                      </button>
+                    ))}
+                  </ComposerSurface>
+                )}
                 <SessionPromptScoreBar
                   promptText={followUp}
                   toolMode={selected.toolMode ?? 'full'}
@@ -1747,12 +1785,12 @@ export function SessionsPage({
                     </button>
                   </div>
                 )}
-                {(contextReferences.length > 0 || selected.workingDirectory) && !followUpCollapsed && <div className="session-context-references" data-testid="session-context-references">
+                {(contextReferences.length > 0 || selected.workingDirectory) && !followUpCollapsed && <ComposerAuxiliary className="session-context-references" data-testid="session-context-references">
                   {selected.workingDirectory && <span className="session-context-reference" title={selected.workingDirectory}><Icon name="folder" size={13} /><span>{basename(selected.workingDirectory)}</span>
                     <button type="button" className="icon-btn" aria-label="Detach working folder" disabled={sendingFollowUp || composerOptions.allowToolAccessChange === false || !canChangeSessionRuntime(selected)}
                       onClick={() => void window.praxis.ai.updateSessionToolAccess(selected.issueKey, { workingDirectory: null, toolMode: 'project-only' }).catch(cause => setFollowUpError(String(cause)))}><Icon name="close" size={12} /></button></span>}
                   {contextReferences.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}><Icon name={contextReferenceIcon(reference.kind)} size={13} /><span>{reference.label}</span><button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={sendingFollowUp} onClick={() => setContextReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button></span>)}
-                </div>}
+                </ComposerAuxiliary>}
                 <SessionComposerInput
                   leading={!followUpCollapsed && <SessionContextPicker key={selected.issueKey} session={selected} sessions={sessions} references={contextReferences} onChange={setContextReferences}
                     disabled={sendingFollowUp} folderDisabled={composerOptions.allowToolAccessChange === false || !canChangeSessionRuntime(selected) || conversationRunning} />}
@@ -1784,6 +1822,13 @@ export function SessionsPage({
                     }
                   }}
                   onKeyDown={event => {
+                    if (stripPaletteOpen) {
+                      const count = stripMatches.length;
+                      if (event.key === 'ArrowDown') { event.preventDefault(); setStripPaletteIndex(i => (i + 1) % count); return; }
+                      if (event.key === 'ArrowUp') { event.preventDefault(); setStripPaletteIndex(i => (i - 1 + count) % count); return; }
+                      if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); pickStripCommand(stripMatches[Math.min(stripPaletteIndex, count - 1)].name); return; }
+                      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setStripPaletteDismissed(true); return; }
+                    }
                     if (event.key === 'Escape' && isSingleAgentRunning && inflightComposerExpanded) {
                       event.preventDefault();
                       setInflightComposerExpanded(false);
@@ -2031,17 +2076,17 @@ export function SessionsPage({
                     )}
                     {workflowOwnsRuntime && selected.provider && (
                       <span
-                        className="composer-chip session-runtime-chip is-readonly"
+                        className="composer-chip session-runtime-chip session-provider-chip is-readonly"
                         data-testid="session-provider"
                         title="The workflow controls the active stage runtime; this is the session's selected provider"
                       >
                         <ProviderBrandLogo provider={selected.provider} size={14} decorative />
-                        {providerLabel(selected.provider)}
+                        <span className="session-provider-chip-label">{providerLabel(selected.provider)}</span>
                       </span>
                     )}
                     {workflowOwnsRuntime && selected.provider && (
                       <span
-                        className="composer-chip session-runtime-chip is-readonly"
+                        className="composer-chip session-runtime-chip session-model-chip is-readonly"
                         data-testid="session-model"
                         title="The workflow controls the active stage runtime; this is the session's selected model"
                       >
@@ -2051,17 +2096,17 @@ export function SessionsPage({
                     )}
                     {!workflowOwnsRuntime && selected.provider && (selected.workflowRole === 'stage' ? (
                       <span
-                        className="composer-chip session-runtime-chip is-readonly"
+                        className="composer-chip session-runtime-chip session-provider-chip is-readonly"
                         data-testid="session-provider"
                         title="This workflow stage's AI provider is fixed"
                       >
                         <ProviderBrandLogo provider={selected.provider} size={14} decorative />
-                        {providerLabel(selected.provider)}
+                        <span className="session-provider-chip-label">{providerLabel(selected.provider)}</span>
                       </span>
                     ) : (
                       <button
                         type="button"
-                        className={`composer-chip session-runtime-chip${transitionPopover?.open === 'handover' ? ' active' : ''}`}
+                        className={`composer-chip session-runtime-chip session-provider-chip${transitionPopover?.open === 'handover' ? ' active' : ''}`}
                         data-testid="session-provider"
                         title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Choose an AI provider' : "This session's AI provider"}
                         aria-haspopup="listbox"
@@ -2078,13 +2123,13 @@ export function SessionsPage({
                         }}
                       >
                         <ProviderBrandLogo provider={selected.provider} size={14} decorative />
-                        {providerLabel(selected.provider)}
+                        <span className="session-provider-chip-label">{providerLabel(selected.provider)}</span>
                       </button>
                     ))}
                     {!workflowOwnsRuntime && selected.provider && (
                       selected.workflowRole === 'stage' ? (
                         <span
-                          className="composer-chip session-runtime-chip is-readonly"
+                          className="composer-chip session-runtime-chip session-model-chip is-readonly"
                           data-testid="session-model"
                           title="This workflow stage's AI model is fixed"
                         >
@@ -2094,7 +2139,7 @@ export function SessionsPage({
                       ) : (
                         <button
                           type="button"
-                          className={`composer-chip session-runtime-chip${transitionPopover?.open === 'model' ? ' active' : ''}`}
+                          className={`composer-chip session-runtime-chip session-model-chip${transitionPopover?.open === 'model' ? ' active' : ''}`}
                           data-testid="session-model"
                           title={!conversationRunning && canChangeSessionRuntime(selected) ? 'Change the model for the next turn' : "This session's AI model"}
                           aria-haspopup="listbox"
@@ -2111,7 +2156,7 @@ export function SessionsPage({
                           }}
                         >
                           <Icon name="sparkles" size={14} />
-                          <span>{selected.model ?? 'Model'}</span>
+                          <span className="session-model-chip-label">{selected.model ?? 'Model'}</span>
                         </button>
                       )
                     )}
@@ -2141,6 +2186,11 @@ export function SessionsPage({
                         {selected.worktreeBaseBranch && (
                           <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
                         )}
+                      </span>
+                    )}
+                    {composerStyle === 'command-strip' && followUp.trim() && (
+                      <span className="composer-chip strip-token-chip" data-testid="strip-token-estimate">
+                        ~{estimateStripTokens(followUp)} tok
                       </span>
                     )}
                     <span className="spacer" />
@@ -2270,7 +2320,7 @@ export function SessionsPage({
                 </>}
               </SessionComposerCard>
               {!followUpCollapsed && !limitSwitchVisible && (
-                <div className="session-composer-footer">
+                <ComposerAuxiliary className="session-composer-footer">
                   {usageHidden && <button type="button" className="composer-chip" data-testid="session-restore-usage-btn" onClick={() => toggleUsageHidden(false)}><Icon name="graph" size={14} /> Usage</button>}
                   <SessionPermissionModeControl
                     value={selected.permissionMode}
@@ -2318,7 +2368,7 @@ export function SessionsPage({
                     testId="session"
                     disabled={conversationRunning || !canChangeSessionRuntime(selected)}
                   />
-                </div>
+                </ComposerAuxiliary>
               )}
               {context && contextPopoverPosition && createPortal(
                 <ComposerSurface part="menu"
