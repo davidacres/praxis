@@ -1,6 +1,7 @@
 import { forwardRef, type HTMLAttributes } from 'react';
 import { useSettings } from '../settings/useSettings';
 import { ComposerPresentationContext, composerPresentationAttributes } from '../ui/composerPresentation';
+import { AmbientControlsProvider } from './AmbientComposerControls';
 
 /**
  * Scope the whole composer, including usage/footer and portalled menus.
@@ -11,6 +12,8 @@ export const ComposerSurface = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDiv
   const { settings } = useSettings();
   const style = settings?.appearance.composerStyle ?? 'classic';
   return <ComposerPresentationContext.Provider value={style}>
-    <div ref={ref} {...props} {...composerPresentationAttributes(style)} data-composer-part={part}>{children}</div>
+    <div ref={ref} {...props} {...composerPresentationAttributes(style)} data-composer-part={part}>
+      {part === 'scope' ? <AmbientControlsProvider>{children}</AmbientControlsProvider> : children}
+    </div>
   </ComposerPresentationContext.Provider>;
 });

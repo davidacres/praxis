@@ -1,3 +1,4 @@
+import { ComposerAuxiliary } from './AmbientComposerControls';
 import { ComposerSurface } from './ComposerSurface';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
@@ -189,7 +190,7 @@ export function NewSession({
   const [uncommittedFiles, setUncommittedFiles] = useState<UncommittedBaseError | undefined>();
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<AiProvider | undefined>();
-  const [providerMenuPos, setProviderMenuPos] = useState<{ top: number; left: number } | undefined>();
+  const [providerMenuPos, setProviderMenuPos] = useState<{ top?: number; bottom?: number; left: number; maxHeight: number } | undefined>();
   const providerChipRef = useRef<HTMLButtonElement | null>(null);
   const providerMenuRef = useRef<HTMLDivElement | null>(null);
   const [modelOptions, setModelOptions] = useState<ModelOptions | undefined>();
@@ -526,7 +527,13 @@ export function NewSession({
     }
     const rect = providerChipRef.current?.getBoundingClientRect();
     if (rect) {
-      setProviderMenuPos({ top: rect.bottom + 4, left: rect.left });
+      const above = liveSettings?.appearance.composerStyle === 'ambient-canvas' && window.innerHeight - rect.bottom < 240;
+      setProviderMenuPos({
+        top: above ? undefined : rect.bottom + 4,
+        bottom: above ? window.innerHeight - rect.top + 4 : undefined,
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - 292)),
+        maxHeight: Math.max(0, Math.min(360, above ? rect.top - 16 : window.innerHeight - rect.bottom - 16))
+      });
     }
     // Settings may have changed since this view mounted (a provider added, set up or turned off).
     window.praxis.ai.listProviderStatuses().then(setProviderStatuses).catch(() => undefined);
@@ -921,13 +928,13 @@ export function NewSession({
               </button>
             </div>
           </SessionComposerHeader>
-          {references.length > 0 && <div className="session-context-references" data-testid="new-session-context-references">
+          {references.length > 0 && <ComposerAuxiliary className="session-context-references" data-testid="new-session-context-references">
             {references.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}>
               <Icon name={contextReferenceIcon(reference.kind)} size={13} /><span>{reference.label}</span>
               <button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={submitting}
                 onClick={() => setReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button>
             </span>)}
-          </div>}
+          </ComposerAuxiliary>}
           <SessionComposerInput
             ref={composerInputRef}
             placeholder={conversational ? 'Ask anything, brainstorm, or get something done…' : "What's the goal?"}
@@ -956,7 +963,7 @@ export function NewSession({
               {selectedProvider
                 ? <ProviderBrandLogo provider={selectedProvider} size={14} decorative />
                 : <Icon name="robot" size={14} />}
-              {selectedProvider ? providerLabel(selectedProvider) : 'Provider'}
+              <span className="session-provider-chip-label">{selectedProvider ? providerLabel(selectedProvider) : 'Provider'}</span>
               <Icon name="chevron-down" size={12} />
             </button>
             {providerMenuPos &&
@@ -966,7 +973,7 @@ export function NewSession({
                   className="composer-provider-menu"
                   role="listbox"
                   aria-label="AI provider"
-                  style={{ position: 'fixed', top: providerMenuPos.top, left: providerMenuPos.left }}
+                  style={{ position: 'fixed', ...providerMenuPos }}
                 >
                   {configuredProviderStatuses.length === 0 && (
                     <div className="popover-label">No providers configured</div>
@@ -1221,7 +1228,7 @@ export function NewSession({
             </button>
           </SessionComposerToolbar>
         </SessionComposerCard>
-        <div className="session-composer-footer">
+        <ComposerAuxiliary className="session-composer-footer">
           {selectedProvider === 'antigravity-cli' && <p className="hint" role="note">Antigravity requires Full tools and explicit Autopilot consent. No tool call will be prompted.</p>}
           <SessionPermissionModeControl value={permissionMode} onChange={setPermissionMode} testId="new-session" />
           <SessionGitBranchControl
@@ -1237,7 +1244,7 @@ export function NewSession({
             testId="new-session"
             disabled={submitting}
           />
-        </div>
+        </ComposerAuxiliary>
         </ComposerSurface>
 
       </div>

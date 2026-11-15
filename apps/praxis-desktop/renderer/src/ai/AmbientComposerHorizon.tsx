@@ -23,7 +23,7 @@ export function AmbientComposerHorizon({ state = 'idle', preview = false }: {
     const draw = (now: number) => {
       const focused = !!element.closest('.ambient-composer-canvas')?.matches(':focus-within');
       const width = element.clientWidth, height = element.clientHeight;
-      const base = preview ? 46 : Math.min(96, height - 20);
+      const base = preview ? 46 : Math.min(24, height - 20);
       const amplitude = preview ? 3 : state === 'thinking' ? 16 : state === 'approval' ? 9 : focused ? 6 : 4;
       const speed = state === 'thinking' ? 3.2 : state === 'approval' ? 1.4 : focused ? .8 : .5;
       if (!motion.matches && previous) time += Math.min((now - previous) / 1000, .05) * speed;
