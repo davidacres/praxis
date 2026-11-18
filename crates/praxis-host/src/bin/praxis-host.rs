@@ -1,5 +1,5 @@
 //! Standalone `praxis-host` binary supporting NDJSON `--stdio` RPC + event streaming
-//! and single-shot `--rpc` invocation for Electron (`rustHostBridge.ts`) and isolated E2E tests.
+//! and single-shot `--rpc` invocation for headless embedding and isolated E2E tests.
 
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     });
 
-    // Host-to-Electron calls share stdout with responses/events; replies arrive on stdin.
+    // Host-to-client calls share stdout with responses/events; replies arrive on stdin.
     let call_stdout = Arc::clone(&stdout);
     let calls = HostCallClient::new(move |frame| {
         write_frame(&call_stdout, &frame);

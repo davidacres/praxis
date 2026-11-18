@@ -2,9 +2,9 @@
 /**
  * Reset Praxis workspace/project persistence for local testing.
  *
- * This intentionally does not remove the whole Electron profile, settings,
+ * This intentionally does not remove the whole Praxis profile, settings,
  * credentials, or portable workspace files in repositories unless explicitly
- * requested. Use --user-data-dir when testing with a custom Electron profile.
+ * requested. Use --user-data-dir when testing with a custom Praxis profile.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,7 +17,7 @@ function usage() {
   node scripts/reset-praxis-workspace-data.mjs --confirm --include-located
   node scripts/reset-praxis-workspace-data.mjs --confirm --user-data-dir /path/to/profile
 
-Default reset removes from Electron userData:
+Default reset removes from the Praxis user-data directory:
   workspaces.json, workspace-locations.json, projects.json, projects/
 
 --include-located also removes the .workspace.praxis files registered in

@@ -9,7 +9,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 use super::model_pricing::{get_known_context_length, get_model_pricing};
 
@@ -313,8 +313,25 @@ fn cache() -> &'static Mutex<HashMap<String, Vec<ModelChoice>>> {
     CACHE.get_or_init(Default::default)
 }
 
+/// Per-process random salt: the cache is in-memory only, so the key digest never needs to be
+/// stable across runs and an API key is never hashed bare.
+fn cache_key_salt() -> &'static [u8; 32] {
+    static SALT: OnceLock<[u8; 32]> = OnceLock::new();
+    SALT.get_or_init(|| {
+        let mut salt = [0u8; 32];
+        salt[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+        salt[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+        salt
+    })
+}
+
 fn cache_key(provider: &str, url: &str, api_key: &str) -> String {
-    let digest = Sha256::digest(api_key.as_bytes())
+    use hmac::{Hmac, Mac};
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(cache_key_salt()).expect("any key length");
+    mac.update(api_key.as_bytes());
+    let digest = mac
+        .finalize()
+        .into_bytes()
         .iter()
         .fold(String::new(), |mut hex, byte| {
             use std::fmt::Write as _;

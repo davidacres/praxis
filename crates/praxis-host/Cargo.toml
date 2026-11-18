@@ -8,10 +8,6 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
-[features]
-default = []
-napi-addon = ["dep:napi", "dep:napi-derive"]
-
 [dependencies]
 praxis-ai.workspace = true
 praxis-contracts.workspace = true
@@ -21,8 +17,6 @@ praxis-trackers.workspace = true
 praxis-workflows.workspace = true
 axum.workspace = true
 chrono.workspace = true
-napi = { workspace = true, optional = true }
-napi-derive = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

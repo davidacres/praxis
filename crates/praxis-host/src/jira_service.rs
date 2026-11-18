@@ -365,6 +365,9 @@ impl HttpSession {
         let (Some(token_endpoint), Some(client_id)) = (token_endpoint, client_id) else {
             return false;
         };
+        if secure_token_endpoint(&token_endpoint).is_err() {
+            return false;
+        }
         let mut form = vec![
             ("grant_type", "refresh_token".to_owned()),
             ("refresh_token", refresh_token.clone()),
@@ -475,6 +478,8 @@ impl HttpSession {
                         .map(str::to_owned),
                 )
             };
+
+        secure_token_endpoint(&token_endpoint)?;
 
         // The loopback listener the authorisation server redirects back to.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -691,6 +696,26 @@ impl HttpSession {
         }
         self.session_id = None;
         Ok(())
+    }
+}
+
+/// A token endpoint that is safe to send credentials to: `https`, or `http` on the loopback
+/// interface for a local development server. The refresh token, authorisation code and client
+/// secret are posted to it, so a plain-`http` endpoint (from config or from discovery metadata)
+/// would expose them on the network.
+pub(crate) fn secure_token_endpoint(raw: &str) -> Result<(), String> {
+    let url =
+        url::Url::parse(raw).map_err(|e| format!("The token endpoint is not a valid URL: {e}"))?;
+    let loopback = match url.host() {
+        Some(url::Host::Domain(name)) => name.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    };
+    match url.scheme() {
+        "https" if url.host().is_some() => Ok(()),
+        "http" if loopback => Ok(()),
+        _ => Err("Refusing to send credentials to a token endpoint that is not https.".to_owned()),
     }
 }
 
@@ -2011,6 +2036,25 @@ pub fn unconfigured() -> Arc<dyn IssueTrackerService> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn credentials_are_only_posted_to_https_or_loopback_token_endpoints() {
+        for allowed in [
+            "https://auth.atlassian.com/oauth/token",
+            "http://127.0.0.1:8080/token",
+            "http://localhost:3000/token",
+        ] {
+            assert!(secure_token_endpoint(allowed).is_ok(), "{allowed}");
+        }
+        for refused in [
+            "http://auth.example.test/token",
+            "ftp://auth.example.test/token",
+            "file:///tmp/token",
+            "not a url",
+        ] {
+            assert!(secure_token_endpoint(refused).is_err(), "{refused}");
+        }
+    }
 
     #[test]
     fn only_a_web_sign_in_page_is_handed_to_the_os_opener() {

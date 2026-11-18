@@ -1,5 +1,5 @@
 //! Newline-delimited JSON (NDJSON) wire framing for the persistent `praxis-host --stdio` bridge
-//! between Electron (`rustHostBridge.ts`) and [`crate::HostContext`].
+//! between an embedding client and [`crate::HostContext`].
 
 use praxis_contracts::{RustEventEnvelope, RustHostStatus, RustRpcResponse};
 use serde::{Deserialize, Serialize};

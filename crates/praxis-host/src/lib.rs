@@ -1,5 +1,5 @@
 //! Shell-agnostic service container, RPC dispatcher, and event broadcast bus
-//! backing the Electron main process (via N-API / JSON-RPC) and headless test runs.
+//! backing the Tauri shell and headless (stdio JSON-RPC) test runs.
 
 pub mod ai_bridge;
 pub mod call_client;
@@ -10,8 +10,6 @@ pub mod electron_secrets;
 pub mod events;
 pub mod mcp_oauth_store;
 pub mod mobile_bridge;
-#[cfg(feature = "napi-addon")]
-pub mod napi_bridge;
 pub mod profile_bridge;
 pub mod secret_backends;
 pub mod secrets;

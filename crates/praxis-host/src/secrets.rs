@@ -110,7 +110,7 @@ impl HostSecretStore {
         if let Some(backend) = self.backend()
             && let Err(error) = backend.remove(key)
         {
-            eprintln!("[secrets] could not remove '{key}': {error}");
+            eprintln!("[secrets] could not remove a secret: {error}");
             return false;
         }
         self.inner

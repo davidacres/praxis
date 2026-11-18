@@ -86,7 +86,7 @@ Production dependencies of `@praxis/core` and the mobile protocol/relay packages
 | Package | Version | Licence |
 | --- | --- | --- |
 | `@agentclientprotocol/sdk` | 1.4.0 | Apache-2.0 |
-| `@hono/node-server` | 2.1.1 | MIT |
+| `@hono/node-server` | 2.1.6 | MIT |
 | `@modelcontextprotocol/sdk` | 1.32.1 | MIT |
 | `@noble/ciphers` | 1.3.0 | MIT |
 | `@noble/curves` | 1.9.7 | MIT |
@@ -140,7 +140,7 @@ Production dependencies of `@praxis/core` and the mobile protocol/relay packages
 | `gopd` | 1.2.0 | MIT |
 | `has-symbols` | 1.1.0 | MIT |
 | `hasown` | 2.0.4 | MIT |
-| `hono` | 4.13.13 | MIT |
+| `hono` | 4.13.16 | MIT |
 | `http-errors` | 2.0.1 | MIT |
 | `iconv-lite` | 0.7.3 | MIT |
 | `inherits` | 2.0.4 | ISC |

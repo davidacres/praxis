@@ -3,7 +3,7 @@
  * Build a calibration set for the composer's prompt clarity check from the
  * prompts in your own Praxis session history.
  *
- * The set stays in your Electron profile (never in the repository): it holds
+ * The set stays in your Praxis profile (never in the repository): it holds
  * your real prompts. Each item gets empty label columns for the same five
  * checks the model answers (see CLARITY_CHECKLIST in packages/core), plus an
  * overall "should the coach have spoken" judgement. Sampling is deterministic:

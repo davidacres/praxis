@@ -110,7 +110,7 @@ test('gadget fences behave as before and stay linear', () => {
   const closed = 'before\n```praxis-gadget\n{"kind":"choice"}\n```\nafter';
   assert.equal(findGadgetFences(closed).length, 1);
   assert.equal(findGadgetFences(closed)[0].body, '{"kind":"choice"}\n');
-  assert.equal(stripGadgetFences(closed), 'before\n\nafter'.replace('\n\n', '\n\n'));
+  assert.equal(stripGadgetFences(closed), 'before\n\nafter');
   assert.equal(stripGadgetFences('keep\n  ```praxis-gadget\n{"half'), 'keep');
   assert.equal(stripGadgetFences('x```praxis-gadget\n{"a":"```"}\n```'), 'x');
   assert.equal(stripGadgetFences('no gadget here'), 'no gadget here');

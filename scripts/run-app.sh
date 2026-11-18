@@ -15,8 +15,8 @@
 # PRAXIS_DEV_SERVER_URL so the renderer hot-reloads on save. The server
 # is shut down again when the app window closes.
 #
-# NODE_OPTIONS is cleared for the child processes. Electron rejects flags such
-# as --use-system-ca when they arrive via NODE_OPTIONS and exits with code 9
+# NODE_OPTIONS is cleared for the child processes. The desktop shell can reject flags such
+# as --use-system-ca when they arrive via NODE_OPTIONS and exit early
 # before the window ever appears, which is easy to mistake for a build failure.
 #
 # Usage:

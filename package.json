@@ -54,8 +54,6 @@
     "test:desktop:workflows": "node scripts/cargo-workspace.mjs test-workflows",
     "test:desktop:git": "node scripts/cargo-workspace.mjs test-git",
     "test:desktop:tauri": "node apps/praxis-desktop/scripts/test-tauri-e2e.cjs",
-    "test:desktop:rust-dual-mode": "npm run test:desktop:tauri",
-    "test:desktop:rust-parity": "npm run test:desktop:tauri",
     "test:desktop:mobile": "cargo test -p praxis-desktop -- mobile",
     "app:demo:mac": "./scripts/run-app.sh --demo",
     "app:build:mac": "./scripts/build-app.sh",
