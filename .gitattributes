@@ -1,0 +1,4 @@
+# Generated files are compared byte-for-byte by their --check scripts, so they must
+# be checked out with LF on every platform (Windows runners default to CRLF).
+*.generated.ts text eol=lf
+apps/praxis-desktop/renderer/src/host/praxisBridge.generated.ts text eol=lf

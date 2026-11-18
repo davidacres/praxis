@@ -91,7 +91,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Install Tauri system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2 file
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -112,6 +112,9 @@ jobs:
         run: npm ci
 
       - name: Build and package (linux)
+        env:
+          # linuxdeploy is itself an AppImage; run it extracted since runners have no FUSE.
+          APPIMAGE_EXTRACT_AND_RUN: 1
         run: node scripts/package-desktop.mjs --target linux
 
       - name: Upload installer artifact
