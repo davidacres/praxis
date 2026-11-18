@@ -35,11 +35,11 @@ jobs:
         env:
           PACKAGE_OWNER: ${{ github.repository_owner }}
         run: |
-          package_version="$(node -p "require('./apps/praxis-desktop/main/package.json').version")"
+          package_version="$(node -p "require('./apps/praxis-desktop/src-tauri/tauri.conf.json').version")"
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             package_version="${GITHUB_REF_NAME#v}"
           fi
-          node apps/praxis-desktop/main/scripts/stagePublishedLibraries.cjs "$RUNNER_TEMP/praxis-packages" "$PACKAGE_OWNER" "$package_version"
+          node scripts/stagePublishedLibraries.cjs "$RUNNER_TEMP/praxis-packages" "$PACKAGE_OWNER" "$package_version"
 
       - name: Publish core
         run: npm publish "$RUNNER_TEMP/praxis-packages/core"

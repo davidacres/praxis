@@ -1899,7 +1899,13 @@ pub fn sanitize_app_settings(raw: &Value) -> AppSettings {
                 defaults.appearance.show_brand_artwork,
             ),
             priority_colors: read_priority_colors(app_obj.get("priorityColors")),
-            composer_style: match app_obj.get("composerStyle").and_then(Value::as_str) { Some("hairline") => "hairline", Some("ambient-canvas") => "ambient-canvas", Some("command-strip") => "command-strip", _ => "classic" }.to_string(),
+            composer_style: match app_obj.get("composerStyle").and_then(Value::as_str) {
+                Some("hairline") => "hairline",
+                Some("ambient-canvas") => "ambient-canvas",
+                Some("command-strip") => "command-strip",
+                _ => "classic",
+            }
+            .to_string(),
             theme_id: read_string(app_obj.get("themeId"), &defaults.appearance.theme_id),
             theme_mode: read_theme_mode(app_obj.get("themeMode"), &defaults.appearance.theme_mode),
             accent_color: read_accent_color(app_obj.get("accentColor")),

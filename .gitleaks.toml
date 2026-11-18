@@ -42,6 +42,12 @@ regexes = [
   '''eyJhbGciOiJIUzI1NiJ9\.payload\.sig''',
   # Prose in a markdown-table fixture, not a credential.
   '''expiry/stale/dedupe''',
+  # Wire-protocol test vectors in crates/praxis-mobile/tests/fixtures/ts_vectors.json:
+  # a derived-from-nothing counting-pattern key (0x55, 0x5c, 0x63, ... step 7) and
+  # the rekey outputs computed from it. Synthetic, matched by exact value.
+  '''555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e''',
+  '''73dfff8ae9a186492e3c602fae675e5fa9839656c62407f28dbf1919''',
+  '''41f61558a0c4b4d2f3c1b20346ce7e8d2d9828ee3463dda34c8e1e''',
   # A localStorage key name, which generic-api-key misreads as key=value.
   '''praxis\.scheduledRuns\.v1''',
 ]

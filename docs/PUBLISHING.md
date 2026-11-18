@@ -35,7 +35,7 @@ From the repository root, with `GITHUB_TOKEN` set as described above:
 npm run build:core
 npm run build:mobile-protocol
 package_dir="$(mktemp -d)"
-node apps/praxis-desktop/main/scripts/stagePublishedLibraries.cjs "$package_dir" davidacres 0.4.0
+node scripts/stagePublishedLibraries.cjs "$package_dir" davidacres 0.4.0
 npm publish "$package_dir/core"
 npm publish "$package_dir/mobile-protocol"
 ```

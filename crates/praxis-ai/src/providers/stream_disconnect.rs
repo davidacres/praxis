@@ -43,7 +43,9 @@ pub struct StreamDisconnect {
 fn is_error_tail(tail: &str) -> bool {
     let mut disconnected = false;
     for line in tail.lines().map(str::trim).filter(|l| !l.is_empty()) {
-        let rest = line.strip_prefix(FALLBACK_WARNING).map_or(line, str::trim_start);
+        let rest = line
+            .strip_prefix(FALLBACK_WARNING)
+            .map_or(line, str::trim_start);
         if rest.starts_with(DISCONNECTED) {
             disconnected = true;
         } else if !rest.is_empty() {
@@ -104,7 +106,8 @@ mod tests {
 
     #[test]
     fn the_fallback_warning_alone_is_not_a_disconnect_when_prose_follows() {
-        let reply = "Warning: Falling back from WebSockets to HTTPS transport.\nHere is the full answer.";
+        let reply =
+            "Warning: Falling back from WebSockets to HTTPS transport.\nHere is the full answer.";
         assert_eq!(split_stream_disconnect(reply), None);
     }
 
