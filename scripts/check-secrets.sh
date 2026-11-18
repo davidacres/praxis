@@ -95,7 +95,9 @@ case "${1:-}" in
   --tree)  exec gitleaks dir . "${common[@]}" ;;
   --range) exec gitleaks git . "${common[@]}" --log-opts="${2:?range required}" ;;
   --history)
-    exec gitleaks git . "${common[@]}" ;;
+    # --verbose prints each finding (file, rule, commit, fingerprint; secrets stay
+    # redacted) so a CI failure names what to fix instead of only counting it.
+    exec gitleaks git . "${common[@]}" --verbose ;;
   --history-baseline)
     emit_history_baseline ;;
   "")      exec gitleaks git . "${common[@]}" --staged ;;
