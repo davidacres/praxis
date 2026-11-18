@@ -1,4 +1,4 @@
-name: Build and Release Electron App
+name: Build and Release Desktop App
 
 on:
   push:
@@ -38,22 +38,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
-        run: npm run build
+      - name: Build and package (mac)
+        run: node scripts/package-desktop.mjs --target mac
 
-      - name: Build DMG installer
-        run: npm run dist:mac --workspace=@praxis/desktop-main
-
-      - name: Upload DMG artifact
+      - name: Upload installer artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: installer-mac
           path: |
-            apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg
-            apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg.blockmap
-            apps/praxis-desktop/main/dist/Praxis-*-arm64.zip
-            apps/praxis-desktop/main/dist/Praxis-*-arm64.zip.blockmap
-            apps/praxis-desktop/main/dist/latest-mac.yml
+            dist/release/Praxis_*.dmg
           if-no-files-found: error
           retention-days: 1
 
@@ -82,26 +75,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
-        run: npm run build
+      - name: Build and package (win)
+        run: node scripts/package-desktop.mjs --target win
 
-      - name: Build Windows installer
-        run: npm run dist:win --workspace=@praxis/desktop-main
-
-      - name: Upload Windows installer artifact
+      - name: Upload installer artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: installer-win
           path: |
-            apps/praxis-desktop/main/dist/Praxis-*-setup.exe
-            apps/praxis-desktop/main/dist/Praxis-*-setup.exe.blockmap
-            apps/praxis-desktop/main/dist/latest.yml
+            dist/release/Praxis_*-setup.exe
           if-no-files-found: error
           retention-days: 1
 
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
+      - name: Install Tauri system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.release_tag || github.ref }}
@@ -120,20 +111,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
-        run: npm run build
+      - name: Build and package (linux)
+        run: node scripts/package-desktop.mjs --target linux
 
-      - name: Build Linux installer
-        run: npm run dist:linux --workspace=@praxis/desktop-main
-
-      - name: Upload Linux installer artifact
+      - name: Upload installer artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: installer-linux
           path: |
-            apps/praxis-desktop/main/dist/Praxis-*.AppImage
-            apps/praxis-desktop/main/dist/Praxis-*.deb
-            apps/praxis-desktop/main/dist/latest-linux.yml
+            dist/release/Praxis_*.AppImage
+            dist/release/Praxis_*.deb
           if-no-files-found: error
           retention-days: 1
 
@@ -162,20 +149,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload installers and update metadata
+      - name: Upload installers
         run: |
-          gh release upload "$RELEASE_TAG" --clobber \
-            dist/Praxis-*-arm64.dmg \
-            dist/Praxis-*-arm64.dmg.blockmap \
-            dist/Praxis-*-arm64.zip \
-            dist/Praxis-*-arm64.zip.blockmap \
-            dist/Praxis-*-setup.exe \
-            dist/Praxis-*-setup.exe.blockmap \
-            dist/Praxis-*.AppImage \
-            dist/Praxis-*.deb \
-            dist/latest.yml \
-            dist/latest-mac.yml \
-            dist/latest-linux.yml
+          gh release upload "$RELEASE_TAG" --clobber dist/Praxis_*
         env:
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
           GH_REPO: ${{ github.repository }}

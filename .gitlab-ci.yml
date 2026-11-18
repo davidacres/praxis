@@ -26,7 +26,7 @@ test:
     - npm ci
     - npm run build:core
     - npm run check-types
-    # `npm test` also runs the desktop e2e suite, which needs an Electron
+    # `npm test` also runs the desktop e2e suite, which needs a
     # display this image does not have. Run the parts that can.
     - npm run test:core
     - npm run build:renderer

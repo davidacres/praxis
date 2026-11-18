@@ -242,7 +242,7 @@ used per-key items; they are migrated into the single item once.
 | Application logs | ✓ | Output tab tails the shared log bus (`[ai]`, `[jira]`, `[gitlab]`, `[workflow]` tags). Filter box (terms ANDed, case-insensitive, tags searchable), copy, save as a file, clear view. History survives a restart: main appends to `<userData>/logs/application.log` (one JSON string per line, rotated once past 1 MB) and seeds the 500-line ring from it, with a `previous session above` marker (FX-BE-041) |
 | Native window chrome | ✓ | Tauri window; native default menu |
 | Auto-update | ✗ | Not ported: the Tauri host reports `unsupported` (FX-BE-034; blocked on credentials) |
-| Installer packaging | ? | `npm run desktop:dist` builds the Tauri binary without bundling; installers, signing and notarization are not re-established on Tauri |
+| Installer packaging | ? | `npm run release:package` builds the Tauri installer (dmg / nsis / AppImage+deb) via `tauri.release.conf.json`; macOS signing and notarization are env-driven and opt-in; Windows signing and auto-update are not set up |
 
 ## Remaining gaps
 

@@ -65,99 +65,63 @@ A consumer retaining the internal import name can use an npm alias:
 
 ## Creating Releases
 
-### Local signed builds
+Praxis desktop is a Tauri app. `tauri.conf.json` keeps bundling off so everyday
+builds stay fast; `src-tauri/tauri.release.conf.json` switches it on, and
+`scripts/package-desktop.mjs` drives it. Tauri cannot cross-package, so each
+platform's installer is built on that platform.
 
-The local scripts pass signing credentials directly to electron-builder and do
-not write passwords or certificates into the repository.
-
-For macOS, export a password-protected **Developer ID Application** certificate
-and its private key from Keychain Access as a `.p12`, then run:
-
-```bash
-npm run release:local:mac -- --certificate /secure/path/DeveloperIDApplication.p12
-```
-
-The script prompts for the `.p12` password, Apple ID, Team ID, and Apple
-app-specific password. Password input is hidden. It builds a signed and
-notarized DMG, the ZIP required by Squirrel.Mac, their blockmaps, and
-`latest-mac.yml`.
-
-For Windows, export or obtain a password-protected Authenticode `.pfx`, then
-run from PowerShell on Windows:
-
-```powershell
-npm run release:local:win -- -Certificate C:\secure\PraxisSigning.pfx
-```
-
-The password is prompted for as a secure value. On macOS or Linux,
-electron-builder can also sign a cross-built Windows installer with:
+### Local build and publish
 
 ```bash
-./scripts/build-signed-installer.sh --target win --certificate /secure/path/PraxisSigning.pfx
+npm run release:package              # host platform -> dist/release/
+npm run release:publish              # create/update the GitHub Release, upload dist/release/*
 ```
 
-All prompts can be bypassed for an existing secure shell session by exporting
-electron-builder's standard variables:
+`release:package` builds the code-intelligence service, runs `tauri build`
+with the release config, and copies the installers to `dist/release/`:
+
+| Platform | Artifact |
+| --- | --- |
+| macOS | `Praxis_<version>_aarch64.dmg` |
+| Windows | `Praxis_<version>_x64-setup.exe` (NSIS) |
+| Linux | `Praxis_<version>_amd64.AppImage`, `.deb` |
+
+`release:publish` needs an authenticated GitHub CLI (`gh auth login`), requires
+the tag to match `version` in `tauri.conf.json` (bump it first), and is safe to
+rerun. Pass `--draft` or `--prerelease` after `--`.
+
+### Signing (macOS)
+
+Signing is opt-in through Tauri's standard variables, so nothing is written to
+disk. Without them the DMG is **unsigned** and macOS will warn on first open.
 
 ```text
-macOS:  CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID,
-        APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
-Windows: WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD
+APPLE_SIGNING_IDENTITY   Developer ID Application identity already in your keychain
+  or APPLE_CERTIFICATE + APPLE_CERTIFICATE_PASSWORD   base64 .p12 (CI)
+APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID   enable notarization
 ```
 
-Do not put these values in a tracked file. `.env` files are ignored, but an OS
-keychain or password manager is preferable for long-lived credentials.
+Do not put these in a tracked file. Windows Authenticode signing is not wired
+up yet; add a `bundle.windows.signCommand` to the release config when needed.
 
-After reviewing the artifacts, publish the current platform through your
-authenticated GitHub CLI session:
+### Auto-update
 
-```bash
-gh auth login
-npm run release:local:upload -- --target mac
-```
-
-The uploader requires the release tag to match the desktop package version,
-creates the GitHub Release when necessary, and safely replaces matching assets
-when rerun. Use `--target win` or `--target linux` for those platforms.
-
-### Manual Release
-
-To create a release and upload the installer:
-
-```bash
-# Build the installers and update metadata first
-npm run dist:mac --workspace=@praxis/desktop-main
-
-# Create the release (requires GITHUB_TOKEN)
-npm run release:create
-
-# Upload the built installer
-gh release upload v0.3.0 \
-  apps/praxis-desktop/main/dist/Praxis-0.3.0-arm64.dmg \
-  apps/praxis-desktop/main/dist/Praxis-0.3.0-arm64.zip \
-  apps/praxis-desktop/main/dist/latest-mac.yml
-```
+Auto-update is not set up on Tauri: the releases carry installers only, with
+no `latest*.yml` manifests. It needs `tauri-plugin-updater` and an updater
+signing key (`bundle.createUpdaterArtifacts`).
 
 ### Automated Releases (GitHub Actions)
 
-When GitHub Actions becomes available, releases will be created automatically when you push a version tag:
+Pushing a version tag runs `build-release.yml`, which packages macOS, Windows
+and Linux in parallel and attaches the installers to the GitHub Release:
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.6.1
+git push origin v0.6.1
 ```
 
-This triggers:
-
-1. `publish-packages.yml` publishes the shared libraries to GitHub Packages.
-2. `build-release.yml` builds the signed/notarized installers and updater
-   metadata on macOS, Windows, and Linux, then creates the GitHub Release and
-   uploads every artifact from one release job.
-
-The release contains the native installers plus `latest.yml`,
-`latest-mac.yml`, and `latest-linux.yml`. The macOS release also contains a ZIP
-because Squirrel.Mac uses it for automatic updates; users still install Praxis
-from the DMG.
+Actions minutes are billed, so prefer the local path unless you need all three
+platforms. `build-release.yml` can also be dispatched with an existing tag.
 
 ## Package Versions
 
@@ -175,14 +139,14 @@ git tag v0.4.0
 git push origin main --tags
 ```
 
-## Using the Built Electron App
+## Using the Built App
 
-The Electron app is released as installers on the [GitHub Releases](https://github.com/davidacres/praxis/releases) page.
+The desktop app is released as installers on the [GitHub Releases](https://github.com/davidacres/praxis/releases) page.
 
 ### macOS Installation
 
 **Method 1: GUI (Easiest)**
-1. Download `Praxis-VERSION-arm64.dmg` from releases
+1. Download `Praxis_VERSION_aarch64.dmg` from releases
 2. Double-click to mount
 3. Drag `Praxis.app` to Applications folder
 4. Unmount the DMG
@@ -190,7 +154,7 @@ The Electron app is released as installers on the [GitHub Releases](https://gith
 **Method 2: Command Line**
 ```bash
 # Download and install
-hdiutil mount Praxis-0.3.0-arm64.dmg && \
+hdiutil mount Praxis_0.6.1_aarch64.dmg && \
 cp -r /Volumes/Praxis/Praxis.app /Applications/ && \
 hdiutil unmount /Volumes/Praxis
 
