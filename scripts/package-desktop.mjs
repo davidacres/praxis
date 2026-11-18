@@ -51,6 +51,10 @@ if (target === 'mac') {
 }
 
 if (!args.includes('--skip-build')) {
+  // The renderer typechecks against core's emitted declarations; a fresh checkout has none.
+  for (const script of ['build:core', 'build:mobile-protocol', 'build:mobile-relay']) {
+    run('npm', ['run', script], root);
+  }
   run('node', [path.join(root, 'scripts', 'bundle-code-intelligence.mjs')], root);
   const renderer = path.join(root, 'apps', 'praxis-desktop', 'renderer');
   run(
@@ -81,7 +85,8 @@ log(`Ready in dist/release: ${produced.join(', ')}`);
 
 function run(cmd, cmdArgs, cwd) {
   log(`${cmd} ${cmdArgs.join(' ')}`);
-  const r = spawnSync(cmd, cmdArgs, { cwd, stdio: 'inherit' });
+  // npm is npm.cmd on Windows, which spawn only resolves through a shell.
+  const r = spawnSync(cmd, cmdArgs, { cwd, stdio: 'inherit', shell: process.platform === 'win32' && cmd === 'npm' });
   if (r.status !== 0) fail(`${cmd} exited with ${r.status ?? r.signal}.`);
 }
 function log(m) { process.stdout.write(`==> ${m}\n`); }

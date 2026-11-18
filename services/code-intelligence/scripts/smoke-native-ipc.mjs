@@ -157,7 +157,7 @@ export async function smokeNativeIpc(executable) {
     process.stdout.write('Native IPC smoke passed: automatic startup, owner lock, forged/stale token rejection, indexing, concurrent search, consent, backup, restart, crash takeover and unregister.\n');
   } finally {
     await stop();
-    await rm(temporary, { recursive: true, force: true });
+    await rm(temporary, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 }).catch(() => {});
   }
 }
 
