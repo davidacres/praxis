@@ -126,8 +126,17 @@ pub fn serve_document(html: String) -> std::io::Result<ServedDocument> {
             };
             let _ = stream.set_nonblocking(false);
             let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+            // Read the whole request head. A client may send it in several segments, and
+            // closing with unread bytes makes Linux reset the connection, which can discard
+            // the response we are about to write.
             let mut head = [0u8; 4096];
-            let read = stream.read(&mut head).unwrap_or(0);
+            let mut read = 0;
+            while read < head.len() && !head[..read].windows(4).any(|w| w == b"\r\n\r\n") {
+                match stream.read(&mut head[read..]) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => read += n,
+                }
+            }
             let request = String::from_utf8_lossy(&head[..read]);
             let target = request
                 .lines()
@@ -147,6 +156,7 @@ pub fn serve_document(html: String) -> std::io::Result<ServedDocument> {
             );
             let _ = stream.write_all(response.as_bytes());
             let _ = stream.write_all(body);
+            let _ = stream.shutdown(std::net::Shutdown::Write);
         }
     });
     Ok(ServedDocument {

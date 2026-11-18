@@ -34,7 +34,15 @@ impl Profile {
 }
 impl Drop for Profile {
     fn drop(&mut self) {
-        fs::remove_dir_all(&self.root).expect("cleanup profile");
+        // A background writer (session store, watchers) can still be creating files while we
+        // delete, which Linux reports as "Directory not empty". Retry; a leaked temp dir is
+        // not a test failure.
+        for _ in 0..10 {
+            if fs::remove_dir_all(&self.root).is_ok() || !self.root.exists() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
     }
 }
 
