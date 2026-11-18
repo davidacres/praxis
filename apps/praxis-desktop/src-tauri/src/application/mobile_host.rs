@@ -68,6 +68,26 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// Non-loopback IPv4 interfaces (`lanInterfaces`), plus the loopback ones when `include_internal`.
+#[cfg(windows)]
+fn interfaces(include_internal: bool) -> Vec<(String, Ipv4Addr)> {
+    let mut found: Vec<(String, Ipv4Addr)> = Vec::new();
+    if let Ok(all) = if_addrs::get_if_addrs() {
+        for entry in all {
+            if entry.is_loopback() && !include_internal {
+                continue;
+            }
+            let if_addrs::IfAddr::V4(v4) = &entry.addr else {
+                continue;
+            };
+            if !found.iter().any(|(_, existing)| *existing == v4.ip) {
+                found.push((entry.name.clone(), v4.ip));
+            }
+        }
+    }
+    found
+}
+
+#[cfg(unix)]
 fn interfaces(include_internal: bool) -> Vec<(String, Ipv4Addr)> {
     use nix::ifaddrs::getifaddrs;
     use nix::net::if_::InterfaceFlags;

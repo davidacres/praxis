@@ -38,7 +38,6 @@ serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
-nix = { workspace = true, features = ["net"] }
 praxis-mobile.workspace = true
 async-trait.workspace = true
 reqwest.workspace = true
@@ -60,6 +59,9 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
 objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-app-kit", "objc2-core-foundation", "WKWebView", "WKSnapshotConfiguration"] }
 
+[target."cfg(windows)".dependencies]
+if-addrs = "0.15.0"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
@@ -67,3 +69,6 @@ custom-protocol = ["tauri/custom-protocol"]
 [dev-dependencies]
 tar.workspace = true
 flate2.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["net"] }
