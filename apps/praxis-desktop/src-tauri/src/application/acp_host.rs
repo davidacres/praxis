@@ -1511,14 +1511,20 @@ async fn drive(
     }
     tokio::spawn(serve(Arc::clone(task), Arc::clone(&connection), incoming));
 
-    let init = connection
+    let init = match connection
         .request("initialize", json!({
             "protocolVersion": 1,
             "clientCapabilities": { "_meta": super::background_tasks::client_meta(), "fs": { "readTextFile": request.tool_mode != "project-only", "writeTextFile": request.tool_mode == "full" } },
             "clientInfo": { "name": "praxis", "version": "0.0.0" }
         }))
         .await
-        .map_err(|e| with_stderr(&e.to_string()))?;
+    {
+        Ok(init) => init,
+        Err(e) => return Err(with_stderr(&connection, &e.to_string()).await),
+    };
+    if let Err(e) = connection.authenticate_if_required(&init).await {
+        return Err(with_stderr(&connection, &e.to_string()).await);
+    }
     let capabilities = init["agentCapabilities"].clone();
     let http_supported = capabilities["mcpCapabilities"]["http"] == true;
     let servers: Vec<Value> = request
@@ -1583,13 +1589,16 @@ async fn drive(
         }
     }
     if !resumed {
-        session = connection
+        session = match connection
             .request(
                 "session/new",
                 json!({ "cwd": task.working_directory, "mcpServers": servers }),
             )
             .await
-            .map_err(|e| with_stderr(&e.to_string()))?;
+        {
+            Ok(session) => session,
+            Err(e) => return Err(with_stderr(&connection, &e.to_string()).await),
+        };
         agent_session = session["sessionId"]
             .as_str()
             .ok_or("The agent did not return a session id.")?
@@ -1736,7 +1745,10 @@ async fn drive(
     // The reply can overtake the last streamed chunks by a hair; let them land before the gate closes.
     tokio::time::sleep(Duration::from_millis(30)).await;
     task.prompt_in_flight.store(false, Ordering::SeqCst);
-    let response = reply.map_err(|e| with_stderr(&e.to_string()))?;
+    let response = match reply {
+        Ok(response) => response,
+        Err(e) => return Err(with_stderr(&connection, &e.to_string()).await),
+    };
     settle(
         task,
         &response,
@@ -1747,8 +1759,14 @@ async fn drive(
 }
 
 /// Appends the agent's stderr tail to an error so the person sees why it failed.
-fn with_stderr(message: &str) -> String {
-    message.to_owned()
+async fn with_stderr(connection: &AcpConnection, message: &str) -> String {
+    let tail = connection.stderr_tail().await;
+    let trimmed = tail.trim();
+    if trimmed.is_empty() {
+        message.to_owned()
+    } else {
+        format!("{message}\n{trimmed}")
+    }
 }
 
 fn mcp_for_session(server: &Value, http_supported: bool) -> Option<Value> {

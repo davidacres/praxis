@@ -122,8 +122,7 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     urlPlaceholder: '',
     modelPlaceholder: '',
     defaultCommand: 'agy',
-    notInstalledHint: 'Not found on PATH — install the ACP package or set the executable path below.',
-    installPackage: 'agy',
+    notInstalledHint: 'Not found on PATH — install the Antigravity CLI (agy) or set the executable path below.',
     signIn: { text: 'Antigravity keeps its own sign-in; follow its prompt the first time it runs.' }
   },
   {

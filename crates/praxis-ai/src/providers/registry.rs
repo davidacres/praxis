@@ -113,7 +113,7 @@ pub fn built_in_descriptors() -> Vec<ProviderDescriptor> {
             "copilot",
             &["--acp"],
         ),
-        cli("antigravity-cli", "Antigravity", "antigravity-acp", &[]),
+        cli("antigravity-cli", "Antigravity", "agy", &["acp"]),
         cli("cursor-cli", "Cursor (local)", "agent", &["acp"]),
     ]
 }

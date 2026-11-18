@@ -411,7 +411,6 @@ fn acp_package(provider: &str) -> Option<&'static str> {
     match provider {
         "claude-code-cli" => Some("@agentclientprotocol/claude-agent-acp"),
         "codex-cli" => Some("@agentclientprotocol/codex-acp"),
-        "antigravity-cli" => Some("agy"),
         _ => None,
     }
 }

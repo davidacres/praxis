@@ -90,7 +90,8 @@ export const PROVIDER_DESCRIPTORS: Record<BuiltInAiProvider, ProviderDescriptor>
     kind: 'cli-agent',
     hostKind: 'acp',
     label: 'Antigravity',
-    defaultCommand: 'antigravity-acp'
+    defaultCommand: 'agy',
+    defaultArgs: ['acp']
   },
   'cursor-cli': {
     id: 'cursor-cli',

@@ -107,10 +107,13 @@ fn apply(ns_window: &NSWindow, titlebar_height: f64) {
     container_frame.origin.y = ns_window.frame().size.height - container_height;
     container.setFrame(container_frame);
 
+    // AppKit's origin is bottom-left: the container is `button_height + y` tall, so a
+    // button at origin.y 0 sits exactly `y` below the container's top. A stock window
+    // starts its buttons at a non-zero origin.y, so it must be reset, not preserved.
     for (index, button) in [close, miniaturize, zoom].iter().enumerate() {
         button.setFrameOrigin(CGPoint::new(
             TRAFFIC_LIGHT_X + index as f64 * space_between,
-            y,
+            0.0,
         ));
     }
 }

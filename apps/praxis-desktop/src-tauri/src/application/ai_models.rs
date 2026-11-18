@@ -119,11 +119,15 @@ async fn read_model_selector(
         })
     };
     let outcome = tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
-        connection
+        let init = connection
             .request(
                 "initialize",
                 json!({ "protocolVersion": 1, "clientCapabilities": {} }),
             )
+            .await
+            .map_err(|e| e.to_string())?;
+        connection
+            .authenticate_if_required(&init)
             .await
             .map_err(|e| e.to_string())?;
         let session = connection

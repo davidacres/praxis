@@ -115,8 +115,8 @@ the next gap is found by reading it rather than by assuming.
     Copilot and Antigravity show no cost chip and the app does not price their tokens.
   - Claude's `model_usage` includes small internal calls (a Haiku call rode along), so
     the reply's model is the row that did the most work.
-  - `packages/antigravity-acp` is ours: it returns `usage` on the response. `agy` reports
-    no model and no context window, so its replies show the requested model and no ring.
+  - `agy acp` is Antigravity's native ACP server: it returns `usage` on the response and
+    `usage_update` context window occupancy/size.
 - **`ai.spendLimit` is a budget the user sets, not a balance anyone reports.**
   Nothing Praxis talks to exposes credits: ACP carries a cumulative `cost` but no
   limit, and the gateway client only calls `/v1/models` and `/v1/chat/completions`.

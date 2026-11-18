@@ -749,7 +749,7 @@ function UpdateIndicator({ settingsOpen, onOpenAiSettings }: { settingsOpen: boo
 }
 
 type AcpUpdate = { provider: AiProvider; label: string; current: string; latest: string };
-const ACP_MANAGED_PROVIDERS: AiProvider[] = ['claude-code-cli', 'codex-cli', 'antigravity-cli'];
+const ACP_MANAGED_PROVIDERS: AiProvider[] = ['claude-code-cli', 'codex-cli'];
 
 /** Checks alongside the startup app-update check and surfaces actionable ACP package updates. */
 function AcpUpdateNotice({

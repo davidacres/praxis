@@ -209,6 +209,34 @@ impl AcpConnection {
         .await
     }
 
+    /// Authenticates when the agent's `initialize` response advertises `authMethods`.
+    ///
+    /// Agents that rely on existing CLI credentials (like `agy acp`) still require an
+    /// `authenticate` call before `session/new`. Prefer `"oauth-personal"` when offered,
+    /// otherwise fall back to the first advertised method.
+    pub async fn authenticate_if_required(&self, init: &Value) -> Result<(), RpcError> {
+        let Some(methods) = init.get("authMethods").and_then(Value::as_array) else {
+            return Ok(());
+        };
+        let preferred = methods
+            .iter()
+            .find(|m| m.get("id").and_then(Value::as_str) == Some("oauth-personal"))
+            .or_else(|| methods.first())
+            .and_then(|m| m.get("id").and_then(Value::as_str));
+        let Some(method_id) = preferred else {
+            return Ok(());
+        };
+        match self
+            .request("authenticate", json!({ "methodId": method_id }))
+            .await
+        {
+            Ok(_) => Ok(()),
+            // Agents that advertise authMethods without implementing `authenticate` fail with -32601.
+            Err(err) if err.code == -32601 => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+
     /// The tail of what the agent wrote to stderr, for error messages.
     pub async fn stderr_tail(&self) -> String {
         self.stderr.lock().await.clone()

@@ -120,9 +120,6 @@ jobs:
       - name: Repo skill mirrors match .agents/skills
         run: npm run test:skills
 
-      - name: Antigravity auto-approval stays behind explicit consent
-        run: npm run test:antigravity-consent
-
       - name: Desktop Tauri E2E and parity tests
         run: npm run test:desktop:tauri
 
