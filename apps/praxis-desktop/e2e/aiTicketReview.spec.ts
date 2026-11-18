@@ -52,7 +52,7 @@ test('ticket reviews retain project ownership and recover older records into the
 
   // Reproduce a legacy record while the isolated app is stopped, then restart.
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   const sessionPath = path.join(reuse.userDataDir, 'ai-sessions.json');
   const legacy = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
   delete legacy['praxis.agentSessions'][review.issueKey].projectId;

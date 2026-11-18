@@ -21,13 +21,13 @@ const REPO_ROOT =path.resolve(__dirname, '../../..');
 const BACKEND_BINARY = process.env.PRAXIS_TAURI_BIN
   ?? path.join(REPO_ROOT, 'target', 'debug', process.platform === 'win32' ? 'praxis-desktop.exe' : 'praxis-desktop');
 
-/** Stand-in for the Electron application object the specs were written against. */
+/** The running backend process and its browser context, as the specs drive them. */
 export interface BackendHandle {
   process(): ChildProcess;
   close(): Promise<void>;
   context(): BrowserContext;
   windows(): Page[];
-  /** Electron main-process evaluation has no equivalent: the backend is a separate Rust process. */
+  /** Evaluating inside the backend has no equivalent: it is a separate Rust process. */
   evaluate(...args: unknown[]): Promise<never>;
   waitForEvent(event: string): Promise<never>;
 }
@@ -44,7 +44,7 @@ export interface ChannelContext {
 }
 
 /**
- * Answers a renderer IPC call in the test process. Replaces the Electron-era
+ * Answers a renderer IPC call in the test process. Replaces the old main-process
  * `ipcMain.removeHandler(ch); ipcMain.handle(ch, ...)` stubs and `dialog.show*Dialog`
  * mocks. Runs in Node, so it can close over fixtures and record calls in ordinary
  * variables instead of `globalThis` in the (retired) main process. Throw to reject
@@ -53,7 +53,7 @@ export interface ChannelContext {
 export type ChannelHandler = (args: any[], context: ChannelContext) => unknown | Promise<unknown>;
 
 export interface TestApp {
-  electronApp: BackendHandle;
+  backendApp: BackendHandle;
   window: Page;
   userDataDir: string;
   /** Per-test settings file the app reads/writes instead of the real shared one. */
@@ -70,14 +70,14 @@ export interface TestApp {
   callBackend(channel: string, ...args: unknown[]): Promise<any>;
   /**
    * Delivers a host event to the renderer exactly as the backend's event stream would
-   * (`webContents.send(channel, payload)` in the Electron main process). Goes to every
+   * (an event pushed from the backend). Goes to every
    * page of the context unless `page` is given.
    */
   emitEvent(channel: string, payload?: unknown, page?: Page): Promise<void>;
   /**
    * Opens another window onto the same backend: a new page of the same browser context
    * (so it shares storage, the channel overrides and the event stream, like a second
-   * `BrowserWindow` on the Electron main process). Defaults to the main window's URL.
+   * window). Defaults to the main window's URL.
    */
   openWindow(url?: string): Promise<Page>;
   /** Every open window (page), main window first. */
@@ -87,7 +87,7 @@ export interface TestApp {
   /**
    * What the shell does when the user closes or quits: asks the renderer to confirm
    * (`window:closeRequested`, with the running-session count and the next armed schedule,
-   * exactly as the Electron main process derived them). Resolves with a promise that settles
+   * exactly as the backend derives them). Resolves with a promise that settles
    * when the renderer confirms (`window:confirmClose`) - the point at which the app would exit.
    */
   requestClose(): Promise<Promise<void>>;
@@ -190,7 +190,7 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
 
 /**
  * Playwright already traces every context a test launches (`trace: 'retain-on-failure'`), so a spec
- * that starts its own trace (the Electron-era `electronApp.context().tracing.start`) would hit
+ * that starts its own trace (a `backendApp.context().tracing.start` call) would hit
  * "Tracing has been already started". Starting is then a no-op, and stopping it writes
  * the requested file from the chunk recorded so far and reopens a chunk, so the harness trace
  * keeps recording to the end of the test.
@@ -221,14 +221,14 @@ function tracingTolerantContext(context: BrowserContext): BrowserContext {
 
 function backendHandle(backend: ChildProcess, context: BrowserContext): BackendHandle {
   const unsupported = (what: string) => async (): Promise<never> => {
-    throw new Error(`${what} drove the retired Electron main process and has no equivalent: the backend is a separate Rust process. Use TestApp.overrideChannel (stub/record a channel or dialog), emitEvent (push a host event), openWindow, callBackend/callHost, page.setViewportSize, the filesystem, or notReproducible() for a native-only step.`);
+    throw new Error(`${what} drove a main-process API that no longer exists and has no equivalent: the backend is a separate Rust process. Use TestApp.overrideChannel (stub/record a channel or dialog), emitEvent (push a host event), openWindow, callBackend/callHost, page.setViewportSize, the filesystem, or notReproducible() for a native-only step.`);
   };
   return {
     process: () => backend,
     context: () => tracingTolerantContext(context),
     windows: () => context.pages(),
-    evaluate: unsupported('electronApp.evaluate'),
-    waitForEvent: unsupported('electronApp.waitForEvent'),
+    evaluate: unsupported('backendApp.evaluate'),
+    waitForEvent: unsupported('backendApp.waitForEvent'),
     async close() {
       await context.close().catch(() => undefined);
       if (backend.exitCode !== null || backend.signalCode !== null) return;
@@ -256,7 +256,7 @@ async function findFreePort(): Promise<number> {
 /**
  * Launches the app fully isolated from the developer's machine:
  *
- * - `--user-data-dir` gives Electron a throwaway profile, and
+ * - `--user-data-dir` gives the backend a throwaway profile, and
  * - `PRAXIS_SETTINGS_PATH` points the settings backend (which the
  *   connection store shares) at a throwaway file inside that profile.
  *
@@ -267,7 +267,7 @@ async function findFreePort(): Promise<number> {
  *
  * `reuse` relaunches into an earlier test app's profile (same user-data dir
  * and settings file) so persistence tests can verify state survives a
- * restart; callers then close the intermediate app with `electronApp.close()`
+ * restart; callers then close the intermediate app with `backendApp.close()`
  * only, letting `closeTestApp` clean the profile up after the final launch.
  */
 export interface LaunchOptions {
@@ -410,14 +410,14 @@ export async function launchTestApp(
   const context = await chromium.launchPersistentContext(path.join(userDataDir, 'chromium-profile'), {
     headless: !options?.headed,
     viewport: { width: 1440, height: 900 },
-    // The specs were written against a day-first locale ("15 Jan"); Electron took it from the OS.
+    // The specs were written against a day-first locale ("15 Jan"); the OS supplied it before.
     locale: 'en-GB',
-    // Electron's nativeTheme defaulted to light under the test runner; Chromium otherwise follows the
+    // The suite expects a light theme by default; Chromium otherwise follows the
     // host OS, which turns every 'system' theme default into dark on a dark-mode machine.
     colorScheme: 'light'
   });
   await context.addInitScript(tauriShim, { port, token });
-  const electronApp = backendHandle(backend, context);
+  const backendApp = backendHandle(backend, context);
   const overrides = new Map<string, ChannelHandler>();
   const callRoute = (route: 'rpc' | 'host') => async (channel: string, ...args: unknown[]): Promise<any> => {
     const response = await fetch(`http://127.0.0.1:${port}/${route}?token=${token}`, { method: 'POST', body: JSON.stringify({ channel, args }) });
@@ -449,13 +449,13 @@ export async function launchTestApp(
     await context.addInitScript(apply, names);
     await Promise.all(context.pages().map(page => page.evaluate(apply, names).catch(() => undefined)));
   };
-  testAppProcesses.set(electronApp, backend);
+  testAppProcesses.set(backendApp, backend);
   const window = context.pages()[0] ?? await context.newPage();
   const baseUrl = process.env.PRAXIS_E2E_RENDERER_URL ?? `http://localhost:${process.env.PRAXIS_E2E_PORT || 5173}`;
   window.on('console', message => {
     if (message.type() === 'error') console.log(`PAGE LOG [error]: ${message.text()}`);
   });
-  // The Electron window had its shell (and its global shortcuts) up by the time `reload()` resolved;
+  // The window had its shell (and its global shortcuts) up by the time `reload()` resolved;
   // the webview installs its host bridge asynchronously, so a key press straight after a reload
   // would reach a shell that was not listening yet. A reload resolves once the title bar is back.
   const reloadPage = window.reload.bind(window);
@@ -519,7 +519,7 @@ export async function launchTestApp(
     return url.toString();
   };
   const testApp: TestApp = {
-    electronApp, window, userDataDir, settingsPath,
+    backendApp, window, userDataDir, settingsPath,
     openWindow,
     windows: () => context.pages(),
     callHost: callRoute('host'),
@@ -536,7 +536,7 @@ export async function launchTestApp(
       // Confirming is the point at which the app would exit, so the backend is stopped here.
       await testApp.overrideChannel('window:confirmClose', async () => {
         // Stopped at once (not asked to close), so nothing it was scheduled to do runs after the answer.
-        testAppProcesses.get(testApp.electronApp)?.kill('SIGTERM') ?? testApp.electronApp.process().kill('SIGTERM');
+        testAppProcesses.get(testApp.backendApp)?.kill('SIGTERM') ?? testApp.backendApp.process().kill('SIGTERM');
         confirm();
       });
       const sessions = (await callBackend('ai:listSessions')) as Array<{ state?: string }>;
@@ -764,8 +764,8 @@ const testAppProcesses = new WeakMap<BackendHandle, ChildProcess>();
 /** A forced exit cleans up isolation, but still fails verification. */
 export async function closeTestApp(app: TestApp, options: { timeoutMs?: number } = {}): Promise<void> {
   // Playwright releases the process handle when its application closes.
-  const child = testAppProcesses.get(app.electronApp) ?? app.electronApp.process();
-  testAppProcesses.set(app.electronApp, child);
+  const child = testAppProcesses.get(app.backendApp) ?? app.backendApp.process();
+  testAppProcesses.set(app.backendApp, child);
   const hasExited = () => child.exitCode !== null || child.signalCode !== null;
   // Subscribe before requesting shutdown so even an immediate exit is observed.
   let onExit: () => void;
@@ -779,7 +779,7 @@ export async function closeTestApp(app: TestApp, options: { timeoutMs?: number }
       if (hasExited()) return;
       await stopTestWork(app);
       stage = 'closing the backend';
-      await app.electronApp.close();
+      await app.backendApp.close();
       stage = 'waiting for the backend process to exit';
       await exited;
     })(), options.timeoutMs ?? 30000, () => `Test app shutdown timed out while ${stage} (pid ${child.pid})`);
@@ -792,7 +792,7 @@ export async function closeTestApp(app: TestApp, options: { timeoutMs?: number }
     }
   } finally {
     child.removeListener('exit', onExit!);
-    // Never remove files while Electron could still be using them. macOS can
+    // Never remove files while the backend could still be using them. macOS can
     // still be flushing the profile right after the process exits, which fails
     // the delete with ENOTEMPTY, so retry briefly before keeping the directory.
     if (hasExited()) removeProfile(app.userDataDir);
@@ -803,7 +803,7 @@ export async function closeTestApp(app: TestApp, options: { timeoutMs?: number }
 }
 
 /**
- * Deletes a test profile after its Electron process has exited. Retries briefly:
+ * Deletes a test profile after its backend process has exited. Retries briefly:
  * macOS can still be writing into the directory for a moment after exit, and
  * that surfaces as ENOTEMPTY, which would otherwise fail an otherwise green test.
  */
@@ -858,7 +858,7 @@ export async function showProjectBoard(scope: Pick<Page, 'getByTestId'> | { getB
 }
 
 /**
- * For a step that drove a native Electron feature (main-process fault injection, native
+ * For a step that drove a native-shell feature (main-process fault injection, native
  * window flags, OS notifications) the Chromium + Rust harness cannot reproduce. Fails the
  * test with the reason rather than faking the behaviour.
  */

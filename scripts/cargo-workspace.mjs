@@ -43,7 +43,6 @@ try {
     await runCargo(['run', '-p', 'praxis-contracts', '--bin', 'export-types']);
   } else if (mode === 'test') {
     await runCargo(['test', '--workspace']);
-    await runCargo(['build', '-p', 'praxis-host', '--bin', 'praxis-host']);
   } else if (mode === 'build') {
     await runCargo(['build', '--workspace']);
   } else if (mode === 'build-desktop') {

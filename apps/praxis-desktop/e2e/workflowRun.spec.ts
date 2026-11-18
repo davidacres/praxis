@@ -176,7 +176,7 @@ test('completed stages are not re-run after an app restart', async () => {
 
   // Relaunch into the same profile and return to the run monitor via the sidebar.
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
   page = app.window;
   await openRun(page, /Governed delivery/);

@@ -153,7 +153,7 @@ test('designer canvas round-trips nodes, a link and zoom across view close and a
 
   // Full relaunch into the same profile — state survives the restart.
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, reuse, { ...NO_GATEWAY_ENV });
   win = app.window;
   await openDesigner(win);

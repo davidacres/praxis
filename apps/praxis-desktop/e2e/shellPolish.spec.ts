@@ -106,7 +106,7 @@ test('output history survives a restart', async () => {
   await app.window.waitForTimeout(500);
 
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, reuse, { ...NO_GATEWAY_ENV });
 
   // The panel's open state is remembered across launches; only open it if it is shut.

@@ -113,7 +113,7 @@ test('list view persists across relaunch', async () => {
 
   // Relaunch into the same profile — the preference must survive the restart.
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, profile);
   await openApplicationBoard(app.window);
   await expect(app.window.locator('[data-testid="board-list-view"]')).toBeVisible();
@@ -134,7 +134,7 @@ test('custom status color paints the column dot and persists', async () => {
   );
 
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, profile);
   await openApplicationBoard(app.window);
   const todoAfter = app.window.locator('.board-column', { hasText: 'To Do' }).first();

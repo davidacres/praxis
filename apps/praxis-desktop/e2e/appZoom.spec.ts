@@ -48,7 +48,7 @@ test('zoom setting is preserved across app restart', async () => {
 
   // Close app and relaunch with the same profile and settings
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
 
   app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
   const restartedPage = app.window;

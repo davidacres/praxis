@@ -11,18 +11,18 @@
  * smear here is therefore done with a *repeating* canvas pattern, so every
  * offset sample wraps around the tile instead of running off it.
  *
- * Runs on Electron's own Chromium rather than a Playwright browser download —
- * it is already a dependency here, and it is the exact engine that will render
- * these tiles at runtime.
+ * Runs in headless Chromium through Playwright (already a dev dependency), the same
+ * engine family the e2e suite renders these tiles with.
  *
  * Run with:  npm run textures --workspace=@praxis/desktop-renderer
  * Output:    apps/praxis-desktop/renderer/src/assets/surfaces/<name>.webp  (+ @2x)
  */
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow } = require('electron');
+const { chromium } = require('@playwright/test');
 
-const OUT_DIR = path.join(__dirname, '..', 'src', 'assets', 'surfaces');
+const OUT_DIR = process.env.PRAXIS_TEXTURE_OUT
+  || path.join(__dirname, '..', 'src', 'assets', 'surfaces');
 
 /**
  * Each tile is grayscale and centred on mid-grey, because the packs blend it
@@ -135,8 +135,9 @@ function renderInPage({ svg, size, smear, quality }) {
 
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const win = new BrowserWindow({ show: false, width: 64, height: 64 });
-  await win.loadURL('data:text/html,<!doctype html><meta charset="utf-8">');
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 64, height: 64 } });
+  await page.goto('data:text/html,<!doctype html><meta charset="utf-8">');
   const report = [];
 
   for (const spec of TEXTURES) {
@@ -148,15 +149,15 @@ async function main() {
         smear: spec.smear,
         quality: spec.quality
       };
-      const dataUrl = await win.webContents.executeJavaScript(
-        `(${renderInPage.toString()})(${JSON.stringify(args)})`
-      );
+      const dataUrl = await page.evaluate(`(${renderInPage.toString()})(${JSON.stringify(args)})`);
       const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
       const file = path.join(OUT_DIR, `${spec.name}${suffix}.webp`);
       fs.writeFileSync(file, buffer);
       report.push({ file: path.basename(file), px: size, kb: +(buffer.length / 1024).toFixed(1) });
     }
   }
+
+  await browser.close();
 
   const total = report.reduce((sum, row) => sum + row.kb, 0);
   for (const row of report) {
@@ -165,10 +166,7 @@ async function main() {
   console.log(`${''.padEnd(26)}       total ${total.toFixed(1)} KB`);
 }
 
-app.whenReady()
-  .then(main)
-  .then(() => app.exit(0))
-  .catch(error => {
-    console.error(error);
-    app.exit(1);
-  });
+main().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

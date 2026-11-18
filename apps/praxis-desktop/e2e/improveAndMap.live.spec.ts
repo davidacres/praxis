@@ -23,7 +23,7 @@ const AGENT_COMMAND = process.env.PRAXIS_LIVE_AGENT_CMD ?? 'claude-agent-acp';
 let app: TestApp | undefined;
 
 test.afterEach(async () => {
-  if (app) await app.electronApp.close();
+  if (app) await app.backendApp.close();
   app = undefined;
 });
 

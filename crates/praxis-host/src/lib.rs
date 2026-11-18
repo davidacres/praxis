@@ -6,7 +6,6 @@ pub mod call_client;
 pub mod config;
 pub mod context;
 pub mod deployment_bridge;
-pub mod electron_secrets;
 pub mod events;
 pub mod mcp_oauth_store;
 pub mod mobile_bridge;

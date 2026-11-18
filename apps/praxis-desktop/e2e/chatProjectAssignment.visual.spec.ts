@@ -32,7 +32,7 @@ test('assign chat picker and project session placement', async () => {
     return { ...project, ticketKey: project.workItems[0]?.key };
   });
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   const now = new Date().toISOString();
   const sessionKey = 'SESSION-abc123';
   const ticketSessionKey = 'SESSION-def456';
@@ -124,7 +124,7 @@ test('assign chat ticket field lists tickets for a folder-backed project', async
       return project;
     }, folder);
     const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-    await app.electronApp.close();
+    await app.backendApp.close();
     const now = new Date().toISOString();
     const sessionKey = 'SESSION-folder-chat';
     fs.writeFileSync(path.join(profile.userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': {

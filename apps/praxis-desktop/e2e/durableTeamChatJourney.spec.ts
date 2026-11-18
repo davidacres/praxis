@@ -82,7 +82,7 @@ test('journey: float and dock, sidebar row, queue and cancel, Stop, restart mid-
     // Crash only once the provider has the request: before dispatch, startup rightly resumes instead.
     await expect.poll(() => completions(mock!)).toBe(requestsBeforeCrash + 1);
     const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-    const child = app.electronApp.process();
+    const child = app.backendApp.process();
     const exited = new Promise(resolve => child.once('exit', resolve));
     child.kill('SIGKILL');
     await exited;
@@ -107,7 +107,7 @@ test('journey: float and dock, sidebar row, queue and cancel, Stop, restart mid-
 
     // 6. A second restart: transcript and usage are read back from disk, not from renderer memory.
     // A clean quit that keeps the profile (closeTestApp would delete it).
-    await app.electronApp.close();
+    await app.backendApp.close();
     app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
     win = app.window;
     await win.getByTestId('team-chat-row').locator('.team-chat-main').click();

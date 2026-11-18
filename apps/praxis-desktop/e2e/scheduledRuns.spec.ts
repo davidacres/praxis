@@ -79,7 +79,7 @@ async function launch(options: { legacyPreview?: boolean; provider?: boolean; ti
 const beltOrder = (page: Page) => page.getByTestId('schedule-belt-card').evaluateAll(cards => cards.map(card => card.getAttribute('data-issue')));
 /**
  * Quits while a schedule is armed. The app asks first (and vetoes a plain
- * `electronApp.close()`), so answer the warning the way a user would.
+ * `backendApp.close()`), so answer the warning the way a user would.
  */
 async function quitWithArmedSchedule(): Promise<void> {
   const closed = await app!.requestClose();
@@ -137,7 +137,7 @@ test('builds a schedule on the belt, saves it, and it survives a restart in the 
 
   // Restart: same start, same tickets, same order.
   const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
-  await app!.electronApp.close();
+  await app!.backendApp.close();
   app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
   if (!(await app.window.getByTestId('schedule-sidebar').isVisible())) await app.window.getByTestId('titlebar-scheduled-runs').click();
   const reopened = app.window.getByTestId('schedule-card');
@@ -479,7 +479,7 @@ test('capture the composer and lineup for visual review (opt-in)', async () => {
   // A realistic lineup: write the runs while the app is stopped, then relaunch.
   const keys = await page.getByTestId('schedule-hopper-card').evaluateAll(cards => cards.map(card => card.getAttribute('data-issue') as string));
   const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
-  await app!.electronApp.close();
+  await app!.backendApp.close();
   const conn = `project:${projectId}`;
   const at = new Date().toISOString();
   const entry = (i: number, n: number, outcome?: Record<string, unknown>) => ({ id: `e-${n}-${i}`, sequence: i + 1, ticket: { connectionId: conn, issueKey: keys[i], title: titles[i] }, ...(outcome ? { outcome } : {}) });
@@ -644,7 +644,7 @@ test('sidebar uses classic recency groups and expands group tickets', async () =
     return group.key;
   }, projectId);
   const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
-  await app!.electronApp.close();
+  await app!.backendApp.close();
   const file = path.join(reuse.userDataDir, 'scheduled-runs.json');
   const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
   const today = new Date(); today.setHours(0, 0, 0, 0);

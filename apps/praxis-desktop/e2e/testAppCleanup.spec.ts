@@ -4,7 +4,7 @@ import { closeTestApp, launchTestApp } from './launchTestApp';
 
 test('normal teardown exits the backend and removes its isolated profile', async () => {
   const app = await launchTestApp();
-  const child = app.electronApp.process();
+  const child = app.backendApp.process();
   await closeTestApp(app);
   expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
   expect(fs.existsSync(app.userDataDir)).toBe(false);
@@ -14,7 +14,7 @@ test('normal teardown exits the backend and removes its isolated profile', async
 
 test('stalled renderer cleanup is bounded and reported after terminating its app', async () => {
   const app = await launchTestApp();
-  const child = app.electronApp.process();
+  const child = app.backendApp.process();
   try {
     {
       await app.overrideChannel('projects:list', () => new Promise(() => {}));
@@ -29,7 +29,7 @@ test('stalled renderer cleanup is bounded and reported after terminating its app
 
 test('vetoed shutdown is bounded and remains a failure', async () => {
   const app = await launchTestApp();
-  const child = app.electronApp.process();
+  const child = app.backendApp.process();
   try {
     await app.vetoShutdown();
     await expect(closeTestApp(app, { timeoutMs: 1000 })).rejects.toThrow(/closing the backend/);

@@ -281,7 +281,7 @@ test('reopens a validated workspace and its last durable route', async () => {
   await openConnections(firstWindow);
   await expect(firstWindow.getByTestId('connections-page')).toBeVisible();
 
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, {
     userDataDir: app.userDataDir,
     settingsPath: app.settingsPath

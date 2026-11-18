@@ -6,8 +6,6 @@
 //!   values) are kept in `secrets.index.json` next to the profile.
 //! * [`FileSecretBackend`] — a 0600 JSON file inside an explicit profile directory. Used by the
 //!   e2e server and tests so a developer's real keychain is never read or written.
-//!
-//! Neither touches Electron's legacy `secrets.json`; see [`crate::electron_secrets`].
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;

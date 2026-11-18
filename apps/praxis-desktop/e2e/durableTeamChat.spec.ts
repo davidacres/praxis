@@ -126,7 +126,7 @@ test('a migrated chat continues from imported history without reusing unproved r
   mock = await startMockOpenAiCompatibleServer({ reply: 'Continued imported history' });
   app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   const file = path.join(reuse.userDataDir, 'team-chats.json');
   const original = JSON.stringify({ teamChats: [{ id: 'legacy-fixture', projectId: '', title: 'Imported chat', createdAt: '2026-01-01', updatedAt: '2026-01-02', messages: [
     { id: 'orphan', role: 'dev', text: 'Orphan history retained', createdAt: '2026-01-01', error: true },
@@ -165,7 +165,7 @@ test('an expired legacy runtime session is linked, reconstructed and listed once
     return project.id;
   }, app.userDataDir);
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   // The pre-durable shape: a saved chat, the runtime session main keyed from its id, and that
   // session's transcript checkpoint naming the dev reply it last saw. The session is long finished.
   const title = 'Legacy linked chat';
@@ -300,7 +300,7 @@ function onDisk(userDataDir: string): DiskSnapshot {
 }
 /** A crash, not a clean quit: no shutdown handler gets to settle anything. */
 async function crash(current: TestApp): Promise<{ userDataDir: string; settingsPath: string }> {
-  const child = current.electronApp.process();
+  const child = current.backendApp.process();
   const exited = new Promise(resolve => child.once('exit', resolve));
   child.kill('SIGKILL');
   await exited;
@@ -348,7 +348,7 @@ test('a queued turn resumes after restart before any chat is opened', async () =
   app = await launchTestApp(mockSettings(mock), undefined, undefined, { openNewSession: false });
   const chat = await app.window.evaluate(() => window.praxis.assistant.createChat(''));
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   // The bytes a crash leaves right after durable acceptance and before any dispatch.
   const core = await import('@praxis/core');
   const file = path.join(reuse.userDataDir, 'team-chats.json');

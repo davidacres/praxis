@@ -723,7 +723,7 @@ test('a chat can be renamed, survives an app restart, and the docked width persi
 
   // Restart on the same profile.
   const { userDataDir, settingsPath } = app!;
-  await app!.electronApp.close();
+  await app!.backendApp.close();
   app = await launchTestApp(undefined, { userDataDir, settingsPath }, undefined, { openNewSession: false });
   const again = app.window;
   await expect(again.getByTestId('assistant-docked')).toBeVisible();

@@ -111,13 +111,8 @@ lockfile), and it passes **`--registry=https://registry.npmjs.org/`** (with a pr
 registry npm rewrites the lockfile's `registry.npmjs.org` tarball URLs to it and every public
 package 404s on a cold cache — verify with `npm ci --cache=<empty dir>`, since a warm cache hides
 it). `workflowInstallDeps.spec.ts` proves both halves on a real repository with a local tarball.
-Praxis also relies on the desktop package's `postinstall` hook: node-pty 1.1.0's macOS prebuild
-ships `spawn-helper` without an executable bit, so a cold `npm ci` otherwise lets Electron load
-the addon but every terminal creation fails with `posix_spawnp failed`. Keep
-`scripts/fixNodePtyPermissions.cjs` wired into `postinstall`; `--ignore-scripts` is not a valid
-way to prepare a worktree that will run the desktop E2E suite.
 The same goes for **build output**: `dist/`, `out/` and a copied renderer are gitignored too, so a `Build`
-stage (`npm run build --if-present`, optional log) runs before QA. Without it an Electron/Playwright
+stage (`npm run build --if-present`, optional log) runs before QA. Without it a Playwright
 suite that loads a pre-built renderer opens a **blank window** in the run worktree (the FX-BF-036 QA
 symptom) — nothing about the failure says "build". `--if-present` keeps it a silent no-op for projects
 with no build script, which is why its log is `required: false` (a required log with no output fails the
@@ -228,7 +223,7 @@ it starts. The rules below each fail silently if broken.
   nothing, so its brief is byte-identical to before.
 - **Map items get their own branches, named `wfitem-<run8>-<node>-<n>`** — deliberately *not* under
   the run's `WF-<run8>` prefix, or `findRunBranch` could return an item's branch as the run's. The git
-  half is `main/mapWorktrees.ts` (Electron-free, tested on a real repo); merges go back in item order
+  half is `main/mapWorktrees.ts` (host-independent, tested on a real repo); merges go back in item order
   and a conflict is backed out and named, never left half-merged.
 - **Run parameters are prose, never commands.** `resolveRunParameters` checks and coerces them at
   start; they reach briefs through `formatRunParameters` only. An integer parameter can set a loop's

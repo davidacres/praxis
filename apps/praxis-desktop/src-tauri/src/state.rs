@@ -41,13 +41,11 @@ struct Method {
     channel: String,
 }
 
-/// Makes secrets durable and imports the retired Electron app's `secrets.json` once.
+/// Makes secrets durable.
 ///
-/// `use_os_keychain` is the shipping path (OS credential store, one-time macOS Keychain prompt
-/// to read Electron's "Safe Storage" key). Otherwise secrets go to a file inside the profile
+/// `use_os_keychain` is the shipping path (the OS credential store). Otherwise secrets go to a file inside the profile
 /// and the keychain is never touched — the e2e server and tests use this.
 pub fn attach_secret_persistence(host: &HostContext, use_os_keychain: bool) {
-    use praxis_host::electron_secrets::import_legacy;
     use praxis_host::secret_backends::{FileSecretBackend, KeychainSecretBackend};
     let profile = host.config().user_data_dir.clone();
     if use_os_keychain {
@@ -58,31 +56,6 @@ pub fn attach_secret_persistence(host: &HostContext, use_os_keychain: bool) {
             .attach_backend(std::sync::Arc::new(FileSecretBackend::new(
                 profile.join("praxis-secrets.json"),
             )));
-    }
-    let report = import_legacy(&profile, host.secrets(), || {
-        if !use_os_keychain {
-            return None;
-        }
-        #[cfg(target_os = "macos")]
-        {
-            // Verified against a real Electron profile: service "Praxis Safe Storage",
-            // account "Praxis Key".
-            praxis_host::electron_secrets::macos_safe_storage_password(
-                "Praxis Safe Storage",
-                "Praxis Key",
-            )
-            .map(|password| praxis_host::electron_secrets::derive_key(&password))
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            None
-        }
-    });
-    if report.imported + report.locked + report.undecryptable > 0 {
-        eprintln!(
-            "[secrets] Electron import: {} imported, {} locked, {} undecryptable",
-            report.imported, report.locked, report.undecryptable
-        );
     }
 }
 

@@ -182,7 +182,7 @@ test('a week of several hundred changes renders and filters without a long main-
   });
   // Seed the store directly while the app is stopped: 600 entries across seven days, oldest first as stored.
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   const now = Date.now();
   const kinds = ['issue', 'session', 'plan'] as const;
   const seeded = Array.from({ length: 600 }, (_, index) => {

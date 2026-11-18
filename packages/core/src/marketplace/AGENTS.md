@@ -14,8 +14,8 @@ those are code (see "Workspace / project / connection model" in the root AGENTS.
   name-prefix filtered). Version metadata and tarballs come from
   `npm.pkg.github.com` (a standard packument). A bearer token is required for
   **both**, even for public packages — 401/403 carry a `read:packages` hint.
-- **The core module has no host dependencies.** No `fs`, no Electron — disk
-  work goes through the `AddonStorage` port (`ElectronAddonStorage` writes
+- **The core module has no host dependencies.** No `fs`, no host APIs — disk
+  work goes through the `AddonStorage` port (the host writes
   `userData/addons/<kind>/<id>/`). It unit-tests with a fake fetch + in-memory
   storage.
 - **A tarball is verified before it is unpacked.** `assertTarballIntegrity`

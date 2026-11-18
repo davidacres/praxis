@@ -71,8 +71,8 @@ exactly what lets any pack compose with any palette.
   Adding a material means **adding a library entry — never a new `[data-surface]`
   block**, and never a change to the panes.
 - **Texture tiles are generated, not hand-authored.** Run
-  `npm run textures --workspace=@praxis/desktop-renderer` (renders through Electron's
-  own Chromium into `src/assets/surfaces/`). Do not hand-edit the `.webp` files.
+  `npm run textures --workspace=@praxis/desktop-renderer` (renders through headless
+  Chromium via Playwright into `src/assets/surfaces/`). Do not hand-edit the `.webp` files.
 - **A pattern's colour is baked into an SVG `data:` URI**, so it cannot follow a `var()`.
   It must be re-baked whenever the palette changes — see `refreshSurfacePattern`, wired
   to the `tm-theme-changed` event.

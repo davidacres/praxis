@@ -13,7 +13,8 @@
     "tauri:dev": "node ../scripts/run-tauri.cjs dev",
     "tauri:build": "node ../scripts/run-tauri.cjs build --debug --no-bundle --config ../src-tauri/tauri.bundle.conf.json",
     "tauri:audit": "node ../scripts/audit-tauri-contract.cjs",
-    "tauri:test": "node ../scripts/test-tauri-e2e.cjs"
+    "tauri:test": "node ../scripts/test-tauri-e2e.cjs",
+    "textures": "node scripts/generate-surface-textures.cjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

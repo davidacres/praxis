@@ -23,7 +23,7 @@ let app: TestApp | undefined;
 
 test.afterEach(async () => {
   // Close without `closeTestApp`, which deletes the profile: this one is kept in the out dir.
-  if (app) await app.electronApp.close();
+  if (app) await app.backendApp.close();
   app = undefined;
 });
 

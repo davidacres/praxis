@@ -70,7 +70,7 @@ test('notes round-trip, notify, reject cross-project access and survive a relaun
   expect(fs.existsSync(notesFile)).toBe(true);
 
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, profile);
 
   const restored = await app.window.evaluate(async ({ a, b }) => {

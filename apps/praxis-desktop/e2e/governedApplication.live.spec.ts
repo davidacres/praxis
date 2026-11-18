@@ -130,6 +130,6 @@ test('a real AI creates a calculator application through Governed delivery and p
       await testInfo.attach('governed-application-run', { path: path.join(output, 'run-summary.json'), contentType: 'application/json' });
     }
     // Retain the isolated profile, repository and worktree for diagnosis. No approval or merge.
-    await app.electronApp.close();
+    await app.backendApp.close();
   }
 });

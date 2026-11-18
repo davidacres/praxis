@@ -151,7 +151,7 @@ test('a person clicking in the in-app browser takes it from the agent driving it
   await new Promise<void>(resolve => page.listen(0, '127.0.0.1', () => resolve()));
   const pageUrl = `http://127.0.0.1:${(page.address() as { port: number }).port}/`;
   app = await launchTestApp(undefined, undefined, { PRAXIS_E2E_BROWSER_ALLOW_LOOPBACK: '1' });
-  const pid = app.electronApp.process().pid!;
+  const pid = app.backendApp.process().pid!;
   broker = await joinCoordination(path.join(app.userDataDir, 'coordination'));
   const surface = `in-app:${pid}`;
   await broker.send({ kind: 'register', session: { sessionKey: 'BROWSING-AGENT', runtime: 'acp', coverage: 'cooperative' } });

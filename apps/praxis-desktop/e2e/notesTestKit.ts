@@ -112,7 +112,7 @@ export async function menu(page: Page, label: string, item: string) {
 /** Closes the app and launches a new one on the same profile, landing on the project home. */
 export async function relaunch(app: TestApp): Promise<TestApp> {
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   return launchTestApp(undefined, reuse, undefined, { openNewSession: false });
 }
 

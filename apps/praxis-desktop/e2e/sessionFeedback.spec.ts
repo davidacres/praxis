@@ -376,7 +376,7 @@ test('post-session inspector scorecard audits tools/skills/MCPs, persists human 
     { openNewSession: false }
   );
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
 
   const issueKey = 'SESSION-feedback-1';
   const now = new Date().toISOString();
@@ -627,7 +627,7 @@ test('checklist caches validated answers and falls back without a score when the
   expect(mock.requests.length).toBe(count);
   // Persisted cache survives a real app restart.
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, profile, { AI_GATEWAY_API_KEY: 'e2e-gateway-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_OIDC_TOKEN: undefined });
   const restarted = await app.window.evaluate(() => window.praxis.ai.evaluatePrompt({ promptText: 'put the thing in the box', toolMode: 'full', checkClarity: true }));
   expect(restarted.clarity?.cached, JSON.stringify(restarted.clarity)).toBe(true);

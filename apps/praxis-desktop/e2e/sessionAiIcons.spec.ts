@@ -17,7 +17,7 @@ test('session list displays single and multiple pixel-perfect AI brand icons bes
   // Launch initial app to obtain test profile directory
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
 
   // Seed sessions directly into ai-sessions.json:
   // 1. Single AI session (Claude Code) -> 1 icon

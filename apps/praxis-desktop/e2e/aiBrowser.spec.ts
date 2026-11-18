@@ -66,7 +66,7 @@ test('restores the selected session and browser URL and keeps an explicit close 
 
   const userDataDir = app.userDataDir;
   const settingsPath = app.settingsPath;
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, { userDataDir, settingsPath }, undefined, { workspace: false });
   await expect(app.window.locator('[data-testid="agent-details-page"]')).toBeVisible();
   await expect(app.window.locator('[data-testid="agent-details-title"]')).toHaveText('persist browser state');

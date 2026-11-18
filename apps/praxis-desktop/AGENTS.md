@@ -2,7 +2,7 @@
 
 The Praxis desktop shell is a native Tauri v2 application (`apps/praxis-desktop/src-tauri`, crate `praxis-desktop`) backed directly by in-process Rust services (`praxis-host`, `praxis-workflows`, `praxis-trackers`, `praxis-ai`, `praxis-mobile`, `praxis-core`).
 
-The legacy Electron main process (`apps/praxis-desktop/main`) and its Node.js backend services have been superseded and retired. All 407 IPC channels are registered and verified in Rust with in-process dispatch.
+All 407 IPC channels are registered and verified in Rust with in-process dispatch.
 
 ## Verification & Build Commands
 

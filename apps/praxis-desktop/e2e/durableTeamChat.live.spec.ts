@@ -69,7 +69,7 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
   }, id);
   await send(win, id, 'In one short sentence, name one risk of renaming a release late. Do not use tools.', runtimeOptions);
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
   win = app.window;
   await send(win, id, 'What release codename did we decide on? Reply with the codename only. Do not use tools.', runtimeOptions);

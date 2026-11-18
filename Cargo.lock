@@ -3121,16 +3121,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pbkdf2"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
-dependencies = [
- "digest",
- "hmac",
-]
-
-[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3462,15 +3452,12 @@ dependencies = [
 name = "praxis-host"
 version = "0.6.6"
 dependencies = [
- "aes",
  "async-trait",
  "axum",
  "base64 0.22.1",
- "cbc",
  "chrono",
  "getrandom 0.2.17",
  "keyring",
- "pbkdf2",
  "praxis-ai",
  "praxis-contracts",
  "praxis-core",
@@ -3480,7 +3467,6 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "sha1",
  "sha2",
  "thiserror 2.0.21",
  "tokio",

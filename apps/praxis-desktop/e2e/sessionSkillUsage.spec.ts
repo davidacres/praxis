@@ -22,7 +22,7 @@ test.afterEach(async () => {
 test('a session shows its agent and the skills it used, and a skill lists the sessions that used it', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
 
   const at = (minute: number) => `2026-10-26T10:${String(minute).padStart(2, '0')}:00.000Z`;
   fs.writeFileSync(path.join(profile.userDataDir, 'ai-sessions.json'), JSON.stringify({

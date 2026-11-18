@@ -39,7 +39,7 @@ test.afterEach(async () => {
     if (replayTraceApp === app) {
       const failed = test.info().status !== test.info().expectedStatus;
       const tracePath = failed ? test.info().outputPath('acp-replay-trace.zip') : undefined;
-      await app.electronApp.context().tracing.stop({ path: tracePath });
+      await app.backendApp.context().tracing.stop({ path: tracePath });
       if (tracePath) await test.info().attach('acp-replay-trace', { path: tracePath, contentType: 'application/zip' });
       replayTraceApp = undefined;
     }
@@ -333,7 +333,7 @@ test('MCP servers the user added reach a CLI agent at session start', async () =
 test('ACP resume replay does not duplicate the previous answer into a follow-up', async () => {
   test.slow();
   app = await launchTestApp(undefined, undefined, { FAKE_ACP_REPLAY_ON_RESUME: '1' });
-  await app.electronApp.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
+  await app.backendApp.context().tracing.start({ screenshots: true, snapshots: true, sources: true });
   replayTraceApp = app;
   const win = app.window;
   await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);

@@ -57,7 +57,7 @@ test('page 3 holds what is left', () => {
 let app: TestApp | undefined;
 
 test.afterEach(async () => {
-  if (app) await app.electronApp.close();
+  if (app) await app.backendApp.close();
   app = undefined;
 });
 

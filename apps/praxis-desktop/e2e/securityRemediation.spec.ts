@@ -74,7 +74,7 @@ test('secret reads repair permissive file modes and stored values remain retriev
   const file = path.join(app.userDataDir, 'praxis-secrets.json');
   expect(JSON.parse(fs.readFileSync(file, 'utf8'))['security-fixture']).toBe('fixture-only-value');
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   fs.chmodSync(file, 0o644);
   app = await launchTestApp(undefined, reuse, CHECK_ONLY_ENV, { openNewSession: false });
   // Loading the store tightens the mode, and the value survived the restart.
@@ -118,7 +118,7 @@ test('repository workflows require command review, preserve trust on restart, an
   await expect.poll(() => app.window.evaluate(id => window.praxis.workflows.projectTrust(id, 'repository-check').then(value => value.trusted), projectId)).toBe(true);
   await expect.poll(() => app.window.evaluate(id => window.praxis.workflows.listRuns(id).then(runs => runs[0]?.status), projectId), { timeout: 15000 }).toBe('succeeded');
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close(); app = await launchTestApp(undefined, reuse, CHECK_ONLY_ENV, { openNewSession: false });
+  await app.backendApp.close(); app = await launchTestApp(undefined, reuse, CHECK_ONLY_ENV, { openNewSession: false });
   expect(await app.window.evaluate(id => window.praxis.workflows.projectTrust(id, 'repository-check').then(value => value.trusted), projectId)).toBe(true);
   definition.nodes[0].args[1] = 'console.log("changed command")'; fs.writeFileSync(file, JSON.stringify(definition));
   expect(await app.window.evaluate(id => window.praxis.workflows.projectTrust(id, 'repository-check').then(value => value.trusted), projectId)).toBe(false);

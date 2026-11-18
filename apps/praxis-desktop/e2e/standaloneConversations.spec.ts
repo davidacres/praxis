@@ -81,7 +81,7 @@ test('standalone conversation persists and resumes across floating-window pop-in
   await win.getByTestId('session-pop-out').click();
   await restartPromise;
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
   win = app.window;
   expect(await win.evaluate(() => window.praxis.detachedChat.list())).toEqual([]);

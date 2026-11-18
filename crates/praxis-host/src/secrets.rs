@@ -1,9 +1,9 @@
-//! In-memory secret store unlocked by Electron `safeStorage` or seeded by isolated tests.
+//! In-memory secret store, backed by the OS credential store (see `secret_backends`) or seeded by
+//! isolated tests.
 //!
-//! Keeping secret decryption at the Electron shell boundary (`safeStorage`) while holding the
-//! unlocked key-value map inside [`HostSecretStore`] lets Rust services (`praxis-trackers`,
-//! `praxis-ai`, `praxis-mobile`, `praxis-core`) read and update credentials without depending
-//! on Electron's C++ keychain APIs.
+//! Holding the unlocked key-value map inside [`HostSecretStore`] lets Rust services
+//! (`praxis-trackers`, `praxis-ai`, `praxis-mobile`, `praxis-core`) read and update credentials
+//! without depending on a platform keychain API.
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;

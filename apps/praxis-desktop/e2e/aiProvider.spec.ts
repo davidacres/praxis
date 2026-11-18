@@ -87,7 +87,7 @@ test('AI provider settings store the API key in the keychain and persist across 
   expect(settingsRaw).not.toContain('e2e-secret-key');
 
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   app = await launchTestApp(undefined, profile, { ...NO_GATEWAY_ENV });
   await openAiSettings(app.window);
 

@@ -15,7 +15,7 @@ async function seedInterrupted(keyAvailable = true, provider = 'vercel-gateway',
   const settings = provider === 'claude-code-cli' ? { ai: { activeProvider: provider, providers: { [provider]: { cliPath: path.join(__dirname, 'fixtures/fakeAcpAgent.mjs') } } } } : undefined;
   app = await launchTestApp(settings, undefined, env, { openNewSession: false });
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   const records = Object.fromEntries(['one', 'two', 'done'].map(name => {
     const issueKey = `SESSION-${name}`;
     return [issueKey, { issueKey, sessionId: issueKey, title: `Recovery ${name}`, provider,
@@ -56,7 +56,7 @@ test('Leave stopped persists across restart without launching requests', async (
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Leave stopped' }).click();
   await expect(dialog).toHaveCount(0);
-  await app!.electronApp.close();
+  await app!.backendApp.close();
   app = await launchTestApp(undefined, profile, env, { openNewSession: false });
   await expect(app.window.getByTestId('session-recovery-dialog')).toHaveCount(0);
   expect(mock!.requests).toHaveLength(0);

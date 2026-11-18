@@ -155,7 +155,7 @@ test('a completed session with an unanswered choice stays in attention until the
 
 test('attention opens the selected missed schedule instead of an unrelated schedule', async () => {
   const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
+  await app.backendApp.close();
   const at = new Date().toISOString();
   fs.writeFileSync(path.join(reuse.userDataDir, 'scheduled-runs.json'), JSON.stringify({ 'praxis.scheduledRuns.v1': ['release', 'docs'].map(id => ({
     schemaVersion: 1, id, projectId, name: `${id} missed run`, scheduledStartAt: '2026-01-01T12:00:00Z', timezone: 'Europe/London',

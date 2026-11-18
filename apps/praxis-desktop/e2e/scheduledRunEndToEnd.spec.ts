@@ -73,7 +73,7 @@ for (const storage of ['app', 'folder'] as const) test(`a mixed serial and paral
   }, { openNewSession: false });
   const page = app.window;
   let mainStderr = '';
-  app.electronApp.process().stderr?.on('data', chunk => { mainStderr = (mainStderr + String(chunk)).slice(-65536); });
+  app.backendApp.process().stderr?.on('data', chunk => { mainStderr = (mainStderr + String(chunk)).slice(-65536); });
 
   const { projectId, runId, keys, startAt } = await page.evaluate(async ({ repo, titles, storage }) => {
     const workspace = (await window.praxis.workspaces.list())[0];

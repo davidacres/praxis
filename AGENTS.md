@@ -13,7 +13,7 @@ A monorepo: the **Praxis** desktop app over a shared core.
 | `apps/praxis-desktop/renderer` | `@praxis/desktop-renderer` | The desktop renderer — React + Vite. Ordinary DOM. |
 | `apps/praxis-desktop/src-tauri` | `praxis-desktop` (Rust) | Native Tauri desktop application host. Integrates all backend services in-process. |
 
-The desktop shell is a native Tauri application (`praxis-desktop`) running in-process Rust services. The Electron main process has been fully superseded and retired.
+The desktop shell is a native Tauri application (`praxis-desktop`) running in-process Rust services.
 
 ## Shared logic belongs in core
 
@@ -141,8 +141,8 @@ association.
 
 There was briefly a second form — `.praxis` as the extension itself, on the
 grounds that a workspace file is "opened with Praxis". That justification was
-aspirational: there is no `fileAssociations` entry in the electron-builder
-config and no `open-file` handler, so double-clicking one has never opened
+aspirational: there is no file-association entry in the bundle config
+and no `open-file` handler, so double-clicking one has never opened
 anything. It was paying the tooling cost for an affordance that did not exist.
 If double-click-to-open is built later, register the association against
 `.praxis.json` — the same trade VS Code makes for `.code-workspace`, which
@@ -282,7 +282,7 @@ covers each product area with one or two spec files and no theme tests. A spec i
 must not use hover, `page.mouse`, drag or `toHaveScreenshot`: those depend on the real
 pointer and pixels. The smoke set does not replace the functional project for a UI change.
 
-**What the e2e suite runs.** Not Electron: `apps/praxis-desktop/e2e/launchTestApp.ts`
+**What the e2e suite runs.** `apps/praxis-desktop/e2e/launchTestApp.ts`
 starts the real `praxis-desktop` binary in `--e2e-server` mode (the same composition the
 GUI uses, answering every channel from Rust) and opens the real renderer's `tauri.html`
 in Chromium at 1440x900, with `window.praxis` bridged to that server. The renderer comes
@@ -291,8 +291,8 @@ from `apps/praxis-desktop/renderer/dist`, served by `vite preview` (Playwright s
 sets the worker count, default 2, or 1 when `CI` is set). A frontend
 change is invisible to e2e until you `npm run build:renderer`. A Rust change needs a
 rebuilt binary; point `PRAXIS_TAURI_BIN` at your own copy when several agents share a
-target dir (see `scripts/agent-build.sh`). Specs replace what used to be Electron main-process
-stubs with `app.overrideChannel(channel, handler)`; there is no main process to evaluate in.
+target dir (see `scripts/agent-build.sh`). Specs stub a channel with
+`app.overrideChannel(channel, handler)`; there is no main process to evaluate in.
 Snapshots are captured at the harness viewport (1440x900, light colour scheme), not an
 OS window, so a baseline from another size will fail on dimensions alone.
 
