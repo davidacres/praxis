@@ -84,7 +84,7 @@ with the release config, and copies the installers to `dist/release/`:
 | --- | --- |
 | macOS | `Praxis_<version>_aarch64.dmg` |
 | Windows | `Praxis_<version>_x64-setup.exe` (NSIS) |
-| Linux | `Praxis_<version>_amd64.AppImage`, `.deb` |
+| Linux | `Praxis_<version>_amd64.deb` (AppImage is not built yet: linuxdeploy fails on hosted runners) |
 
 `release:publish` needs an authenticated GitHub CLI (`gh auth login`), requires
 the tag to match `version` in `tauri.conf.json` (bump it first), and is safe to

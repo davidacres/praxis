@@ -36,7 +36,8 @@ const target = flag >= 0 ? args[flag + 1] : hostTarget;
 const platforms = {
   mac: { bundles: 'dmg', dirs: ['dmg'], match: /\.dmg$/ },
   win: { bundles: 'nsis', dirs: ['nsis'], match: /-setup\.exe$/ },
-  linux: { bundles: 'appimage,deb', dirs: ['appimage', 'deb'], match: /\.(AppImage|deb)$/ },
+  // AppImage is omitted: linuxdeploy fails on the hosted runners; revisit with --verbose output.
+  linux: { bundles: 'deb', dirs: ['deb'], match: /\.deb$/ },
 };
 if (!platforms[target]) fail(`Unsupported target "${target}" (use mac, win or linux).`);
 if (target !== hostTarget) fail(`Tauri cannot cross-package: target ${target} on a ${hostTarget} host.`);

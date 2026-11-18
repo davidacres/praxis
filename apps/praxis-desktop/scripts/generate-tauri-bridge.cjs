@@ -5,7 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const parser = require('@babel/parser');
 const root = path.resolve(__dirname, '..');
-const source = fs.readFileSync(path.join(__dirname, 'contract/preload.ts'), 'utf8');
+// Normalise line endings: a Windows checkout may use CRLF, and the output must not depend on it.
+const lf = text => text.replace(/\r\n/g, '\n');
+const source = lf(fs.readFileSync(path.join(__dirname, 'contract/preload.ts'), 'utf8'));
 const tree = parser.parse(source, { sourceType: 'module', plugins: ['typescript'] });
 const methods = [];
 const events = new Set();
@@ -53,7 +55,7 @@ const outputs = [
 for (const [file, content] of outputs) {
   const target = path.join(root, file);
   if (process.argv.includes('--check')) {
-    if (!fs.existsSync(target) || fs.readFileSync(target, 'utf8') !== content) {
+    if (!fs.existsSync(target) || lf(fs.readFileSync(target, 'utf8')) !== content) {
       throw new Error(`${file} is stale; run node scripts/generate-tauri-bridge.cjs`);
     }
   } else fs.writeFileSync(target, content);
