@@ -5,7 +5,9 @@ use std::sync::Mutex;
 use praxis_host::{HostCallClient, HostConfig, HostContext, HostServices};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
+#[cfg(target_os = "macos")]
+use tauri::Manager;
 
 pub const SHELL_CHANNELS: &[&str] = &[
     "app:getVersion",
@@ -45,7 +47,7 @@ struct Method {
 /// to read Electron's "Safe Storage" key). Otherwise secrets go to a file inside the profile
 /// and the keychain is never touched — the e2e server and tests use this.
 pub fn attach_secret_persistence(host: &HostContext, use_os_keychain: bool) {
-    use praxis_host::electron_secrets::{derive_key, import_legacy};
+    use praxis_host::electron_secrets::import_legacy;
     use praxis_host::secret_backends::{FileSecretBackend, KeychainSecretBackend};
     let profile = host.config().user_data_dir.clone();
     if use_os_keychain {
@@ -69,7 +71,7 @@ pub fn attach_secret_persistence(host: &HostContext, use_os_keychain: bool) {
                 "Praxis Safe Storage",
                 "Praxis Key",
             )
-            .map(|password| derive_key(&password))
+            .map(|password| praxis_host::electron_secrets::derive_key(&password))
         }
         #[cfg(not(target_os = "macos"))]
         {

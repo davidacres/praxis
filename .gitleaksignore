@@ -29,3 +29,7 @@ f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-
 f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:6
 f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:61
 f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:92
+# Same rotated GitHub PAT (see above), reachable from commits CI also sees via PR refs.
+ad2883d95e7ec1f91a7391e82120146c725467e0:apps/praxis-desktop/main/e2e/verify-marketplace.spec.ts:github-pat:23
+0925f91c067bd74263b9f3e3f32c1a4576b048b3:apps/praxis-desktop/main/e2e/marketplace.spec.ts:github-pat:318
+0925f91c067bd74263b9f3e3f32c1a4576b048b3:apps/praxis-desktop/main/e2e/marketplace.spec.ts:github-pat:350
