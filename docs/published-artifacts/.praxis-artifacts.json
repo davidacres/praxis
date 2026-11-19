@@ -151,7 +151,43 @@
       "savedAt": "2026-11-19T21:23:20.787Z",
       "sessionKey": "SESSION-4058ca53",
       "title": "1 · Console",
-      "description": "Dense, dark, terminal-style status panels",
+      "description": "Dense, dark, terminal-style status panels (the built design)",
+      "mediaType": "text/html",
+      "sessionTitle": "New session"
+    },
+    {
+      "path": "docs/published-artifacts/overview-2-resume.html",
+      "savedAt": "2026-11-19T21:23:20.787Z",
+      "sessionKey": "SESSION-4058ca53",
+      "title": "2 · Resume",
+      "description": "One big \"pick up where you left off\" card",
+      "mediaType": "text/html",
+      "sessionTitle": "New session"
+    },
+    {
+      "path": "docs/published-artifacts/overview-3-journal.html",
+      "savedAt": "2026-11-19T21:23:20.787Z",
+      "sessionKey": "SESSION-4058ca53",
+      "title": "3 · Journal",
+      "description": "Day-by-day feed of sessions, commits and runs",
+      "mediaType": "text/html",
+      "sessionTitle": "New session"
+    },
+    {
+      "path": "docs/published-artifacts/overview-4-bento.html",
+      "savedAt": "2026-11-19T21:23:20.787Z",
+      "sessionKey": "SESSION-4058ca53",
+      "title": "4 · Bento",
+      "description": "Mixed-size tiles with an activity heatmap and change map",
+      "mediaType": "text/html",
+      "sessionTitle": "New session"
+    },
+    {
+      "path": "docs/published-artifacts/overview-5-pipeline.html",
+      "savedAt": "2026-11-19T21:23:20.787Z",
+      "sessionKey": "SESSION-4058ca53",
+      "title": "5 · Pipeline",
+      "description": "Lanes: needs you, in progress, coming up, done",
       "mediaType": "text/html",
       "sessionTitle": "New session"
     }
@@ -173,6 +209,18 @@
         "docs/published-artifacts/shelf-6-aurora-glass.html"
       ],
       "createdAt": "2026-11-07T09:09:34.698Z"
+    },
+    {
+      "id": "4a640840-5821-477d-9442-df487e110146",
+      "name": "Project Overview Designs",
+      "paths": [
+        "docs/published-artifacts/overview-1-console.html",
+        "docs/published-artifacts/overview-2-resume.html",
+        "docs/published-artifacts/overview-3-journal.html",
+        "docs/published-artifacts/overview-4-bento.html",
+        "docs/published-artifacts/overview-5-pipeline.html"
+      ],
+      "createdAt": "2026-11-19T21:30:00.000Z"
     }
   ]
 }
