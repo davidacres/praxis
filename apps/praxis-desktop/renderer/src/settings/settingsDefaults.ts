@@ -95,6 +95,7 @@ export const DEFAULT_APP_SETTINGS = {
     gatewayUrl: '',
     defaultModel: '',
     agentName: '',
+    defaultAgentId: 'praxis-default',
     activityWords: ['Thinking', 'Working', 'Pondering'] as string[],
     spendLimit: 0,
     providerHandoverPercent: 95,

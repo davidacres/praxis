@@ -278,6 +278,8 @@ pub struct AiSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub activity_words: Option<Vec<String>>,
     pub working_directory: String,
+    /// The agent profile a new chat session starts with; empty means none.
+    pub default_agent_id: String,
     pub analysis_prompt: String,
     pub analysis_gate_enabled: bool,
     pub spend_limit: f64,
@@ -596,6 +598,7 @@ pub fn default_app_settings() -> AppSettings {
                 "Pondering".to_string(),
             ]),
             working_directory: String::new(),
+            default_agent_id: "praxis-default".to_owned(),
             analysis_prompt: String::new(),
             analysis_gate_enabled: false,
             spend_limit: 0.0,
@@ -1646,6 +1649,12 @@ pub fn sanitize_app_settings(raw: &Value) -> AppSettings {
                 ai_obj.get("workingDirectory"),
                 &defaults.ai.working_directory,
             ),
+            default_agent_id: read_string(
+                ai_obj.get("defaultAgentId"),
+                &defaults.ai.default_agent_id,
+            )
+            .trim()
+            .to_owned(),
             analysis_prompt: read_string(
                 ai_obj.get("analysisPrompt"),
                 &defaults.ai.analysis_prompt,

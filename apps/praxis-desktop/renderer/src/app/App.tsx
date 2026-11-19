@@ -89,7 +89,7 @@ import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
 import { sessionSkillRows } from '../ai/sessionSkills';
 import { CreateAgentDialog, CreateAgentProfileDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
-import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
+import { isHostShimProfile, sessionAgentOptions, skillTitle } from '../agents/agentCatalog';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 import { useDialogs } from '../ui/dialogs';
@@ -514,6 +514,7 @@ export function App() {
   /** The Agent Hub catalog. App owns it so the sidebar tree, the centre record,
    *  and the right-pane runtime all read one snapshot. */
   const [agentSnapshot, setAgentSnapshot] = useState<AgentRuntimeSnapshot>();
+  const sessionAgents = useMemo(() => sessionAgentOptions(agentSnapshot), [agentSnapshot]);
   const [agentsBusy, setAgentsBusy] = useState(false);
   const [agentError, setAgentError] = useState<string>();
   const [activations, setActivations] = useState<ActivationMap>({});
@@ -1801,6 +1802,7 @@ export function App() {
   const renderNewSession = () => (
     <NewSession
       sessions={agentSessions}
+      agentOptions={sessionAgents}
       boards={workspaceBoards}
       workflowOptions={composerProject ? sessionWorkflowsByProject[composerProject.id] ?? [] : []}
       initialWorkflowId={route.quickSession ? quickSessionWorkflowId : undefined}
@@ -1888,6 +1890,7 @@ export function App() {
   const renderNewConversation = () => (
     <NewSession
       sessions={agentSessions}
+      agentOptions={sessionAgents}
       boards={[]}
       conversational
       defaultToolMode="project-only"

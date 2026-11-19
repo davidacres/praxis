@@ -181,9 +181,13 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
             }));
         }
     };
+    // A binding to a host with its own transport brings its own provider rules. A built-in agent
+    // runs on the session's provider, so a session with one (the default for a chat session) is
+    // still checked for a turned-off provider, a missing key and missing tool calling up front.
     let has_binding = ["profileId", "hostId", "agentId"]
         .iter()
-        .any(|k| non_empty(&input, k).is_some());
+        .filter_map(|k| non_empty(&input, k))
+        .any(|id| !is_bundled_host(id));
     if !has_binding && ai.providers.get(&provider).and_then(|c| c.enabled) == Some(false) {
         return Err(failure(format!(
             "{label} is turned off. Enable it under Settings → AI Provider."

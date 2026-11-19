@@ -18,11 +18,13 @@ import { parseReviewFindings } from '../aiReviewService';
 
 test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
   const bundled = getBundledAgentManifests();
-  assert.strictEqual(bundled.length, 9);
+  assert.strictEqual(bundled.length, 11);
 
   const ids = bundled.map(a => a.manifest.id).sort();
   assert.deepStrictEqual(ids, [
     'praxis-addon-builder',
+    'praxis-default',
+    'praxis-fixer',
     'praxis-human-reviewer',
     'praxis-implementer',
     'praxis-planner',
@@ -190,4 +192,24 @@ test('the Praxis Scheduler agent uses the scheduled-run skill, in its mirrored p
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
+});
+
+test('the default agent carries the baseline loop and attaches only skills Praxis installs for everyone', () => {
+  const baseline = BUNDLED_AGENT_DEFINITIONS['praxis-default'];
+  assert.match(baseline.brief, /at most 3 rounds/);
+  assert.match(baseline.brief, /Do not commit, push or publish unless asked/);
+  assert.match(baseline.brief, /Not verified/);
+  assert.match(baseline.brief, /visual-verification/);
+  // A skill the agent lists must already be installed, or launching a session with it fails
+  // with "Skill ... was not discovered".
+  for (const name of [...(baseline.skills ?? []), ...(BUNDLED_AGENT_DEFINITIONS['praxis-fixer'].skills ?? [])]) {
+    assert.ok(BUNDLED_SKILL_NAMES.includes(name), `${name} must be in BUNDLED_SKILL_NAMES`);
+  }
+  assert.ok(!baseline.brief.includes('\\`'), 'template escapes must not leak into the brief');
+});
+
+test('the fixer never weakens tests to pass and stops after ten cycles', () => {
+  const fixer = BUNDLED_AGENT_DEFINITIONS['praxis-fixer'];
+  assert.match(fixer.brief, /Never delete, skip or weaken an existing test/);
+  assert.match(fixer.brief, /10 edit-and-test cycles/);
 });

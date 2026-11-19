@@ -145,6 +145,11 @@ export interface AiSettings {
    * discovery, delivery runs). Empty means the app's own directory.
    */
   workingDirectory: string;
+  /**
+   * The built-in or user agent a new chat session starts with (an `AgentProfile` id).
+   * Empty means no agent: the session runs as the bare provider.
+   */
+  defaultAgentId: string;
   /** System prompt for issue analysis runs. Empty disables the analysis action. */
   analysisPrompt: string;
   /** When true, an issue must have a confirmed analysis before it can be delegated. */
@@ -634,6 +639,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     agentName: '',
     activityWords: ['Thinking', 'Working', 'Pondering'],
     workingDirectory: '',
+    defaultAgentId: 'praxis-default',
     analysisPrompt: '',
     analysisGateEnabled: false,
     spendLimit: 0,
@@ -1260,6 +1266,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         agentName: readString(raw.ai.agentName, DEFAULT_APP_SETTINGS.ai.agentName),
         activityWords: sanitizeActivityWords(raw.ai.activityWords),
         workingDirectory: readString(raw.ai.workingDirectory, DEFAULT_APP_SETTINGS.ai.workingDirectory),
+        defaultAgentId: readString(raw.ai.defaultAgentId, DEFAULT_APP_SETTINGS.ai.defaultAgentId).trim(),
         analysisPrompt: readString(raw.ai.analysisPrompt, DEFAULT_APP_SETTINGS.ai.analysisPrompt),
         spendLimit: clampNumber(raw.ai.spendLimit, 0, Number.MAX_SAFE_INTEGER, DEFAULT_APP_SETTINGS.ai.spendLimit),
         providerHandoverPercent: Math.round(

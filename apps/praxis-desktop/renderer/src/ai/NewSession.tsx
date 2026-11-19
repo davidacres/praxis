@@ -39,6 +39,7 @@ import { SessionGitBranchControl } from './SessionGitBranchControl';
 import { SessionCodeIntelControl } from './SessionCodeIntelControl';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing, modelPriceLabel, modelPriceTitle } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
+import type { SessionAgentOption } from '../agents/agentCatalog';
 import { NEW_SESSION_HANDOFF, peekSessionHandoff, takeSessionHandoff } from '../notes/noteSendStore';
 import { contextReferenceIcon, withSessionContext, type SessionContextReference } from './sessionContext';
 import { canRunAgentSessions, isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
@@ -84,6 +85,11 @@ export interface NewSessionProps {
     /** How to proceed when the checkout has uncommitted files. */
     uncommittedChanges?: UncommittedChoice;
   }) => Promise<void>;
+  /**
+   * Agents a session can start with. A chat session begins with the one named in
+   * Settings → AI Provider → Behaviour; the Agent chip changes it for this session.
+   */
+  agentOptions?: SessionAgentOption[];
   /** Pre-attributes the composer to a profile/host binding from the Agent Hub. */
   agentContext?: { agentId: string; profileId?: string; hostId?: string; skillNames: string[] };
   /** Working folder pre-selected by the caller (e.g. the chosen project board's folder). */
@@ -158,6 +164,7 @@ export function NewSession({
   initialWorkflowId,
   autoFocusGoal,
   agentContext,
+  agentOptions,
   defaultWorkingDirectory,
   scopeLabel,
   conversational,
@@ -206,6 +213,20 @@ export function NewSession({
   const [runInWorktree, setRunInWorktree] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
   const workflowOptionsForPicker = workflowOptions ?? [];
+  // A chat session starts with the user's default agent; analysis, review and workflow-driven
+  // sessions start with none. An explicit pick (the chip, or a prompt-check suggestion) wins, and
+  // an agent that is not installed or trusted falls back to none instead of failing the launch.
+  const startsWithDefaultAgent = !agentContext && mode === 'chat' && !selectedWorkflowId;
+  const wantedAgentId = selectedProfileId !== undefined
+    ? selectedProfileId
+    : startsWithDefaultAgent ? liveSettings?.ai.defaultAgentId ?? '' : '';
+  const effectiveAgent = agentContext
+    ? undefined
+    : (agentOptions ?? []).find(option => option.id === wantedAgentId);
+  const effectiveProfileId = agentContext ? selectedProfileId : effectiveAgent?.id;
+  const effectiveSkills = agentContext
+    ? attachedSkills
+    : [...new Set([...(effectiveAgent?.skills ?? []), ...attachedSkills])];
   const [modelFilter, setModelFilter] = useState('');
   const [configuringModels, setConfiguringModels] = useState<AiProvider>();
   const [modelMenuPos, setModelMenuPos] = useState<{ top?: number; bottom?: number; left: number; maxHeight: number } | undefined>();
@@ -599,8 +620,10 @@ export function NewSession({
               ...(attachedSkills.length ? { skillNames: attachedSkills } : {})
             }
           : {
-              ...(selectedProfileId ? { profileId: selectedProfileId } : {}),
-              ...(attachedSkills.length ? { skillNames: attachedSkills } : {})
+              // The launch needs a profile and a host together; a built-in agent runs on the
+              // session's own runtime, so its host shares its id.
+              ...(effectiveProfileId ? { agentId: effectiveProfileId, profileId: effectiveProfileId, hostId: effectiveProfileId } : {}),
+              ...(effectiveSkills.length ? { skillNames: effectiveSkills } : {})
             }),
         ...(selectedWorkflowId ? { workflowId: selectedWorkflowId } : {}),
         ...(uncommittedChanges ? { uncommittedChanges } : {})
@@ -853,8 +876,8 @@ export function NewSession({
             promptText={goal}
             toolMode={toolMode}
             sessionMode={mode}
-            profileId={selectedProfileId}
-            activeSkills={attachedSkills}
+            profileId={effectiveProfileId}
+            activeSkills={effectiveSkills}
             workingDirectory={workingDirectory}
             issueKey={selectedIssueKey || undefined}
             disabled={submitting}
@@ -915,6 +938,22 @@ export function NewSession({
                 options={TOOL_MODE_OPTIONS.map(({ value, label, description, icon }) => ({ value, label, description, icon }))}
                 onChange={value => setToolMode(value as AgentToolMode)}
               />
+              {!agentContext && agentOptions && agentOptions.length > 0 && (
+                <ChipSelect
+                  variant="plain"
+                  className="session-runtime-chip"
+                  data-testid="new-session-agent"
+                  ariaLabel="Agent"
+                  title={effectiveAgent ? `${effectiveAgent.name}: ${effectiveAgent.description ?? 'Working method for this session'}` : 'Start without an agent'}
+                  icon="robot"
+                  value={effectiveAgent?.id ?? ''}
+                  options={[
+                    { value: '', label: 'No agent', description: 'Run as the bare provider.' },
+                    ...agentOptions.map(option => ({ value: option.id, label: option.name, ...(option.description ? { description: option.description } : {}) }))
+                  ]}
+                  onChange={value => setSelectedProfileId(value)}
+                />
+              )}
               <button
                 type="button"
                 className="composer-chip session-runtime-chip"

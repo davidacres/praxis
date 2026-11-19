@@ -321,6 +321,28 @@ unarmed drafts (`scheduledRunRequests.ts`, polled every 5 s and on `scheduledRun
 writes `<name>.status.json` beside each one. Requests never arm a schedule or touch one that
 is no longer a draft. Change the request schema and the skill text together.
 
+## The default agent a chat session starts with
+
+`praxis-default` (the baseline) and `praxis-fixer` are bundled agents in `bundledAgents.ts`. A new
+**chat** session starts with `ai.defaultAgentId` (default `praxis-default`; empty means none) unless
+it is an analysis or review session, is driven by a workflow, or comes from the Agent Hub. The
+composer's Agent chip overrides it for one session, and Settings → AI Provider → Behaviour changes
+the default. Nothing is forced: an agent that is missing or untrusted falls back to none.
+
+- **A profile is only text appended to the goal** (`create_binding` in `agent_runtime.rs`), so the
+  baseline's loop (checks, at most three review-and-fix rounds, visual verification, the report) is
+  instruction, not engine behaviour. Change the brief in `bundledAgents.ts`, then
+  `npm run build:core && node scripts/generate-bundled-agents.mjs` to refresh the `bundled.json` the
+  Rust runtime embeds. Bump nothing else: agents are rewritten on mirror, skills by `version:`.
+- **Every skill an agent lists must be in `BUNDLED_SKILL_NAMES`.** The launch fails with "Skill X was
+  not discovered" for one that is not installed; `bundledAgents.test.ts` and the Rust test in
+  `bundled.rs` both guard this. The composer also drops a listed skill discovery cannot find.
+- **A launch needs the profile and the host together.** The composer sends `profileId`, `hostId` and
+  `agentId` as the same id; a built-in agent runs on the session's own runtime.
+- Skills reach the model inline (`context` mode) unless the runtime reads them from its own folder,
+  so each skill a default agent lists costs tokens on every session. Keep the list short.
+- `e2e/defaultAgent.spec.ts` covers the default, the override, the mode gate and the Settings row.
+
 ## Which agent and skills a session used
 
 A session records its agent (`profileId`) and the skills Praxis attached (`activeSkills`).

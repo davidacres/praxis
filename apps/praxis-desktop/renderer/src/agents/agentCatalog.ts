@@ -110,6 +110,32 @@ export function isHostShimProfile(profile: DiscoveredAgentProfile): boolean {
   return profile.fingerprint === 'legacy-host-profile';
 }
 
+/** An agent a session can start with: what the composer chip and the Settings default list. */
+export interface SessionAgentOption {
+  id: string;
+  name: string;
+  description?: string;
+  /** Preferred skills that are actually installed; one that is not would fail the launch. */
+  skills: string[];
+}
+
+/**
+ * The agents a new session can start with. A profile is only offered when it is usable
+ * (trusted and error-free), and its preferred skills are kept only if discovery found them,
+ * because the launch rejects a binding that names a skill it cannot find.
+ */
+export function sessionAgentOptions(snapshot: AgentRuntimeSnapshot | undefined): SessionAgentOption[] {
+  const installed = new Set((snapshot?.skills ?? []).filter(skill => !skill.error).map(skill => skill.metadata.name));
+  return (snapshot?.profiles ?? [])
+    .filter(profile => !isHostShimProfile(profile) && profile.trusted && !profile.error)
+    .map(profile => ({
+      id: profile.profile.id,
+      name: profile.profile.name,
+      ...(profile.profile.description ? { description: profile.profile.description } : {}),
+      skills: (profile.profile.preferredSkills ?? []).filter(name => installed.has(name))
+    }));
+}
+
 /** Transport → short human label. */
 export function transportLabel(type: DiscoveredAgent['manifest']['type']): string {
   const labels: Record<DiscoveredAgent['manifest']['type'], string> = {

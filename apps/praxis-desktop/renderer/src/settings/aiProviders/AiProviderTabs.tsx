@@ -4,6 +4,7 @@ import { ChipSelect } from '../../ui/ChipSelect';
 import { Icon } from '../../ui/Icon';
 import { ProviderBrandLogo } from '../../ui/ProviderBrandLogo';
 import { fetchModelOptions, hasModelCatalog } from '../../ai/modelProviders';
+import { sessionAgentOptions, type SessionAgentOption } from '../../agents/agentCatalog';
 import { isProviderUsableForSessions } from '../../ai/providerAvailability';
 import { DebouncedTextArea, DebouncedTextField, Toggle } from '../settingsFields';
 import { McpServersPanel } from '../McpServersPanel';
@@ -206,8 +207,33 @@ export function RoutingTab({ settings, update, metas, statuses, allMetas, onMake
 export function BehaviourTab({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
   const name = settings.ai.agentName.trim() || 'Praxis Agent';
   const analysisOn = settings.ai.analysisPrompt.trim().length > 0;
+  const [agents, setAgents] = useState<SessionAgentOption[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void window.praxis.agentRuntime.list()
+      .then(snapshot => { if (!cancelled) setAgents(sessionAgentOptions(snapshot)); })
+      .catch(() => { if (!cancelled) setAgents([]); });
+    return () => { cancelled = true; };
+  }, []);
+  const chosenAgent = settings.ai.defaultAgentId;
   return (
     <div className="aip-stack">
+      <TabCard title="Default agent">
+        <SettingLine label="New chat sessions start with" help="The agent a new chat session begins with: its working method and the skills it attaches. You can change it per session from the composer. Analysis and review sessions never start with one.">
+          <ChipSelect
+            block
+            ariaLabel="Default agent for new chat sessions"
+            data-testid="settings-default-agent"
+            value={chosenAgent}
+            onChange={value => void update({ ai: { defaultAgentId: value } })}
+            options={[
+              { value: '', label: 'None', description: 'Run as the bare provider.' },
+              ...agents.map(agent => ({ value: agent.id, label: agent.name, ...(agent.description ? { description: agent.description } : {}) })),
+              ...(chosenAgent && !agents.some(agent => agent.id === chosenAgent) ? [{ value: chosenAgent, label: chosenAgent, description: 'Not found — sessions start without it.' }] : [])
+            ]}
+          />
+        </SettingLine>
+      </TabCard>
       <TabCard title="Desktop notifications">
         <p className="aip-hint">Alerts for AI sessions and workflow runs. Allow notifications for Praxis in your system settings.</p>
         {([

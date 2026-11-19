@@ -710,3 +710,10 @@ test('activity words are bounded, normalized, persisted and default safely', () 
   assert.deepEqual(merged.ai.activityWords, ['Musing']);
   assert.equal(merged.ai.agentName, DEFAULT_APP_SETTINGS.ai.agentName);
 });
+
+test('the default agent starts as the Praxis baseline, can be cleared, and can name another agent', () => {
+  assert.strictEqual(sanitizeAppSettings({}).ai.defaultAgentId, 'praxis-default');
+  assert.strictEqual(sanitizeAppSettings({ ai: { defaultAgentId: '' } }).ai.defaultAgentId, '');
+  assert.strictEqual(sanitizeAppSettings({ ai: { defaultAgentId: '  my-agent ' } }).ai.defaultAgentId, 'my-agent');
+  assert.strictEqual(sanitizeAppSettings({ ai: { defaultAgentId: 7 } }).ai.defaultAgentId, 'praxis-default');
+});

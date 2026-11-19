@@ -213,13 +213,46 @@ mod tests {
     }
 
     #[test]
+    fn ships_the_default_and_fixer_agents_with_skills_that_are_installed_for_everyone() {
+        let agents = bundled_agent_definitions();
+        let installed: Vec<&str> = data()["bundledSkillNames"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        for id in ["praxis-default", "praxis-fixer"] {
+            let definition = &agents[id];
+            assert!(is_bundled_agent(id), "{id} is a bundled agent");
+            for skill in definition["skills"].as_array().into_iter().flatten() {
+                let name = skill.as_str().unwrap_or_default();
+                assert!(
+                    installed.contains(&name),
+                    "{id} lists {name}, which is not always installed"
+                );
+            }
+        }
+        assert!(
+            agents["praxis-default"]["brief"]
+                .as_str()
+                .is_some_and(|brief| brief.contains("at most 3 rounds"))
+        );
+    }
+
+    #[test]
     fn mirroring_is_idempotent_and_preserves_user_edits() {
         let dir = std::env::temp_dir().join(format!("praxis-mirror-{}", std::process::id()));
         let skills = dir.join("skills");
         let agents = dir.join("agents");
+        // The scheduler's skill plus the two the default and fixer agents attach, so launching a
+        // session with either never names a skill discovery cannot find.
         assert_eq!(
             mirror_bundled_skills(&skills),
-            vec!["praxis-scheduled-runs"]
+            vec![
+                "praxis-scheduled-runs",
+                "verification-report",
+                "visual-verification"
+            ]
         );
         let skill_file = skills.join("praxis-scheduled-runs/SKILL.md");
         let original = fs::read_to_string(&skill_file).expect("skill written");
