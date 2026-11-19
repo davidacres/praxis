@@ -142,7 +142,7 @@ trap cleanup EXIT INT TERM
 # Installation per platform
 if [ "$PLATFORM" = "darwin" ]; then
   # macOS Installation
-  ASSET_NAME="Praxis-${VERSION}-arm64.dmg"
+  ASSET_NAME="Praxis_${VERSION}_aarch64.dmg"
   DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
 
   # Determine target directory

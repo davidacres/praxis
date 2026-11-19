@@ -237,6 +237,8 @@ Works with the CLI agents you already use — sessions run against your own sign
 curl -fsSL https://raw.githubusercontent.com/davidacres/praxis/main/scripts/install.sh | bash
 ```
 
+The macOS builds are not notarized, so a `.dmg` downloaded in a browser is blocked by Gatekeeper. The install script above avoids that. If you used the `.dmg`, run `xattr -dr com.apple.quarantine /Applications/Praxis.app` once.
+
 **Windows (PowerShell):**
 ```powershell
 irm https://raw.githubusercontent.com/davidacres/praxis/main/scripts/install.ps1 | iex
