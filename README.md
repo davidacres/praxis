@@ -210,7 +210,7 @@ Built-in Planner, Implementer, Reviewer, Security Analyst and Test Author agents
 - **Workspaces** — Save a shareable set of projects and connections in a `.workspace.praxis.json` file and commit it. Secrets never travel with it.
 - **Governed delivery workflows** — Stage-based runs with policies and bounded QA self-healing.
 - **Folder-backed plans** — Point a project at a folder of markdown plans; the board is synthesised from the files.
-- **Auto-update** — Signed builds check for and install updates in the background.
+- **Default agent** — New chat sessions start with a built-in baseline agent (checks, a bounded review-and-fix pass, visual verification, an honest report); change or clear it per session or in Settings.
 
 ---
 
