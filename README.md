@@ -23,30 +23,58 @@
   <em>Click any screenshot to open the full high-resolution image in a new tab without navigating away from the page.</em>
 </p>
 
-### 🗂️ Classic Mode &nbsp;·&nbsp; Full Engineering Workspace
+### 💬 Sessions &nbsp;·&nbsp; Every Agent Conversation, One Place
 
-The full-power workspace for managing multi-board projects, tracking sprint columns, inspecting git graphs, running subagents, and orchestrating delivery pipelines.
+Run Claude Code, Codex, Gemini CLI, GitHub Copilot or any ACP agent side by side. Each session keeps its own history, task list, cost and token meter, git branch and changed files — so you can start three before lunch and know exactly where each one stands.
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/classic-mode-dark.png" target="_blank" rel="noopener noreferrer">
-    <img src="docs/assets/readme/classic-mode-dark.png" alt="Praxis in Classic Mode (Dark Theme) — Full Kanban planning board with tickets and sidebar navigation" width="960" />
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/sessions-dark.png" target="_blank" rel="noopener noreferrer">
+    <img src="docs/assets/readme/sessions-dark.png" alt="Praxis session view (dark theme) — a streamed agent reply with code and a table, the session list on the left and the changed files with Commit and Discard on the right" width="960" />
   </a>
   <br/>
-  <em>Classic Mode: Full Kanban board with sprint columns, ticket metadata, and sidebar navigation. (Click to open full size)</em>
+  <em>Sessions: the conversation in the middle, the session list on the left, and what the agent changed — with Commit and Discard — on the right. (Click to open full size)</em>
 </p>
 
 <br/>
 
-### 🪶 Easy Mode &nbsp;·&nbsp; Focused Agent & Automation Canvas
+### 🎯 Focus Mode &nbsp;·&nbsp; Just the Conversation
 
-A distraction-free, single-pane focus mode for rapid agent interactions. Perfect for opening a repository folder, asking questions, launching targeted changes with quick chips, and tracking automated pipelines.
+One click on the title bar's focus button (or **Toggle focus mode** in the command palette) hides both sidebars and the bottom panel, and the conversation takes the whole window. Your other sessions don't disappear: they collapse into a slim **session shelf** along the edge, each spine drawing its state — working, waiting for approval, waiting for you, done or failed. Hover or tab onto a spine for a card that answers an approval or follows up in place. Toggle again and your previous layout comes back exactly as you left it.
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/easymode-dark.png" target="_blank" rel="noopener noreferrer">
-    <img src="docs/assets/readme/easymode-dark.png" alt="Praxis in Easy Mode (Dark Theme) — Streamlined canvas with quick starter chips and nested automations" width="960" />
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/focus-mode-dark.png" target="_blank" rel="noopener noreferrer">
+    <img src="docs/assets/readme/focus-mode-dark.png" alt="Praxis in focus mode — the conversation fills the window with a slim session shelf down the left edge" width="960" />
   </a>
   <br/>
-  <em>Easy Mode: Streamlined single-pane canvas with starter chips, folder-scoped sessions, and nested pipeline stages. (Click to open full size)</em>
+  <em>Focus mode: the chrome steps back, the session shelf stays on the edge. (Click to open full size)</em>
+</p>
+
+<br/>
+
+### ⏰ Scheduled Runs &nbsp;·&nbsp; Queue Tickets, Walk Away
+
+Pick tickets from a project, drag them into a run order, choose a start time, and let Praxis work through them while you're away. A run starts at its time while Praxis is open, works its tickets one at a time (or side by side in parallel steps), and **pauses to ask you** at an approval gate, on a failure, or when a provider is nearly out of allowance — then hands over to the next provider with a context snapshot instead of stalling.
+
+- **Lineup** — a seven-day timeline plus a *Needs you* list: a run that was due while Praxis was closed offers *Start now* or *Skip*; a paused run opens straight into its live view.
+- **Composer** — a flow graph for the run order (drop a ticket onto another to share a step), a rehearsal of the order, a clock-face start time with timezone, and a policy for how each ticket's workflow runs.
+- **Live view and report** — watch each ticket move through its stages as it runs, then read a report of what happened.
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/scheduled-runs-dark.png" target="_blank" rel="noopener noreferrer">
+    <img src="docs/assets/readme/scheduled-runs-dark.png" alt="Praxis Scheduled runs — a seven-day timeline, a Needs you list and a running batch with per-ticket progress" width="960" />
+  </a>
+  <br/>
+  <em>Scheduled runs: the week at a glance, what needs you, and a batch in flight. (Click to open full size)</em>
+</p>
+
+<br/>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/scheduled-composer-dark.png" target="_blank" rel="noopener noreferrer">
+    <img src="docs/assets/readme/scheduled-composer-dark.png" alt="Praxis scheduled run composer — a flow graph of tickets in run order, a clock-face start time and a run policy" width="960" />
+  </a>
+  <br/>
+  <em>The composer: a flow graph for the run order, a start time, and a run policy. (Click to open full size)</em>
 </p>
 
 <br/>
@@ -57,13 +85,25 @@ A distraction-free, single-pane focus mode for rapid agent interactions. Perfect
 <tr>
 <td width="50%" valign="middle">
 
-### Easy Mode &amp; Quick Flow
+### Focus Mode &amp; the Session Shelf
 
-Toggle between Classic and Easy Mode with one click in the titlebar or via <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>. Opening any folder immediately defaults to Easy Mode with quick-action prompts, scoped session histories, and nested stage automations.
+Hide every panel with one click and keep the conversation; your other sessions stay one glance away on the shelf, each spine showing whether it's working, waiting on you, done or failed. Approve a tool request without leaving the thread.
 
 </td>
 <td width="50%">
-  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/easymode-dark.png" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/easymode-dark.png" alt="Praxis Easy Mode with prompt hero and automations" width="100%" /></a>
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/focus-mode-dark.png" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/focus-mode-dark.png" alt="Praxis focus mode with the session shelf" width="100%" /></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="middle">
+
+### Scheduled Runs
+
+Queue tickets into a run order, set a start time, and Praxis works through them while you are away — pausing at approval gates and failures, and handing over to another provider when one runs low on allowance.
+
+</td>
+<td width="50%">
+  <a href="https://raw.githubusercontent.com/davidacres/praxis/main/docs/assets/readme/scheduled-runs-dark.png" target="_blank" rel="noopener noreferrer"><img src="docs/assets/readme/scheduled-runs-dark.png" alt="Scheduled runs lineup" width="100%" /></a>
 </td>
 </tr>
 <tr>
@@ -137,9 +177,9 @@ Follow live sessions from your phone, read activity, and approve or deny the age
 <tr>
 <td width="50%" valign="middle">
 
-### Themes &amp; Surface Packs
+### Looks, Surfaces &amp; Composers
 
-Looks, surface patterns and sidebar styles — Noir, Blueprint, Graphite, Parchment, Aurora Glass and more — switchable in Settings and extensible with add-ons.
+Make it yours. **Looks** bundle a whole appearance in one click — Noir, Blueprint, Graphite, Parchment, Aurora Glass and more. **Surface packs** add living textures behind the work (hex grids, blueprint lines, aurora gradients, grain). Pick a composer style — Classic, Ambient Canvas, Hairline or Command Strip — and bring your own with add-ons. Under the polish: a <kbd>Cmd</kbd>+<kbd>K</kbd> command palette that jumps to any session, ticket or action, and a keyboard focus ring on everything.
 
 [Docs →](docs/published-artifacts/praxis-surface-packs.html)
 
