@@ -315,7 +315,7 @@ export function createPraxisBridge(ipcRenderer: DesktopTransport): PraxisIpc {
       ipcRenderer.invoke('ai:archiveSession', issueKey, archived),
     delegate: (input: AiDelegateInput) => ipcRenderer.invoke('ai:delegate', input),
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
-    continueSession: (issueKey: string, message: string, images?: WireImageAttachment[], options?: { gadgetAnswer?: boolean }) =>
+    continueSession: (issueKey: string, message: string, images?: WireImageAttachment[], options?: { gadgetAnswer?: boolean; agent?: { profileId: string; skillNames?: string[] } }) =>
       ipcRenderer.invoke('ai:continueSession', issueKey, message, images, options),
     updateSessionModel: (issueKey: string, model: string) =>
       ipcRenderer.invoke('ai:updateSessionModel', issueKey, model),

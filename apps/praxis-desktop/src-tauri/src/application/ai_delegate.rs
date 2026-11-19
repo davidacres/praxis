@@ -951,6 +951,71 @@ fn continue_session(host: &HostContext, dir: &std::path::Path, args: &[Value]) -
     continue_with(host, dir, args, false, None)
 }
 
+/// What an agent adds to a session's goal starts at this heading (`create_binding`'s first section).
+const AGENT_CONTEXT_MARKER: &str = "\n\n## Praxis agent profile: ";
+
+/// The goal without the agent context a bound session had appended to it.
+fn goal_without_agent(goal: &str) -> &str {
+    goal.rfind(AGENT_CONTEXT_MARKER)
+        .map_or(goal, |index| &goal[..index])
+}
+
+/// Applies an agent chosen in the follow-up composer. A session's agent is part of the goal every
+/// turn is built from, so a change rewrites that goal and the session's profile and skills; the
+/// next turn then carries the new agent, and only the new one. An empty `profileId` clears it.
+fn apply_agent_change(
+    host: &HostContext,
+    dir: &std::path::Path,
+    key: &str,
+    record: &Value,
+    provider: &str,
+    change: &Value,
+) -> Result<()> {
+    let profile_id = change["profileId"].as_str().unwrap_or_default().trim();
+    let skills: Vec<String> = change["skillNames"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect();
+    // Only a session that was bound has agent context to remove from its goal.
+    let was_bound = non_empty(record, "profileId").is_some();
+    let goal = record["taskDefinition"]["goal"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let base = if was_bound {
+        goal_without_agent(&goal)
+    } else {
+        goal.as_str()
+    };
+    let (new_goal, binding) = if profile_id.is_empty() {
+        (base.to_owned(), false)
+    } else {
+        let binding = super::agent_runtime::create_binding(
+            host, dir, profile_id, profile_id, provider, &skills,
+        )?;
+        (format!("{base}\n\n{}", binding.context), true)
+    };
+    let profile = profile_id.to_owned();
+    store(dir).mutate(key, true, |stored| {
+        if stored["taskDefinition"].is_object() {
+            stored["taskDefinition"]["goal"] = json!(new_goal);
+        }
+        if binding {
+            stored["profileId"] = json!(profile);
+            stored["hostId"] = json!(profile);
+            stored["activeSkills"] = json!(skills);
+        } else if let Some(object) = stored.as_object_mut() {
+            for field in ["profileId", "hostId", "activeSkills"] {
+                object.remove(field);
+            }
+        }
+    })?;
+    Ok(())
+}
+
 /// Continues a recorded session. `internal` marks a turn Praxis schedules between the AIs of a
 /// multi-AI conversation; `conversation_context` is the system context that turn adds.
 pub(super) fn continue_with(
@@ -968,6 +1033,20 @@ pub(super) fn continue_with(
         .as_str()
         .map(str::to_owned)
         .unwrap_or_else(|| host.settings().read().ai.active_provider.clone());
+    // An agent chosen in the follow-up composer takes effect with this message.
+    let record = match args
+        .get(3)
+        .and_then(|options| options.get("agent"))
+        .filter(|agent| agent.is_object() && !internal)
+    {
+        Some(change) => {
+            apply_agent_change(host, dir, key, &record, &provider, change)?;
+            store(dir)
+                .get(key)?
+                .ok_or_else(|| failure(format!("No agent session found for {key}.")))?
+        }
+        None => record,
+    };
     let cli = built_in_descriptors()
         .into_iter()
         .find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent);
@@ -1233,4 +1312,29 @@ pub fn dispatch(
         .map(|()| Value::Null),
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod agent_goal_tests {
+    use super::goal_without_agent;
+
+    #[test]
+    fn removes_only_the_agent_context_a_bound_goal_ends_with() {
+        let goal = "Plan the release.\n\n## Praxis agent profile: Praxis Default\n\nBrief.\n\n## Praxis skill: x (context)\n\nSkill.";
+        assert_eq!(goal_without_agent(goal), "Plan the release.");
+    }
+
+    #[test]
+    fn leaves_a_goal_without_agent_context_alone() {
+        assert_eq!(goal_without_agent("Plan the release."), "Plan the release.");
+    }
+
+    #[test]
+    fn cuts_at_the_last_agent_heading_so_a_pasted_one_in_the_goal_survives() {
+        let goal = "Explain this:\n\n## Praxis agent profile: pasted\n\nmore\n\n## Praxis agent profile: Real\n\nBrief.";
+        assert_eq!(
+            goal_without_agent(goal),
+            "Explain this:\n\n## Praxis agent profile: pasted\n\nmore"
+        );
+    }
 }

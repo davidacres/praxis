@@ -401,7 +401,7 @@ export function SessionChatThread({
                 aria-label="Quote to reply"
                 title="Quote message (or highlight text to quote selection)"
                 data-testid="session-chat-quote-btn"
-                onClick={() => handleQuote(session.taskDefinition.goal)}
+                onClick={() => handleQuote(displaySessionContext(session.taskDefinition.goal))}
               >
                 <Icon name="chats" size={12} />
               </button>
@@ -410,14 +410,14 @@ export function SessionChatThread({
                 className="icon-btn icon-btn-sm session-chat-copy-btn"
                 aria-label="Copy message text"
                 title={copiedKey === 'user-goal' ? 'Copied!' : 'Copy message text'}
-                onClick={() => copyMessageText('user-goal', session.taskDefinition.goal)}
+                onClick={() => copyMessageText('user-goal', displaySessionContext(session.taskDefinition.goal))}
               >
                 <Icon name={copiedKey === 'user-goal' ? 'check' : 'copy'} size={12} />
               </button>
             </div>
           </div>
           <Markdown
-            text={session.taskDefinition.goal}
+            text={displaySessionContext(session.taskDefinition.goal)}
             testId="session-chat-markdown"
             imageSessionId={session.issueKey}
           />

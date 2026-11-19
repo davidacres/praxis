@@ -59,3 +59,11 @@ test('a reference records provenance as a copy, and only the raw message carries
   assert.ok(message.includes('"updatedAt":"t"') && message.includes('"projectId":"p"'));
   assert.equal(displaySessionContext(message), 'go\n\nContext: Group: Src (2 notes)');
 });
+
+test('chat hides the agent brief a session appends to its goal, and keeps attached-context receipts', () => {
+  const agent = '\n\n## Praxis agent profile: Praxis Default\n\nBrief.\n\n## Praxis skill: x (context)\n\nSkill.';
+  assert.equal(displaySessionContext(`Plan the release.${agent}`), 'Plan the release.');
+  assert.equal(displaySessionContext('Plan the release.'), 'Plan the release.');
+  const withContext = withSessionContext('Do it', [{ id: 'g', kind: 'note-group', label: 'Group: Src (2 notes)', data: { notes: [] } } as never]);
+  assert.equal(displaySessionContext(`${withContext}${agent}`), 'Do it\n\nContext: Group: Src (2 notes)');
+});

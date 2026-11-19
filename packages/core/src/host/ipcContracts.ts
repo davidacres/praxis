@@ -1135,7 +1135,15 @@ export interface AiIpc {
     issueKey: string,
     message: string,
     images?: WireImageAttachment[],
-    options?: { gadgetAnswer?: boolean }
+    options?: {
+      gadgetAnswer?: boolean;
+      /**
+       * Sets or changes the session's agent from this message on. The agent's brief is part of the
+       * stored goal every turn is built from, so this rewrites it rather than adding a message.
+       * An empty `profileId` clears the agent.
+       */
+      agent?: { profileId: string; skillNames?: string[] };
+    }
   ): Promise<void>;
   /** Changes the model used for the next turn of an idle session. */
   updateSessionModel(issueKey: string, model: string): Promise<AgentSessionRecord>;

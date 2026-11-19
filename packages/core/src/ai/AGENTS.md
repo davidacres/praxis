@@ -334,6 +334,19 @@ the default. Nothing is forced: an agent that is missing or untrusted falls back
   instruction, not engine behaviour. Change the brief in `bundledAgents.ts`, then
   `npm run build:core && node scripts/generate-bundled-agents.mjs` to refresh the `bundled.json` the
   Rust runtime embeds. Bump nothing else: agents are rewritten on mirror, skills by `version:`.
+- **The brief lives in the stored goal, and every turn is built from that goal.** A follow-up does not
+  resend it; the session's system prompt is rebuilt from `taskDefinition.goal` each turn. So an agent
+  chosen in a running session's follow-up composer is sent as `continueSession(..., { agent })` and
+  `apply_agent_change` (`ai_delegate.rs`) rewrites the goal (cutting the old context at the last
+  `## Praxis agent profile:` heading, then appending the new one) and the record's `profileId`,
+  `hostId` and `activeSkills`. An empty `profileId` clears it. The old brief is replaced, never
+  stacked; `defaultAgent.spec.ts` reads the model requests to prove it.
+- **The brief is model context, not something the user wrote.** `displaySessionContext`
+  (`renderer/src/ai/sessionContext.ts`) drops it from the opening chat bubble, its quote/copy actions
+  and the agent-details timeline. A new place that shows `taskDefinition.goal` must go through it.
+- **The same bubble would otherwise bloat every chat**, and API sessions carry the goal twice in the
+  system prompt (under Task and again as the synthesized issue's description), so a brief costs its
+  tokens twice there. Keep briefs short.
 - **Every skill an agent lists must be in `BUNDLED_SKILL_NAMES`.** The launch fails with "Skill X was
   not discovered" for one that is not installed; `bundledAgents.test.ts` and the Rust test in
   `bundled.rs` both guard this. The composer also drops a listed skill discovery cannot find.
@@ -341,7 +354,8 @@ the default. Nothing is forced: an agent that is missing or untrusted falls back
   `agentId` as the same id; a built-in agent runs on the session's own runtime.
 - Skills reach the model inline (`context` mode) unless the runtime reads them from its own folder,
   so each skill a default agent lists costs tokens on every session. Keep the list short.
-- `e2e/defaultAgent.spec.ts` covers the default, the override, the mode gate and the Settings row.
+- `e2e/defaultAgent.spec.ts` covers the default, the override, the mode gate, the Settings row, the
+  follow-up chip and agent changes, and the launch pre-checks a bound session still gets.
 
 ## Which agent and skills a session used
 

@@ -25,8 +25,20 @@ export function withSessionContext(message: string, references: SessionContextRe
   return `${CONTEXT_PREFIX}${data}\n</selected_context>\n\n${message}`;
 }
 
+/**
+ * A session started with an agent has the agent's brief and skills appended to its goal so every
+ * turn can be built from it. That is the model's context, not something the user wrote, so chat
+ * shows the goal without it. Matches the heading `create_binding` starts the context with.
+ */
+const AGENT_CONTEXT_MARKER = '\n\n## Praxis agent profile: ';
+export function withoutAgentContext(message: string): string {
+  const at = message.lastIndexOf(AGENT_CONTEXT_MARKER);
+  return at >= 0 ? message.slice(0, at) : message;
+}
+
 /** Keep reference snapshots in the recorded request, but show a compact receipt in chat. */
-export function displaySessionContext(message: string): string {
+export function displaySessionContext(full: string): string {
+  const message = withoutAgentContext(full);
   if (!message.startsWith(CONTEXT_PREFIX)) return message;
   const end = message.indexOf('\n</selected_context>\n\n', CONTEXT_PREFIX.length);
   if (end < 0) return message;

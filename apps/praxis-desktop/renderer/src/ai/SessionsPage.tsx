@@ -26,6 +26,8 @@ import { Markdown } from '../ui/Markdown';
 import { isTerminalAgentState } from './aiSessionState';
 import { useDialogs } from '../ui/dialogs';
 import { useSettings } from '../settings/useSettings';
+import { useSessionAgentOptions } from '../agents/useSessionAgentOptions';
+import { ChipSelect } from '../ui/ChipSelect';
 import { BrowserPane, type BrowserLinkRequest } from '../browser/BrowserPane';
 import { ArtifactDock } from './artifactWorkspace/ArtifactDock';
 import type { ActiveArtifact } from './artifactWorkspace/artifactTypes';
@@ -707,6 +709,11 @@ export function SessionsPage({
   }, []);
 
   const selected = sessions.find(session => session.issueKey === selectedKey) ?? sessions[0];
+  // An agent picked in the follow-up composer applies with the next message. undefined means no
+  // change: the chip shows the agent the session already has, or "No agent" for one started without.
+  const sessionAgents = useSessionAgentOptions();
+  const [agentChoice, setAgentChoice] = useState<string | undefined>();
+  useEffect(() => { setAgentChoice(undefined); }, [selected?.issueKey]);
   useEffect(() => { setContextReferences([]); }, [selected?.issueKey]);
   const selectedSubagents = useMemo(() => (selected ? extractSubagents(selected, sessions) : []), [selected, sessions]);
   // Concept 1: a bare `/word` draft opens the agent's own command palette above the strip.
@@ -1349,7 +1356,12 @@ export function SessionsPage({
       });
       setFollowUp('');
       setFollowUpImages([]);
-      await window.praxis.ai.continueSession(selected.issueKey, message, stagedImages);
+      const currentAgent = selected.profileId ?? '';
+      const agentChange = agentChoice !== undefined && agentChoice !== currentAgent
+        ? { agent: { profileId: agentChoice, skillNames: sessionAgents.find(option => option.id === agentChoice)?.skills ?? [] } }
+        : undefined;
+      await window.praxis.ai.continueSession(selected.issueKey, message, stagedImages, agentChange);
+      setAgentChoice(undefined);
       setContextReferences([]);
       setAttachTerminalContext(false);
     } catch (error) {
@@ -2330,6 +2342,23 @@ export function SessionsPage({
                     testId="session"
                     disabled={conversationRunning || !canChangeSessionRuntime(selected)}
                   />
+                  {isTerminalAgentState(selected.state) && !conversationRunning && !isWorkflowStageSession(selected) && sessionAgents.length > 0 && (
+                    <ChipSelect
+                      variant="plain"
+                      className="session-runtime-chip"
+                      data-testid="session-agent-chip"
+                      ariaLabel="Agent"
+                      title="Agent for this session. A change applies from your next message."
+                      icon="robot"
+                      value={agentChoice ?? selected.profileId ?? ''}
+                      options={[
+                        { value: '', label: 'No agent', description: 'Work as the bare provider.' },
+                        ...sessionAgents.map(option => ({ value: option.id, label: option.name, ...(option.description ? { description: option.description } : {}) })),
+                        ...(selected.profileId && !sessionAgents.some(option => option.id === selected.profileId) ? [{ value: selected.profileId, label: selected.profileId }] : [])
+                      ]}
+                      onChange={value => setAgentChoice(value === (selected.profileId ?? '') ? undefined : value)}
+                    />
+                  )}
                   {isTerminalAgentState(selected.state) && !conversationRunning && !isWorkflowStageSession(selected) && (
                       <button
                         type="button"

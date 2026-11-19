@@ -9,6 +9,7 @@ import { providerIconName, providerLabel } from '../../ai/modelProviders';
 import { ToolExecutionCard } from './ToolExecutionCard';
 import { SessionChatThread } from '../../ai/SessionChatThread';
 import { usePendingTurn } from '../../ai/pendingTurns';
+import { displaySessionContext } from '../../ai/sessionContext';
 import { SessionTeamMessages } from '../../ai/SessionTeamMessages';
 
 export interface AgentActivityFeedProps {
@@ -271,7 +272,7 @@ export function AgentActivityFeed({
     if (!hasAnyPrompt && goalText) {
       items.unshift({
         type: 'prompt',
-        text: goalText,
+        text: displaySessionContext(goalText),
         timestamp: session.startedAt || new Date().toISOString()
       });
     }
