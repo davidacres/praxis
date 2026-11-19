@@ -145,6 +145,15 @@
       "sessionKey": "SESSION-ed09dc83",
       "sessionTitle": "New session",
       "savedAt": "2026-11-07T08:38:19.005Z"
+    },
+    {
+      "path": "docs/published-artifacts/overview-1-console.html",
+      "savedAt": "2026-11-19T21:23:20.787Z",
+      "sessionKey": "SESSION-4058ca53",
+      "title": "1 · Console",
+      "description": "Dense, dark, terminal-style status panels",
+      "mediaType": "text/html",
+      "sessionTitle": "New session"
     }
   ],
   "groups": [
