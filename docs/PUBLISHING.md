@@ -190,22 +190,11 @@ The installer creates:
 
 ### Linux Installation
 
-**Method 1: AppImage (Universal)**
-1. Download `Praxis-VERSION-ARCH.AppImage` from releases
-2. Make it executable:
-   ```bash
-   chmod +x Praxis-*.AppImage
-   ```
-3. Launch:
-   ```bash
-   ./Praxis-*.AppImage
-   ```
+Releases ship a Debian package (x86_64). AppImage is not built.
 
-**Method 2: Debian / Ubuntu (.deb)**
-1. Download `Praxis-VERSION-ARCH.deb` from releases
-2. Install with apt or dpkg:
+1. Download `Praxis_VERSION_amd64.deb` from releases
+2. Install with apt:
    ```bash
-   sudo apt install ./Praxis-*.deb
-   # or: sudo dpkg -i Praxis-*.deb
+   sudo apt install ./Praxis_*_amd64.deb
    ```
-3. Launch `praxis` from your terminal or application launcher.
+3. Launch Praxis from your application menu, or run `praxis-desktop`.

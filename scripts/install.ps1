@@ -83,7 +83,7 @@ $tag = if ($Version.StartsWith("v")) { $Version } else { "v$Version" }
 $versionNum = $tag.TrimStart("v")
 Write-Host "  ✓ Selected version: $tag" -ForegroundColor Green
 
-$assetName = "Praxis-$versionNum-setup.exe"
+$assetName = "Praxis_${versionNum}_x64-setup.exe"
 $downloadUrl = "https://github.com/$repo/releases/download/$tag/$assetName"
 $tempDir = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
 $tempPath = Join-Path $tempDir $assetName

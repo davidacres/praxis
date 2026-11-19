@@ -6,7 +6,7 @@
 # Options (pass after -- when piping to bash):
 #   curl -fsSL ... | bash -s -- [options]
 #     --version <tag>   Install specific version (e.g. v0.4.1 or 0.4.1)
-#     --user            Install to ~/Applications (macOS) or ~/.local/bin (Linux) without sudo
+#     --user            Install to ~/Applications (macOS only; Linux needs sudo for the .deb)
 #     --launch          Open Praxis after successful installation
 #     --help, -h        Show help message
 
@@ -51,9 +51,8 @@ Usage:
 
 Options:
   --version <v>   Install specific version (e.g. 0.4.1 or v0.4.1)
-  --user          Install locally without root/sudo:
-                    macOS: ~/Applications/Praxis.app
-                    Linux: ~/.local/bin/praxis
+  --user          macOS only: install to ~/Applications/Praxis.app without sudo
+                  (Linux installs the .deb with apt and needs sudo)
   --launch        Automatically launch Praxis after installation
   --help, -h      Show this help message
 EOF
@@ -141,7 +140,11 @@ trap cleanup EXIT INT TERM
 
 # Installation per platform
 if [ "$PLATFORM" = "darwin" ]; then
-  # macOS Installation
+  # macOS Installation (Apple Silicon only)
+  if [ "$ARCH_FAMILY" != "arm64" ]; then
+    log_error "macOS releases are built for Apple Silicon only (this Mac is ${ARCH})."
+    exit 1
+  fi
   ASSET_NAME="Praxis_${VERSION}_aarch64.dmg"
   DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
 
@@ -205,55 +208,44 @@ if [ "$PLATFORM" = "darwin" ]; then
   fi
 
 elif [ "$PLATFORM" = "linux" ]; then
-  # Linux Installation
-  ASSET_NAME="Praxis-${VERSION}-x86_64.AppImage"
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
-
-  if [ "$INSTALL_USER" -eq 1 ] || [ ! -w "/usr/local/bin" ]; then
-    BIN_DIR="$HOME/.local/bin"
-  else
-    BIN_DIR="/usr/local/bin"
+  # Linux installation: the release ships a .deb (x86_64 only).
+  if [ "$ARCH_FAMILY" != "x64" ]; then
+    log_error "Linux releases are built for x86_64 only (this machine is ${ARCH})."
+    exit 1
   fi
-  mkdir -p "$BIN_DIR"
+  if ! command -v apt-get >/dev/null 2>&1; then
+    log_error "The Linux release is a .deb package and needs apt (Debian, Ubuntu and derivatives)."
+    printf "Download it manually from: https://github.com/%s/releases/latest\n" "$REPO"
+    exit 1
+  fi
+  ASSET_NAME="Praxis_${VERSION}_amd64.deb"
+  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
+  if [ "$(id -u)" -eq 0 ]; then
+    USE_SUDO=""
+  elif command -v sudo >/dev/null 2>&1; then
+    USE_SUDO="sudo"
+  else
+    log_error "Installing a .deb needs root and sudo is unavailable."
+    exit 1
+  fi
 
   log_info "Downloading Praxis ${TAG} for Linux..."
-  TARGET_BIN="${BIN_DIR}/praxis"
-  if ! curl -fL --progress-bar -o "$TARGET_BIN" "$DOWNLOAD_URL"; then
+  DEB_PATH="${TMP_DIR}/${ASSET_NAME}"
+  if ! curl -fL --progress-bar -o "$DEB_PATH" "$DOWNLOAD_URL"; then
     log_error "Failed to download ${DOWNLOAD_URL}"
     exit 1
   fi
-  chmod +x "$TARGET_BIN"
-  log_step "Installed binary to ${BOLD}${TARGET_BIN}${RESET}"
+  log_step "Download complete"
 
-  # Desktop launcher entry
-  APPLICATIONS_DIR="$HOME/.local/share/applications"
-  if [ -d "$APPLICATIONS_DIR" ] || [ -d "$HOME/.local/share" ]; then
-    mkdir -p "$APPLICATIONS_DIR"
-    DESKTOP_ENTRY="${APPLICATIONS_DIR}/praxis.desktop"
-    cat > "$DESKTOP_ENTRY" <<EOF
-[Desktop Entry]
-Name=Praxis
-Comment=The workspace where boards, AI agents and delivery meet
-Exec=${TARGET_BIN} %U
-Terminal=false
-Type=Application
-Categories=Development;ProjectManagement;
-StartupWMClass=praxis
-EOF
-    chmod +x "$DESKTOP_ENTRY" 2>/dev/null || true
-    log_step "Registered desktop application launcher"
-  fi
+  log_info "Installing ${ASSET_NAME} with apt..."
+  $USE_SUDO apt-get install -y "$DEB_PATH"
 
   printf "\n${GREEN}${BOLD}✓ Praxis ${TAG} installed successfully!${RESET}\n"
-  if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-    printf "${YELLOW}Note:${RESET} ${BIN_DIR} is not in your PATH. Add it with:\n"
-    printf "  ${BOLD}export PATH=\"\$PATH:%s\"${RESET}\n\n" "$BIN_DIR"
-  fi
-  printf "Run Praxis with:\n"
-  printf "  ${BOLD}praxis${RESET}\n\n"
+  printf "Find Praxis in your application menu, or run:\n"
+  printf "  ${BOLD}praxis-desktop${RESET}\n\n"
 
   if [ "$LAUNCH_AFTER" -eq 1 ]; then
     log_info "Launching Praxis..."
-    "$TARGET_BIN" &
+    nohup praxis-desktop >/dev/null 2>&1 &
   fi
 fi

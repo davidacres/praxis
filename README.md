@@ -246,7 +246,7 @@ irm https://raw.githubusercontent.com/davidacres/praxis/main/scripts/install.ps1
 
 ### Desktop Downloads — macOS, Windows, Linux
 
-- **[Download the latest release](https://github.com/davidacres/praxis/releases/latest)** — `.dmg` (macOS), `-setup.exe` (Windows), `.AppImage` / `.deb` (Linux)
+- **[Download the latest release](https://github.com/davidacres/praxis/releases/latest)** — `.dmg` (macOS, Apple Silicon), `-setup.exe` (Windows), `.deb` (Linux, x86_64)
 
 ### Mobile Companion — iOS, Android
 
