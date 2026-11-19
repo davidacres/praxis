@@ -288,12 +288,12 @@ actions, stash workflows, and three-way conflict resolution.
 | GitLab | `gitlab` | Connection and delivery/MR workflows; the issue/board model does not match Jira parity. |
 | GitHub | `github` | Configuration surface only; no full board/issue backend yet. |
 
-## Automatic updates
+## Updating
 
-Packaged desktop builds check for updates automatically on launch and in the
-background. When an update is ready, Praxis installs it on next launch or
-immediately via the **Restart to update** button in the title bar. Update
-preferences and manual checks are available under **Settings → Workspace → Updates**.
+Praxis does not update itself yet. To update, run the install script again or
+download the latest installer from the
+[releases page](https://github.com/davidacres/praxis/releases/latest); your
+workspaces and settings are kept.
 
 ## Known limitations
 

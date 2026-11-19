@@ -1,6 +1,7 @@
 # Desktop shell migration: Tauri and the zero-TypeScript boundary
 
-Status: In Progress, 2026-11-10. Owner: FX-BE-199 / TASK-527.
+Status: In Progress, 2026-11-19. Owner: FX-BE-199 / TASK-527.
+Electron is gone: the main process, N-API bridge, electron-builder packaging and the Electron-only scripts were removed (`e2db0b5c`, `42129440`, `db61da43`). What remains in progress is behavioural parity, below.
 Contract Coverage: 407/407 desktop channels registered, 0 missing. Behavioral parity is unverified: the former audit incorrectly equated registration with parity. The current audit reports 0 independently verified channels.
 
 ## Architecture and current scope

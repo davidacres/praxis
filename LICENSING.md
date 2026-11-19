@@ -54,10 +54,10 @@ acceptable risk.
 
 What reaches a user's machine:
 
-- **Desktop installer** — the Electron runtime (which itself ships Chromium's
-  and Node.js's notices in `LICENSES.chromium.html`), the main process's
-  production npm dependencies, the renderer bundle, and the code-intelligence
-  service package.
+- **Desktop installer** — the Tauri application (Rust crates from
+  `Cargo.lock` and their notices), the renderer bundle, and the
+  code-intelligence service package. It uses the operating system's web view
+  (WKWebView, WebView2, WebKitGTK) rather than bundling a browser engine.
 - **Code-intelligence service package** — published self-contained, so it
   carries the .NET runtime (MIT), its NuGet dependencies, and a copy of
   TypeScript (Apache-2.0) for the TypeScript sidecar.
