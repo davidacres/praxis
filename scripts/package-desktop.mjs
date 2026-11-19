@@ -48,7 +48,7 @@ const { bundles, dirs, match } = platforms[target];
 if (target === 'mac') {
   const signed = process.env.APPLE_SIGNING_IDENTITY || process.env.APPLE_CERTIFICATE;
   const notarize = process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID;
-  log(signed ? (notarize ? 'Signing and notarizing' : 'Signing (no notarization)') : 'UNSIGNED build (no APPLE_SIGNING_IDENTITY / APPLE_CERTIFICATE)');
+  log(signed ? (notarize ? 'Signing and notarizing' : 'Signing (no notarization)') : 'Ad-hoc signed build (no APPLE_SIGNING_IDENTITY / APPLE_CERTIFICATE); Gatekeeper will still ask to open it');
 }
 
 if (!args.includes('--skip-build')) {
