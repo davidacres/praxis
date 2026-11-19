@@ -92,11 +92,6 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
   const boardCount = project.linkedBoards.length + (hasOwnedBoard ? 1 : 0);
   const isFileOnly = project.planningMode === 'files' && boardCount === 0;
   const detectedPlanCount = inspection?.planFiles?.length ?? 0;
-  const gitState: { label: string; on: boolean } = !project.workspaceFolder
-    ? { label: 'No folder', on: false }
-    : inspection?.hasGit
-      ? { label: 'Git repo', on: true }
-      : { label: inspection ? 'No repo' : 'Folder attached', on: false };
 
   const cancelEdit = () => { setEditing(false); setName(project.name); setKey(project.key); setIcon(project.icon); setColor(project.color); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); setStages(project.workflowStages); setArtifactsFolder(project.artifactsFolder ?? ''); setError(undefined); };
 
@@ -207,12 +202,26 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
     </header>
 
     <div className="project-home-chips">
-      <span className={`ph-chip${gitState.on ? ' is-on' : ''}`}><Icon name="git-branch" size={12} />{gitState.label}</span>
       <span className="ph-chip"><Icon name="tools" size={12} />{TOOL_MODE_LABEL[project.defaultAiToolMode]}</span>
       <span className="ph-chip"><Icon name={isFileOnly ? 'folder' : 'columns'} size={12} />{isFileOnly ? 'File structure' : `${boardCount} board${boardCount === 1 ? '' : 's'}`}</span>
     </div>
 
     <div className="project-home-sections">
+      {!editing && <section className="project-panel" data-testid="project-facts">
+        <div className="ph-section-head"><h2>About</h2></div>
+        <dl className="ph-facts">
+          {inspection && inspection.languages.length > 0 && <><dt>Languages</dt><dd>{inspection.languages.join(', ')}</dd></>}
+          {inspection && inspection.frameworks.length > 0 && <><dt>Frameworks</dt><dd>{inspection.frameworks.join(', ')}</dd></>}
+          {inspection && inspection.manifests.length > 0 && <><dt>Manifests</dt><dd>{inspection.manifests.join(', ')}</dd></>}
+          {inspection?.readme && <><dt>README</dt><dd>{inspection.readme}</dd></>}
+          {inspection && <><dt>Project file</dt><dd>{inspection.projectFileExists ? 'project.praxis.md' : 'none yet'}</dd></>}
+          {detectedPlanCount > 0 && <><dt>Plans</dt><dd>{detectedPlanCount} markdown file{detectedPlanCount === 1 ? '' : 's'}{inspection?.planFiles?.slice(0, 3).map(file => <code key={file}>{file}</code>)}</dd></>}
+          {project.workItems.length > 0 && <><dt>Tickets</dt><dd>{project.workItems.length}</dd></>}
+          <dt>Sessions start with</dt><dd>{TOOL_MODE_LABEL[project.defaultAiToolMode]}</dd>
+          <dt>Created</dt><dd>{new Date(project.createdAt).toLocaleDateString()}</dd>
+        </dl>
+      </section>}
+
       <section className="project-panel">
         <div className="ph-section-head">
           <h2>Brief</h2>
@@ -224,10 +233,16 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
         </>}
         {editing
           ? <label className="field"><span>Purpose</span><textarea className="input textarea" value={purpose} onChange={e => setPurpose(e.target.value)} /></label>
-          : <div className={`ph-brief-row${project.purpose.trim() ? ' is-filled' : ''}`}><Icon name={project.purpose.trim() ? 'check' : 'dot'} size={12} /><div><strong>Purpose</strong>{project.purpose.trim() && <p>{project.purpose}</p>}</div></div>}
+          : project.purpose.trim() && <div className="ph-brief-row is-filled"><Icon name="check" size={12} /><div><strong>Purpose</strong><p>{project.purpose}</p></div></div>}
         {briefFields.map(field => editing
           ? <label className="field" key={field.key}><span>{field.label}</span><textarea className="input textarea" value={brief[field.key] ?? ''} onChange={e => setBrief(current => ({ ...current, [field.key]: e.target.value }))} /></label>
-          : <div className={`ph-brief-row${project.brief[field.key]?.trim() ? ' is-filled' : ''}`} key={field.key}><Icon name={project.brief[field.key]?.trim() ? 'check' : 'dot'} size={12} /><div><strong>{field.label}</strong>{project.brief[field.key]?.trim() && <p>{project.brief[field.key]}</p>}</div></div>)}
+          : project.brief[field.key]?.trim() && <div className="ph-brief-row is-filled" key={field.key}><Icon name="check" size={12} /><div><strong>{field.label}</strong><p>{project.brief[field.key]}</p></div></div>)}
+        {!editing && filled < briefTotal && (
+          <p className="ph-hint" data-testid="project-brief-prompt">
+            {filled === 0 ? 'Agents read the brief at the start of every session. ' : `${briefTotal - filled} more field${briefTotal - filled === 1 ? '' : 's'} to fill. `}
+            <button type="button" className="btn-quiet" onClick={() => setEditing(true)}>{filled === 0 ? 'Add a purpose' : 'Complete the brief'}</button>
+          </p>
+        )}
       </section>
 
       {project.planningMode !== 'files' && <section className="project-panel" data-testid="project-workflow">
@@ -279,8 +294,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
         <div className="ph-section-head"><h2>Workspace</h2></div>
         {project.workspaceFolder ? <>
           <div className="ph-path"><Icon name="folder-open" size={14} /><div><strong>{workspaceName}</strong><code>{project.workspaceFolder}</code></div></div>
-          {stack.length > 0 && <div className="ph-tags">{stack.map(item => <span key={item}>{item}</span>)}</div>}
-          {inspection && stack.length === 0 && <p className="muted">No languages or frameworks detected.</p>}
+          {editing && stack.length > 0 && <div className="ph-tags">{stack.map(item => <span key={item}>{item}</span>)}</div>}
           {editing
             ? <label className="field"><span>Artifacts folder</span><input className="input" data-testid="project-artifacts-folder-input" value={artifactsFolder} placeholder={DEFAULT_ARTIFACTS_FOLDER} spellCheck={false} onChange={e => setArtifactsFolder(e.target.value)} /><small className="muted">Where &ldquo;Save to workspace&rdquo; copies artifacts, relative to the repository root. Leave empty for the default.</small></label>
             : <div className="ph-path" data-testid="project-artifacts-folder"><Icon name="folder" size={14} /><div><strong>Artifacts folder{project.artifactsFolder ? '' : ' (default)'}</strong><code>{project.artifactsFolder ?? DEFAULT_ARTIFACTS_FOLDER}</code></div></div>}

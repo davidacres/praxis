@@ -90,8 +90,8 @@ test('walks the shell, rings each control, and remembers it was seen', async () 
   ]);
   expect(calloutBottom).toBeLessThanOrEqual(ringTop);
   await page.getByTestId('walkthrough-next').click();
-  await expect(callout).toContainText('Hand work to an agent');
-  await expectRingWraps(page, '[data-testid="easymode-prompt-input"]');
+  await expect(callout).toContainText('Your project at a glance');
+  await expectRingWraps(page, '[data-testid="easymode-overview-stats"]');
 
   // Last stop offers a close, not another Next.
   await expect(page.getByTestId('walkthrough-next')).toHaveCount(0);
@@ -185,9 +185,9 @@ test('a stop whose target disappears mid-tour is skipped, not shown empty', asyn
   await expect(callout).toContainText('Runs take work through a workflow');
 
   // Remove stop 3's target while the tour is open: starting a new session
-  // replaces the canvas, and with it the composer the third stop rings.
+  // replaces the canvas, and with it the overview the third stop rings.
   await page.getByTestId('section-header-add-sessions').click();
-  await expect(page.getByTestId('easymode-prompt-input')).toHaveCount(0);
+  await expect(page.getByTestId('easymode-overview-stats')).toHaveCount(0);
 
   // With the final target gone, Next finishes the tour without an empty stop.
   await page.getByTestId('walkthrough-next').click();

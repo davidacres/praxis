@@ -12,11 +12,11 @@ function useOpenFocusSignal(open: boolean): number {
 }
 
 /**
- * Floating mode: a bottom-right popover plus a launcher. The launcher stays while the
- * panel is closed; docked mode (see `AssistantDock`) owns the layout instead.
+ * Floating mode: a bottom-right popover, opened from the title bar or ⌘J. There is no
+ * launcher button; docked mode (see `AssistantDock`) owns the layout instead.
  */
 export function AssistantFloating() {
-  const { open, docked, toggle, setOpen } = useAssistant();
+  const { open, docked, setOpen } = useAssistant();
   const focusSignal = useOpenFocusSignal(open && !docked);
   const showPanel = open && !docked;
   const [bounds, setBounds] = useState(() => {
@@ -109,18 +109,6 @@ export function AssistantFloating() {
             }}
           />
         </div>
-      )}
-      {!(open && docked) && (
-        <button
-          type="button"
-          className={`assistant-launcher${showPanel ? ' is-open' : ''}`}
-          aria-label={showPanel ? 'Close virtual team assistant' : 'Open virtual team assistant'}
-          aria-expanded={showPanel}
-          data-testid="assistant-launcher"
-          onClick={toggle}
-        >
-          <Icon name="sparkles" size={16} />
-        </button>
       )}
     </div>
   );

@@ -78,7 +78,7 @@ async function launch(responseDelayMs = 0, withToolFolder = false, toolCall?: { 
 
 test('⌘J summons the floating assistant; pin docks it, keeping the conversation', async () => {
   const win = await launch();
-  await expect(win.getByTestId('assistant-launcher')).toBeVisible();
+  await expect(win.getByTestId('assistant-launcher')).toHaveCount(0);
   await win.keyboard.press('ControlOrMeta+j');
   await expect(win.getByTestId('assistant-floating')).toBeVisible();
   await expect(win.getByTestId('assistant-input')).toBeFocused();

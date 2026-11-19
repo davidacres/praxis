@@ -3,7 +3,7 @@
 Area-specific guidance, moved out of the root [AGENTS.md](../../../AGENTS.md).
 The root file still holds the rules that apply to every change; read it too.
 
-## Praxis desktop app (`apps/praxis-desktop/renderer` + `apps/praxis-desktop/main`)
+## Praxis desktop app (`apps/praxis-desktop/renderer` + `apps/praxis-desktop/src-tauri`)
 
 Plain React in a normal DOM.
 
@@ -293,7 +293,7 @@ by `WorkflowDesignerPage` to guide users through the workflow graph, toolbar, ag
 stage inspector, and validation (portaled to `document.body` so it is not trapped inside `.pane-main`'s
 isolated stacking context). Stops are declared as CSS selectors over existing `data-testid`s; a stop
 whose target is absent is skipped, not shown empty. The project tour's three stops are the
-sidebar's Sessions header, its Runs header and the canvas composer. Three invariants, all covered by
+sidebar's Sessions header, its Runs header and the canvas overview. Three invariants, all covered by
 `e2e/walkthrough.spec.ts`: **the ring never takes pointer events** (the highlighted control
 stays clickable), **the ring must enclose the control the callout describes** — do not
 add a CSS transition to the ring's geometry, which left it lagging a stop behind — and **a

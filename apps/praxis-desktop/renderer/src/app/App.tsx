@@ -1679,10 +1679,10 @@ export function App() {
       body: 'A run carries a task through your workflow’s stages and pauses at review gates. Press + to start one.'
     },
     {
-      id: 'composer',
-      selector: '[data-testid="easymode-prompt-input"]',
-      title: 'Hand work to an agent',
-      body: 'Describe what you want done: the agent plans, asks before it uses a tool, and reports what it changed. Boards, Git and settings are a ⌘K away.'
+      id: 'overview',
+      selector: '[data-testid="easymode-overview-stats"]',
+      title: 'Your project at a glance',
+      body: 'Sessions, running agents and the git working tree for this project. Boards, Git and settings are a ⌘K away.'
     }
   ], []);
 
@@ -2203,9 +2203,7 @@ export function App() {
         <EasyModeCanvas
           project={activeProject}
           sessions={agentSessions}
-          settings={settings}
-          updateSettings={updateSettings}
-          onStartSession={goal => navigate({ newSession: true, ...(activeProject ? { projectId: activeProject.id } : {}), ...(goal ? { newSessionGoal: goal } : {}) })}
+          runs={activeProject ? runsByProjectId[activeProject.id] : undefined}
           onSelectSession={sessionKey => {
             const session = agentSessions.find(candidate => candidate.issueKey === sessionKey);
             const sessionProjectId = session?.projectId ?? activeProject?.id;
