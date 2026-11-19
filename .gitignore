@@ -101,3 +101,6 @@ __pycache__/
 /osv-report.sarif
 .agent-bin/
 apps/praxis-desktop/src-tauri/resources/
+
+# Scratch scripts and captures agents leave at the repo root. Nothing here is part of the project.
+/tmp/
