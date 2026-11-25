@@ -214,7 +214,7 @@ fn is_valid_worktree_branch_name(name: &str) -> bool {
 }
 
 async fn run_git_stdout(args: &[&str], cwd: &Path) -> Result<String, WorktreeError> {
-    let output = Command::new("git")
+    let output = crate::process::quiet(Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .output()
@@ -337,7 +337,7 @@ impl GitWorktreeManager {
             let temp_index_path = temp_index.clone();
             let cwd = repo_root.to_path_buf();
             async move {
-                let mut cmd = Command::new("git");
+                let mut cmd = crate::process::quiet(Command::new("git"));
                 cmd.args(&args)
                     .current_dir(&cwd)
                     .env("GIT_INDEX_FILE", &temp_index_path);
@@ -876,7 +876,7 @@ mod tests {
     use std::process::Command as StdCommand;
 
     fn git_sync(cwd: &Path, args: &[&str]) -> String {
-        let out = StdCommand::new("git")
+        let out = crate::process::quiet(StdCommand::new("git"))
             .args(args)
             .current_dir(cwd)
             .output()

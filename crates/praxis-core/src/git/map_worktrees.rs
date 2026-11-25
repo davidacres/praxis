@@ -8,7 +8,7 @@ use tokio::process::Command;
 use super::run_work::{preserve_uncommitted_work, run_worktree_key};
 
 async fn git_out(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+    let output = crate::process::quiet(Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .output()
@@ -189,7 +189,7 @@ mod tests {
     const RUN_ID: &str = "5a1e2b3c-0000-4000-8000-000000000001";
 
     fn git_sync(cwd: &Path, args: &[&str]) -> String {
-        let out = StdCommand::new("git")
+        let out = crate::process::quiet(StdCommand::new("git"))
             .args(args)
             .current_dir(cwd)
             .output()

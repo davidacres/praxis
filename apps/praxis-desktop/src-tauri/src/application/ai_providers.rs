@@ -510,7 +510,7 @@ fn install_cli_provider(host: &HostContext, args: &[Value]) -> Result<Value> {
             "No supported JavaScript package manager was found. Install Node.js (which includes npm), or install {package} manually and set the ACP executable path below."
         )));
     };
-    let output = std::process::Command::new(manager)
+    let output = praxis_core::process::quiet(std::process::Command::new(manager))
         .args(manager_args)
         .env("PATH", path)
         .stdin(std::process::Stdio::null())

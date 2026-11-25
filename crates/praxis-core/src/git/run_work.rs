@@ -9,7 +9,7 @@ use tokio::process::Command;
 use super::git_worktree_manager::block_on_git;
 
 async fn git_out(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+    let output = crate::process::quiet(Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .output()

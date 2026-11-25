@@ -283,7 +283,7 @@ pub fn probe_cli_provider(command: &str) -> CliPreflight {
             provider_version: None,
         };
     };
-    let mut child = match Command::new(&resolved)
+    let mut child = match praxis_core::process::quiet(Command::new(&resolved))
         .arg("--version")
         .env("PATH", effective_path())
         .stdin(Stdio::null())

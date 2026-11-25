@@ -109,7 +109,7 @@ impl SystemPreflightProbes {
 #[async_trait]
 impl PreflightProbes for SystemPreflightProbes {
     async fn run_command(&self, command: &str, args: &[&str]) -> CommandProbe {
-        match tokio::process::Command::new(command)
+        match praxis_core::process::quiet(tokio::process::Command::new(command))
             .args(args)
             .output()
             .await

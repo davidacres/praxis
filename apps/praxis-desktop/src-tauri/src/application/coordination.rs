@@ -162,7 +162,7 @@ fn last_checkout() -> &'static Mutex<HashMap<String, (String, String)>> {
 }
 
 fn git(cwd: &Path, args: &[&str]) -> Option<String> {
-    let output = std::process::Command::new("git")
+    let output = praxis_core::process::quiet(std::process::Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .stdin(std::process::Stdio::null())
@@ -1304,7 +1304,7 @@ mod tests {
         let repo = std::env::temp_dir().join(format!("praxis-coord-move-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&repo).expect("dir");
         let run = |args: &[&str]| {
-            let status = std::process::Command::new("git")
+            let status = praxis_core::process::quiet(std::process::Command::new("git"))
                 .args(["-c", "user.email=t@t", "-c", "user.name=t"])
                 .args(args)
                 .current_dir(&repo)

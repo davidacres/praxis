@@ -194,7 +194,7 @@ async fn kill_tree(child: &mut Child, pid: Option<u32>, force: bool) {
     {
         let _ = child;
         let _ = force;
-        let _ = Command::new("taskkill")
+        let _ = praxis_core::process::quiet(Command::new("taskkill"))
             .args(["/pid", &pid.to_string(), "/T", "/F"])
             .status()
             .await;
@@ -219,7 +219,7 @@ pub async fn spawn_check(
         };
     }
 
-    let mut command = Command::new(&node.command);
+    let mut command = praxis_core::process::quiet(Command::new(&node.command));
     command
         .args(node.args.as_deref().unwrap_or_default())
         .current_dir(cwd)

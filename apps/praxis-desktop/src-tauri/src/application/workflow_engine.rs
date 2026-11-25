@@ -72,7 +72,7 @@ async fn git_raw(cwd: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 async fn git_once(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+    let output = praxis_core::process::quiet(Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .stdin(std::process::Stdio::null())
@@ -260,7 +260,7 @@ async fn snapshot_uncommitted_work(
             .env("GIT_COMMITTER_EMAIL", "praxis@localhost");
     };
     let run = |args: Vec<String>| {
-        let mut cmd = Command::new("git");
+        let mut cmd = praxis_core::process::quiet(Command::new("git"));
         cmd.args(&args).current_dir(repo_root);
         env(&mut cmd);
         async move {
@@ -1643,7 +1643,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("praxis-scope-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(root.join("src/pay")).expect("dir");
         let run = |args: &[&str]| {
-            let status = std::process::Command::new("git")
+            let status = praxis_core::process::quiet(std::process::Command::new("git"))
                 .args([
                     "-c",
                     "user.name=t",
@@ -1697,7 +1697,7 @@ mod tests {
     }
 
     fn sh(dir: &Path, args: &[&str]) {
-        let ok = std::process::Command::new("git")
+        let ok = praxis_core::process::quiet(std::process::Command::new("git"))
             .args([
                 "-c",
                 "user.name=T",
@@ -1743,7 +1743,7 @@ mod tests {
     }
 
     fn commit_count(dir: &Path) -> usize {
-        let out = std::process::Command::new("git")
+        let out = praxis_core::process::quiet(std::process::Command::new("git"))
             .args(["rev-list", "--count", "HEAD"])
             .current_dir(dir)
             .output()

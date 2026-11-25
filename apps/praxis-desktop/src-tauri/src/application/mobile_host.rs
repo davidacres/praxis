@@ -114,7 +114,7 @@ fn interfaces(include_internal: bool) -> Vec<(String, Ipv4Addr)> {
 }
 
 fn machine_name() -> String {
-    std::process::Command::new("hostname")
+    praxis_core::process::quiet(std::process::Command::new("hostname"))
         .output()
         .ok()
         .and_then(|out| String::from_utf8(out.stdout).ok())

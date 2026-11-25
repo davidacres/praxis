@@ -35,7 +35,7 @@ pub async fn signal_process_tree(child: &mut Child, pid: Option<u32>, force: boo
 pub async fn signal_process_tree(child: &mut Child, pid: Option<u32>, _force: bool) {
     let _ = &child;
     let Some(pid) = pid else { return };
-    let _ = tokio::process::Command::new("taskkill")
+    let _ = praxis_core::process::quiet(tokio::process::Command::new("taskkill"))
         .args(["/pid", &pid.to_string(), "/T", "/F"])
         .status()
         .await;

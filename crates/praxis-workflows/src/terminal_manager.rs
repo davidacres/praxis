@@ -963,7 +963,7 @@ fn hang_up_tree(session: &Arc<Session>, io: &SessionIo) {
 #[cfg(not(unix))]
 fn hang_up_tree(session: &Arc<Session>, io: &SessionIo) {
     if let Some(pid) = session.pid {
-        let _ = std::process::Command::new("taskkill")
+        let _ = praxis_core::process::quiet(std::process::Command::new("taskkill"))
             .args(["/pid", &pid.to_string(), "/T", "/F"])
             .status();
     }

@@ -38,7 +38,7 @@ pub struct AcpClient {
 
 impl AcpClient {
     pub async fn spawn(options: AcpClientOptions) -> Result<Self, String> {
-        let mut cmd = Command::new(&options.command);
+        let mut cmd = praxis_core::process::quiet(Command::new(&options.command));
         cmd.args(&options.args);
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());

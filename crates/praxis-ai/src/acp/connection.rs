@@ -69,7 +69,7 @@ impl AcpConnection {
     pub async fn spawn(
         options: AcpSpawn,
     ) -> Result<(Self, mpsc::UnboundedReceiver<Incoming>), String> {
-        let mut command = Command::new(&options.command);
+        let mut command = praxis_core::process::quiet(Command::new(&options.command));
         command
             .args(&options.args)
             .stdin(Stdio::piped())
@@ -212,18 +212,13 @@ impl AcpConnection {
     /// Authenticates when the agent's `initialize` response advertises `authMethods`.
     ///
     /// Agents that rely on existing CLI credentials (like `agy acp`) still require an
-    /// `authenticate` call before `session/new`. Prefer `"oauth-personal"` when offered,
-    /// otherwise fall back to the first advertised method.
+    /// `authenticate` call before `session/new`. See [`pick_auth_method`] for which
+    /// method is chosen; when none is suitable the call is skipped.
     pub async fn authenticate_if_required(&self, init: &Value) -> Result<(), RpcError> {
-        let Some(methods) = init.get("authMethods").and_then(Value::as_array) else {
-            return Ok(());
-        };
-        let preferred = methods
+        let has_env_key = ["CODEX_API_KEY", "OPENAI_API_KEY"]
             .iter()
-            .find(|m| m.get("id").and_then(Value::as_str) == Some("oauth-personal"))
-            .or_else(|| methods.first())
-            .and_then(|m| m.get("id").and_then(Value::as_str));
-        let Some(method_id) = preferred else {
+            .any(|k| std::env::var(k).is_ok_and(|v| !v.trim().is_empty()));
+        let Some(method_id) = pick_auth_method(init, has_env_key) else {
             return Ok(());
         };
         match self
@@ -306,5 +301,65 @@ async fn route(message: &Value, pending: &Pending, tx: &mpsc::UnboundedSender<In
 pub fn signal_group(pid: u32, signal: nix::sys::signal::Signal) {
     if let Ok(pid) = i32::try_from(pid) {
         let _ = nix::sys::signal::killpg(nix::unistd::Pid::from_raw(pid), signal);
+    }
+}
+
+
+/// Chooses which advertised auth method to use, or `None` to skip `authenticate`.
+///
+/// Prefers `oauth-personal`, then `chat-gpt`, then the first other method. `api-key` is
+/// never a fallback unless a key is in the environment: agents such as Codex advertise it
+/// first even when they already hold a working ChatGPT login, and picking it demands an
+/// API key the user never needed.
+fn pick_auth_method(init: &Value, has_env_key: bool) -> Option<&str> {
+    let ids: Vec<&str> = init
+        .get("authMethods")?
+        .as_array()?
+        .iter()
+        .filter_map(|m| m.get("id").and_then(Value::as_str))
+        .collect();
+    ["oauth-personal", "chat-gpt"]
+        .iter()
+        .find_map(|want| ids.iter().copied().find(|id| id == want))
+        .or_else(|| ids.iter().copied().find(|id| *id != "api-key"))
+        .or_else(|| (has_env_key && ids.contains(&"api-key")).then_some("api-key"))
+}
+
+#[cfg(test)]
+mod auth_tests {
+    use super::*;
+
+    fn init(ids: &[&str]) -> Value {
+        json!({ "authMethods": ids.iter().map(|i| json!({ "id": i })).collect::<Vec<_>>() })
+    }
+
+    #[test]
+    fn codex_prefers_chatgpt_over_api_key() {
+        let i = init(&["api-key", "chat-gpt", "chat-gpt-device-code", "gateway"]);
+        assert_eq!(pick_auth_method(&i, false), Some("chat-gpt"));
+        assert_eq!(pick_auth_method(&i, true), Some("chat-gpt"));
+    }
+
+    #[test]
+    fn oauth_personal_wins() {
+        let i = init(&["api-key", "chat-gpt", "oauth-personal"]);
+        assert_eq!(pick_auth_method(&i, false), Some("oauth-personal"));
+    }
+
+    #[test]
+    fn unknown_first_method_still_used() {
+        assert_eq!(pick_auth_method(&init(&["login"]), false), Some("login"));
+    }
+
+    #[test]
+    fn api_key_only_needs_a_key() {
+        let i = init(&["api-key"]);
+        assert_eq!(pick_auth_method(&i, false), None);
+        assert_eq!(pick_auth_method(&i, true), Some("api-key"));
+    }
+
+    #[test]
+    fn no_methods_skips() {
+        assert_eq!(pick_auth_method(&json!({}), false), None);
     }
 }

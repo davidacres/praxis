@@ -508,6 +508,10 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 let appearance = state.host.settings().read().appearance;
                 window.set_zoom(appearance.zoom_factor)?;
+                // `titleBarStyle: Overlay` is macOS-only. Elsewhere the native frame would stack on top
+                // of the renderer's own title bar, so drop it; the renderer draws the caption buttons.
+                #[cfg(not(target_os = "macos"))]
+                window.set_decorations(false)?;
                 // Keep the native traffic lights centred on the renderer's title bar,
                 // which grows with display size and zoom (see macos_traffic_lights).
                 #[cfg(target_os = "macos")]

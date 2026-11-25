@@ -625,7 +625,7 @@ impl HttpSession {
             } else {
                 "xdg-open"
             };
-            let _ = std::process::Command::new(opener)
+            let _ = praxis_core::process::quiet(std::process::Command::new(opener))
                 .arg(authorize_url.as_str())
                 .spawn();
         }
@@ -2137,7 +2137,7 @@ mod tests {
     fn mock_config() -> Option<StaticJiraConfig> {
         let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../apps/praxis-desktop/e2e/mockJiraMcpServer.mjs");
-        let node = std::process::Command::new("node")
+        let node = praxis_core::process::quiet(std::process::Command::new("node"))
             .arg("--version")
             .output()
             .ok()?;

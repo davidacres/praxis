@@ -209,7 +209,7 @@ pub(super) fn invoke_with(
     args: &[&str],
     input: Option<&Value>,
 ) -> std::result::Result<Value, String> {
-    let mut command = Command::new(&runtime.executable);
+    let mut command = praxis_core::process::quiet(Command::new(&runtime.executable));
     if let Some(assembly) = &runtime.assembly {
         command.arg(assembly);
     }
@@ -402,7 +402,7 @@ fn owner_restart(host: &HostContext) -> Value {
 // ── removed-worktree cleanup ─────────────────────────────────────────────────────────────────
 
 fn git_output(root: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
+    let output = praxis_core::process::quiet(Command::new("git"))
         .args(args)
         .current_dir(root)
         .stdin(Stdio::null())

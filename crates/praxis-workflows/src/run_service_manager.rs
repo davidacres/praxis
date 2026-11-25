@@ -592,7 +592,7 @@ async fn launch_and_probe(
         || options.project_folder.clone(),
         |c| options.project_folder.join(c),
     );
-    let mut command = Command::new(&definition.executable);
+    let mut command = praxis_core::process::quiet(Command::new(&definition.executable));
     command
         .args(definition.args.iter().flatten())
         .envs(definition.env.iter().flatten())

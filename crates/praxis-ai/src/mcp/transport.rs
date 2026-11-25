@@ -127,7 +127,7 @@ impl StdioTransport {
         env: &Option<BTreeMap<String, String>>,
         cwd: Option<&str>,
     ) -> Result<Self, String> {
-        let mut cmd = Command::new(command);
+        let mut cmd = praxis_core::process::quiet(Command::new(command));
         cmd.args(args);
         if let Some(dir) = cwd.filter(|d| !d.is_empty()) {
             cmd.current_dir(dir);

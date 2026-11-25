@@ -334,7 +334,7 @@ pub fn manifest(snapshot: &Value, stored_at: &str) -> Value {
 }
 
 fn git(cwd: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
+    let output = praxis_core::process::quiet(Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .output()
@@ -696,7 +696,7 @@ mod tests {
         std::fs::create_dir_all(&repo).unwrap();
         let run = |args: &[&str]| {
             assert!(
-                Command::new("git")
+                praxis_core::process::quiet(Command::new("git"))
                     .args(args)
                     .current_dir(&repo)
                     .output()

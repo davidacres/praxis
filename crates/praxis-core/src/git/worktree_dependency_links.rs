@@ -21,7 +21,7 @@ pub struct RemovedDependencyLink {
 async fn package_dirs(root: &Path) -> Vec<String> {
     let mut dirs = BTreeSet::new();
     dirs.insert(".".to_string());
-    if let Ok(output) = Command::new("git")
+    if let Ok(output) = crate::process::quiet(Command::new("git"))
         .args(["ls-files", "-z", "--", "package.json", "*/package.json"])
         .current_dir(root)
         .output()
@@ -189,12 +189,12 @@ mod tests {
             )
             .expect("write");
             std::fs::write(root.join(".gitignore"), "node_modules\n").expect("write");
-            StdCommand::new("git")
+            crate::process::quiet(StdCommand::new("git"))
                 .args(["init", "-q"])
                 .current_dir(root)
                 .status()
                 .expect("git init");
-            StdCommand::new("git")
+            crate::process::quiet(StdCommand::new("git"))
                 .args(["add", "-A"])
                 .current_dir(root)
                 .status()

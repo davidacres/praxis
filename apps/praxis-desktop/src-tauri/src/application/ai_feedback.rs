@@ -119,7 +119,7 @@ fn remember(report: Value) -> Value {
 // ── workspace facts ──────────────────────────────────────────────────────────────────────────
 
 fn git(cwd: &Path, args: &[&str]) -> String {
-    let Ok(mut child) = Command::new("git")
+    let Ok(mut child) = praxis_core::process::quiet(Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .stdin(Stdio::null())
@@ -1166,7 +1166,7 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join("e2e/a.spec.ts"), "//").unwrap();
         let run = |args: &[&str]| {
-            Command::new("git")
+            praxis_core::process::quiet(Command::new("git"))
                 .args(["-c", "user.name=t", "-c", "user.email=t@t"])
                 .args(args)
                 .current_dir(&dir)

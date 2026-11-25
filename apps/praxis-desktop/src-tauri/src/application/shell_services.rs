@@ -682,7 +682,7 @@ pub async fn track_service(
 }
 
 fn hostname() -> String {
-    std::process::Command::new("hostname")
+    praxis_core::process::quiet(std::process::Command::new("hostname"))
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()

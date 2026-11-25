@@ -203,7 +203,7 @@ fn run_to_completion(
     cwd: &Path,
     timeout: Duration,
 ) -> Result<String, String> {
-    let mut child = Command::new(program)
+    let mut child = praxis_core::process::quiet(Command::new(program))
         .args(args)
         .current_dir(cwd)
         .env("PATH", effective_path())
@@ -248,7 +248,7 @@ fn run_to_completion(
 /// Asks `codex app-server --stdio` for the account's rate limits and lifetime tokens.
 /// `(rate limits result, usage result)`; the usage read is best effort.
 fn codex_rpc(program: &Path) -> Result<(Value, Option<Value>), String> {
-    let mut child = Command::new(program)
+    let mut child = praxis_core::process::quiet(Command::new(program))
         .args(["app-server", "--stdio"])
         .env("PATH", effective_path())
         .stdin(Stdio::piped())

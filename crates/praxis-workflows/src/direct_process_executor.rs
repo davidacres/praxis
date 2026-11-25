@@ -136,7 +136,7 @@ pub async fn run_direct_process_deployment(
         );
     }
 
-    let mut command = Command::new(&input.executable);
+    let mut command = praxis_core::process::quiet(Command::new(&input.executable));
     command
         .args(&input.args)
         .current_dir(&input.cwd)

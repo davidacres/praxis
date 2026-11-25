@@ -268,7 +268,7 @@ fn load_host(definition: &Value) -> std::result::Result<HostEntry, String> {
         ),
         _ => return Err("A subprocess host requires entry.command.".into()),
     };
-    let mut child = Command::new(&command)
+    let mut child = praxis_core::process::quiet(Command::new(&command))
         .args(&args)
         .current_dir(definition["rootPath"].as_str().unwrap_or("."))
         .env_clear()

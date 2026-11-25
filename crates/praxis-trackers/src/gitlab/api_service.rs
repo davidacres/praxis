@@ -510,7 +510,7 @@ pub fn parse_gitlab_remote_url(remote_url: &str) -> Result<GitLabProjectRemote, 
 pub async fn infer_gitlab_project_from_repo(
     repo_path: &Path,
 ) -> Result<GitLabProjectRemote, String> {
-    let mut command = tokio::process::Command::new("git");
+    let mut command = praxis_core::process::quiet(tokio::process::Command::new("git"));
     command
         .args(["remote", "get-url", "origin"])
         .current_dir(repo_path)

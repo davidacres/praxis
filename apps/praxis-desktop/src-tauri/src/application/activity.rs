@@ -211,7 +211,7 @@ fn read_git_commits(host: &HostContext, project: &Value, project_id: &str) -> Ve
     }
 
     let git_bin = host.git_service().git_executable();
-    let log_output = Command::new(&git_bin)
+    let log_output = praxis_core::process::quiet(Command::new(&git_bin))
         .current_dir(folder_path)
         .args([
             "log",
@@ -228,7 +228,7 @@ fn read_git_commits(host: &HostContext, project: &Value, project_id: &str) -> Ve
         return Vec::new();
     }
 
-    let self_email = Command::new(&git_bin)
+    let self_email = praxis_core::process::quiet(Command::new(&git_bin))
         .current_dir(folder_path)
         .args(["config", "user.email"])
         .output()

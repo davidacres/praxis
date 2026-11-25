@@ -1007,7 +1007,7 @@ pub(super) fn prepare_worktree(
     branch_name: Option<String>,
 ) -> Result<Value> {
     use praxis_core::git::{GitWorktreeManager, PrepareWorktreeOptions, WorktreeIssueInput};
-    let current = std::process::Command::new("git")
+    let current = praxis_core::process::quiet(std::process::Command::new("git"))
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(folder)
         .output()

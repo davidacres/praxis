@@ -39,7 +39,7 @@ const ROLE_RULE_IMPLEMENT: &str = "Implement the planned changes directly in thi
 // ── git helpers ──────────────────────────────────────────────────────────
 
 async fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+    let output = praxis_core::process::quiet(Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .stdin(std::process::Stdio::null())
@@ -141,7 +141,7 @@ async fn write_diff_run_file(
         Some(point) if point != target => point,
         _ => format!("{target}^"),
     };
-    let output = Command::new("git")
+    let output = praxis_core::process::quiet(Command::new("git"))
         .args(["diff", "--no-color", "--no-ext-diff", "-M", &base, &target])
         .current_dir(worktree)
         .stdin(std::process::Stdio::null())

@@ -115,7 +115,7 @@ fn resolve_shell_path() -> Option<String> {
         });
     let script = format!("echo -n {MARKER_START}; printenv PATH; echo -n {MARKER_END}");
     // -i evaluates .zshrc/.bashrc, -l evaluates .zprofile/.bash_profile.
-    let mut child = Command::new(shell)
+    let mut child = praxis_core::process::quiet(Command::new(shell))
         .args(["-ilc", &script])
         .env("CI", "1")
         .stdin(Stdio::null())

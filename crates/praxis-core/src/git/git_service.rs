@@ -88,7 +88,7 @@ impl GitService {
 
     async fn git(&self, args: &[String], cwd: &Path) -> Result<String, String> {
         let executable = self.git_executable();
-        let output = Command::new(&executable)
+        let output = crate::process::quiet(Command::new(&executable))
             .args(args)
             .current_dir(cwd)
             .output()
@@ -120,7 +120,7 @@ impl GitService {
         input: &str,
     ) -> Result<String, String> {
         let executable = self.git_executable();
-        let mut child = Command::new(&executable)
+        let mut child = crate::process::quiet(Command::new(&executable))
             .args(args)
             .current_dir(cwd)
             .stdin(Stdio::piped())
@@ -1638,7 +1638,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn git_sync(cwd: &Path, args: &[&str]) -> String {
-        let out = StdCommand::new("git")
+        let out = crate::process::quiet(StdCommand::new("git"))
             .args(args)
             .current_dir(cwd)
             .output()

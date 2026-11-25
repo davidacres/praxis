@@ -9,6 +9,7 @@ pub mod git;
 pub mod issues;
 pub mod marketplace;
 pub mod network_address;
+pub mod process;
 pub mod projects;
 pub mod sandbox;
 pub mod ui;
